@@ -10,7 +10,7 @@ const MAX_SCOPE_METRICS = 16;
 const MAX_METRICS = 32;
 const MAX_DATA_POINTS = 256;
 const METRIC_NAME = "claude_code.token.usage";
-const SOURCE = "claude-otlp-metrics-v1";
+const SOURCE = "claude-otlp-metrics-v2";
 
 type JsonObject = Record<string, unknown>;
 
@@ -53,30 +53,31 @@ function pointType(value: unknown): "inputNew" | "inputCached" | "cacheCreated" 
   return undefined;
 }
 
-function deltaSum(metric: JsonObject): JsonObject | undefined {
+type UsageKey = "inputNew" | "inputCached" | "cacheCreated" | "output";
+type ClaudeMetricSamples = { delta: Partial<Pick<UsageMetrics, UsageKey>>; cumulative: Partial<Pick<UsageMetrics, UsageKey>> };
+
+function temporality(metric: JsonObject): "delta" | "cumulative" | undefined {
   const sum = object(metric.sum);
   if (!sum) return undefined;
-  // OTLP protobuf JSON encodes this enum as 2. Some exporters emit the enum
-  // name instead, so accept both documented representations. Never add a
-  // cumulative counter: repeated exports would otherwise overstate usage.
   const temporality = sum.aggregationTemporality;
-  if (temporality !== 2 && temporality !== "AGGREGATION_TEMPORALITY_DELTA") return undefined;
-  return sum;
+  // OTLP defines 1 as delta and 2 as cumulative. The previous mapping used
+  // protobuf field assumptions instead of the OpenTelemetry enum values and
+  // silently discarded the real Claude Code export.
+  if (temporality === 1 || temporality === "AGGREGATION_TEMPORALITY_DELTA") return "delta";
+  if (temporality === 2 || temporality === "AGGREGATION_TEMPORALITY_CUMULATIVE") return "cumulative";
+  return undefined;
 }
 
 /**
- * Extracts only four numeric counters from the documented Claude OTLP metric.
- * All resource attributes and every unknown metric are deliberately ignored.
+ * Extracts only the documented numeric token counters. The receiver derives a
+ * safe delta from cumulative counters in memory, so repeated OTel exports do
+ * not overstate usage. All resource attributes and unknown metrics are
+ * discarded before a sample leaves this parser.
  */
-export function parseClaudeOtlpMetrics(payload: unknown): UsageMetrics | undefined {
+export function parseClaudeOtlpMetricSamples(payload: unknown): ClaudeMetricSamples | undefined {
   const resources = limitedArray(object(payload)?.resourceMetrics, MAX_RESOURCE_METRICS);
   if (!resources) return undefined;
-  const totals: Required<Pick<UsageMetrics, "inputNew" | "inputCached" | "cacheCreated" | "output">> = {
-    inputNew: 0,
-    inputCached: 0,
-    cacheCreated: 0,
-    output: 0
-  };
+  const totals: ClaudeMetricSamples = { delta: {}, cumulative: {} };
   let found = false;
 
   for (const resourceMetric of resources) {
@@ -88,22 +89,56 @@ export function parseClaudeOtlpMetrics(payload: unknown): UsageMetrics | undefin
       for (const metric of metrics) {
         const metricObject = object(metric);
         if (metricObject?.name !== METRIC_NAME) continue;
-        const sum = deltaSum(metricObject);
-        if (!sum) continue;
+        const kind = temporality(metricObject);
+        const sum = object(metricObject.sum);
+        if (!kind || !sum) continue;
         const points = limitedArray(sum.dataPoints, MAX_DATA_POINTS);
         if (!points) return undefined;
         for (const point of points) {
           const type = pointType(point);
           const value = nonNegativeInteger(object(point)?.asInt ?? object(point)?.asDouble);
           if (!type || value === undefined) continue;
-          totals[type] += value;
-          if (!Number.isSafeInteger(totals[type])) return undefined;
+          const bucket = totals[kind];
+          const current = bucket[type] ?? 0;
+          const next = current + value;
+          if (!Number.isSafeInteger(next)) return undefined;
+          bucket[type] = next;
           found = true;
         }
       }
     }
   }
   return found ? totals : undefined;
+}
+
+/** Backwards-compatible helper for a documented delta payload. */
+export function parseClaudeOtlpMetrics(payload: unknown): UsageMetrics | undefined {
+  const delta = parseClaudeOtlpMetricSamples(payload)?.delta;
+  return delta && Object.keys(delta).length > 0 ? delta : undefined;
+}
+
+function addUsage(target: Partial<UsageMetrics>, addition: Partial<UsageMetrics>): void {
+  for (const key of ["inputNew", "inputCached", "cacheCreated", "output"] as const) {
+    const value = addition[key];
+    if (value === undefined) continue;
+    const next = (target[key] ?? 0) + value;
+    if (!Number.isSafeInteger(next)) throw new Error("Claude metric total exceeded safe integer range");
+    target[key] = next;
+  }
+}
+
+function deltaFromCumulative(snapshot: Partial<UsageMetrics>, current: Partial<UsageMetrics>): Partial<UsageMetrics> {
+  const delta: Partial<UsageMetrics> = {};
+  for (const key of ["inputNew", "inputCached", "cacheCreated", "output"] as const) {
+    const value = current[key];
+    if (value === undefined) continue;
+    const previous = snapshot[key];
+    const difference = previous === undefined || value < previous ? value : value - previous;
+    if (!Number.isSafeInteger(difference) || difference < 0) throw new Error("Invalid cumulative Claude metric");
+    snapshot[key] = value;
+    delta[key] = difference;
+  }
+  return delta;
 }
 
 function writeResponse(response: http.ServerResponse, status: number): void {
@@ -114,6 +149,7 @@ function writeResponse(response: http.ServerResponse, status: number): void {
 
 export async function startClaudeMetricsReceiver(database: TelemetryDatabase, runId: string): Promise<ClaudeMetricsReceiver> {
   const secret = randomBytes(32).toString("hex");
+  const cumulativeSnapshot: Partial<UsageMetrics> = {};
   const server = http.createServer((request, response) => {
     if (request.method !== "POST" || request.url !== "/v1/metrics" || request.headers["x-tokenpilot-metrics"] !== secret) {
       request.resume();
@@ -141,9 +177,14 @@ export async function startClaudeMetricsReceiver(database: TelemetryDatabase, ru
     request.on("end", () => {
       if (rejected) return;
       try {
-        const usage = parseClaudeOtlpMetrics(JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown);
-        if (usage) {
+        const samples = parseClaudeOtlpMetricSamples(JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown);
+        if (samples) {
+          const usage: Partial<UsageMetrics> = {};
+          addUsage(usage, samples.delta);
+          addUsage(usage, deltaFromCumulative(cumulativeSnapshot, samples.cumulative));
+          if (Object.keys(usage).length > 0) {
           database.addUsage({ runId, observedAt: new Date().toISOString(), source: SOURCE, ...usage });
+          }
         }
         writeResponse(response, 200);
       } catch {
@@ -165,7 +206,8 @@ export async function startClaudeMetricsReceiver(database: TelemetryDatabase, ru
       resolve(server.address() as AddressInfo);
     });
   });
-  const endpoint = `http://127.0.0.1:${address.port}/v1/metrics`;
+  const collectorEndpoint = `http://127.0.0.1:${address.port}`;
+  const endpoint = `${collectorEndpoint}/v1/metrics`;
   const headers = { "x-tokenpilot-metrics": secret };
   return {
     endpoint,
@@ -183,6 +225,11 @@ export async function startClaudeMetricsReceiver(database: TelemetryDatabase, ru
       OTEL_METRICS_INCLUDE_SESSION_ID: "false",
       OTEL_METRICS_INCLUDE_ACCOUNT_UUID: "false",
       OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES: "false",
+      // Claude documents the common OTLP header and endpoint variables. Keep
+      // the metrics-specific variants as well for clients that support them.
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/json",
+      OTEL_EXPORTER_OTLP_ENDPOINT: collectorEndpoint,
+      OTEL_EXPORTER_OTLP_HEADERS: "x-tokenpilot-metrics=" + secret,
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "http/json",
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: endpoint,
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: "x-tokenpilot-metrics=" + secret,
