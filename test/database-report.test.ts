@@ -45,9 +45,87 @@ describe("aggregate reporting", () => {
       optimizationProfile: "codex-balanced-v1",
       baselineSessions: 2,
       treatmentSessions: 1,
+      baselineExpectedTreatmentTokens: 250,
+      treatmentRecordedTokens: 150,
+      estimatedTokensAvoided: 100,
+      tokenReductionPercent: 40,
       tokenPressureDeltaPercent: -40,
-      readiness: "preliminary"
+      latencyDeltaSeconds: -5,
+      latencyDeltaPercent: -(5 / 30) * 100,
+      latencyResult: "faster",
+      readiness: "preliminary",
+      tokenResult: "preliminary"
     });
+  });
+
+  it("calculates token-only avoidance from a matched baseline without counting cache reads", () => {
+    const sessions = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
+      id: `${mode}-${index}`,
+      provider: "grok" as const,
+      mode,
+      optimizationApplied: mode === "balanced",
+      optimizationProfile: mode === "balanced" ? "grok-balanced-v1" : undefined,
+      comparisonProfile: "grok-balanced-v1",
+      taskKind: "feature" as const,
+      outcome: "unknown" as const,
+      durationSeconds: 10,
+      inputNew: mode === "observe" ? 100 : 70,
+      // A radically different cache-read value must not manufacture a saving.
+      inputCached: mode === "observe" ? 1 : 100_000,
+      cacheCreated: 0,
+      output: 0,
+      reasoning: 0,
+      compactions: 0,
+      retries: 0
+    })));
+    const [comparison] = treatmentComparisons(sessions);
+    expect(comparison).toMatchObject({
+      baselineExpectedTreatmentTokens: 500,
+      treatmentRecordedTokens: 350,
+      estimatedTokensAvoided: 150,
+      readiness: "ready",
+      tokenResult: "measured-reduction"
+    });
+  });
+
+  it("reports a ready non-reduction instead of hiding increased token use", () => {
+    const sessions = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
+      id: `${mode}-${index}`,
+      provider: "claude" as const,
+      mode,
+      optimizationApplied: mode === "balanced",
+      optimizationProfile: mode === "balanced" ? "claude-balanced-v2" : undefined,
+      comparisonProfile: "claude-balanced-v2",
+      taskKind: "research" as const,
+      outcome: "unknown" as const,
+      durationSeconds: 10,
+      inputNew: mode === "observe" ? 100 : 120,
+      inputCached: 0,
+      cacheCreated: 0,
+      output: 0,
+      reasoning: 0,
+      compactions: 0,
+      retries: 0
+    })));
+    const [comparison] = treatmentComparisons(sessions);
+    expect(comparison).toMatchObject({
+      estimatedTokensAvoided: -100,
+      readiness: "ready",
+      tokenResult: "no-reduction"
+    });
+  });
+
+  it("renders the counterfactual token calculation without a money conversion", () => {
+    const comparisons = treatmentComparisons([
+      { id: "observe", provider: "codex", mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v1", taskKind: "benchmark", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, reportedTotal: 100, measurementBasis: "provider-total", compactions: 0, retries: 0 },
+      { id: "balanced", provider: "codex", mode: "balanced", optimizationApplied: true, optimizationProfile: "codex-balanced-v1", comparisonProfile: "codex-balanced-v1", taskKind: "benchmark", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, reportedTotal: 80, measurementBasis: "provider-total", compactions: 0, retries: 0 }
+    ]);
+    const markdown = reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons });
+    expect(markdown).toContain("## Estimated token avoidance");
+    expect(markdown).toContain("Estimated tokens avoided");
+    expect(markdown).toContain("not a provider invoice and not a money calculation");
+    expect(markdown).toContain("## Reduction and latency summary");
+    expect(markdown).toContain("20.0% reduction");
   });
 
   it("does not compare a treatment with a baseline assigned to another policy version", () => {
