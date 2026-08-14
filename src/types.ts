@@ -26,6 +26,8 @@ export interface RunRecord {
   endedAt?: string;
   exitCode?: number | null;
   cliVersion?: string;
+  optimizationApplied?: boolean;
+  optimizationProfile?: string;
   collectionState: CollectionState;
   taskKind: TaskKind;
   outcome: TaskOutcome;
@@ -75,6 +77,8 @@ export interface ProviderAdapter {
 export interface AggregateRow {
   provider: Provider;
   mode: RunMode;
+  optimizationApplied: boolean;
+  optimizationProfile?: string;
   taskKind: TaskKind;
   sessions: number;
   completed: number;
@@ -89,4 +93,39 @@ export interface AggregateRow {
   modelCalls: number;
   compactions: number;
   retries: number;
+}
+
+export interface SessionSummary {
+  id: string;
+  provider: Provider;
+  mode: RunMode;
+  optimizationApplied: boolean;
+  optimizationProfile?: string;
+  taskKind: TaskKind;
+  outcome: TaskOutcome;
+  durationSeconds: number;
+  inputNew: number;
+  inputCached: number;
+  cacheCreated: number;
+  output: number;
+  reasoning: number;
+  compactions: number;
+  retries: number;
+}
+
+export interface TreatmentComparison {
+  provider: Provider;
+  taskKind: TaskKind;
+  optimizationProfile: string;
+  baselineSessions: number;
+  treatmentSessions: number;
+  baselineMedianTokenPressure: number;
+  treatmentMedianTokenPressure: number;
+  tokenPressureDeltaPercent: number;
+  baselineIqrTokenPressure: number;
+  treatmentIqrTokenPressure: number;
+  baselineMedianDurationSeconds: number;
+  treatmentMedianDurationSeconds: number;
+  baselineCompletionRate?: number;
+  treatmentCompletionRate?: number;
 }

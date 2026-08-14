@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import type { AggregateRow, RunRecord, SessionEvent, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
+import type { AggregateRow, RunRecord, SessionEvent, SessionSummary, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
 import { safeEvent, safeRun, safeUsage } from "./privacy.js";
 import type { TokenPilotPaths } from "./paths.js";
 
@@ -24,6 +24,8 @@ export class TelemetryDatabase {
         ended_at TEXT,
         exit_code INTEGER,
         cli_version TEXT,
+        optimization_applied INTEGER NOT NULL DEFAULT 0,
+        optimization_profile TEXT,
         collection_state TEXT NOT NULL,
         task_kind TEXT NOT NULL DEFAULT 'unknown',
         outcome TEXT NOT NULL DEFAULT 'unknown'
@@ -52,15 +54,25 @@ export class TelemetryDatabase {
       CREATE INDEX IF NOT EXISTS idx_usage_run_id ON usage_records(run_id);
       CREATE INDEX IF NOT EXISTS idx_events_run_id ON session_events(run_id);
     `);
+    this.ensureRunColumn("optimization_applied", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureRunColumn("optimization_profile", "TEXT");
+  }
+
+  private ensureRunColumn(name: "optimization_applied" | "optimization_profile", definition: string): void {
+    const columns = this.db.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === name)) {
+      this.db.exec(`ALTER TABLE runs ADD COLUMN ${name} ${definition}`);
+    }
   }
 
   createRun(record: RunRecord): void {
     safeRun(record);
     this.db.prepare(`INSERT INTO runs
-      (id, provider, mode, started_at, ended_at, exit_code, cli_version, collection_state, task_kind, outcome)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, provider, mode, started_at, ended_at, exit_code, cli_version, optimization_applied, optimization_profile, collection_state, task_kind, outcome)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(record.id, record.provider, record.mode, record.startedAt, record.endedAt ?? null, record.exitCode ?? null,
-        record.cliVersion ?? null, record.collectionState, record.taskKind, record.outcome);
+        record.cliVersion ?? null, record.optimizationApplied ? 1 : 0, record.optimizationProfile ?? null,
+        record.collectionState, record.taskKind, record.outcome);
   }
 
   finishRun(id: string, exitCode: number | null, endedAt: string): void {
@@ -87,12 +99,17 @@ export class TelemetryDatabase {
       .run(record.runId, record.observedAt, record.source, record.type, record.count);
   }
 
+  private normalizeRun(row: RunRecord & { optimizationApplied?: boolean | number }): RunRecord {
+    return { ...row, optimizationApplied: Boolean(row.optimizationApplied) };
+  }
+
   getPendingRuns(): RunRecord[] {
-    return this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
-        exit_code AS exitCode, cli_version AS cliVersion, collection_state AS collectionState,
+    return (this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
+        exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
+        optimization_profile AS optimizationProfile, collection_state AS collectionState,
         task_kind AS taskKind, outcome FROM runs
         WHERE collection_state = 'pending' AND ended_at IS NOT NULL ORDER BY ended_at ASC`)
-      .all() as unknown as RunRecord[];
+      .all() as unknown as Array<RunRecord & { optimizationApplied?: number }>).map((row) => this.normalizeRun(row));
   }
 
   hasUsage(runId: string): boolean {
@@ -106,9 +123,11 @@ export class TelemetryDatabase {
   }
 
   getRun(id: string): RunRecord | undefined {
-    return this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
-      exit_code AS exitCode, cli_version AS cliVersion, collection_state AS collectionState,
-      task_kind AS taskKind, outcome FROM runs WHERE id = ?`).get(id) as RunRecord | undefined;
+    const row = this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
+      exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
+      optimization_profile AS optimizationProfile, collection_state AS collectionState,
+      task_kind AS taskKind, outcome FROM runs WHERE id = ?`).get(id) as RunRecord & { optimizationApplied?: number } | undefined;
+    return row ? this.normalizeRun(row) : undefined;
   }
 
   aggregateSince(since: string): AggregateRow[] {
@@ -124,7 +143,8 @@ export class TelemetryDatabase {
           SUM(CASE WHEN type = 'retry' THEN count ELSE 0 END) AS retries
         FROM session_events GROUP BY run_id
       )
-      SELECT r.provider, r.mode, r.task_kind AS taskKind, COUNT(*) AS sessions,
+      SELECT r.provider, r.mode, r.optimization_applied AS optimizationApplied,
+        r.optimization_profile AS optimizationProfile, r.task_kind AS taskKind, COUNT(*) AS sessions,
         SUM(CASE WHEN r.outcome = 'completed' THEN 1 ELSE 0 END) AS completed,
         SUM(CASE WHEN r.outcome = 'rework' THEN 1 ELSE 0 END) AS rework,
         SUM(CASE WHEN r.outcome = 'abandoned' THEN 1 ELSE 0 END) AS abandoned,
@@ -134,8 +154,40 @@ export class TelemetryDatabase {
         SUM(COALESCE(u.reasoning, 0)) AS reasoning, SUM(COALESCE(u.model_calls, 0)) AS modelCalls,
         SUM(COALESCE(e.compactions, 0)) AS compactions, SUM(COALESCE(e.retries, 0)) AS retries
       FROM runs r LEFT JOIN usage u ON u.run_id = r.id LEFT JOIN events e ON e.run_id = r.id
-      WHERE r.started_at >= ? GROUP BY r.provider, r.mode, r.task_kind ORDER BY r.provider, r.mode, r.task_kind
-    `).all(since) as unknown as AggregateRow[];
+      WHERE r.started_at >= ? GROUP BY r.provider, r.mode, r.optimization_applied, r.optimization_profile, r.task_kind
+      ORDER BY r.provider, r.mode, r.optimization_profile, r.task_kind
+    `).all(since).map((row) => ({
+      ...(row as unknown as AggregateRow),
+      optimizationApplied: Boolean((row as { optimizationApplied: number }).optimizationApplied)
+    }));
+  }
+
+  sessionSummariesSince(since: string): SessionSummary[] {
+    return (this.db.prepare(`
+      WITH usage AS (
+        SELECT run_id, SUM(COALESCE(input_new, 0)) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
+          SUM(COALESCE(cache_created, 0)) AS cache_created, SUM(COALESCE(output, 0)) AS output,
+          SUM(COALESCE(reasoning, 0)) AS reasoning
+        FROM usage_records GROUP BY run_id
+      ), events AS (
+        SELECT run_id,
+          SUM(CASE WHEN type = 'compaction' THEN count ELSE 0 END) AS compactions,
+          SUM(CASE WHEN type = 'retry' THEN count ELSE 0 END) AS retries
+        FROM session_events GROUP BY run_id
+      )
+      SELECT r.id, r.provider, r.mode, r.optimization_applied AS optimizationApplied,
+        r.optimization_profile AS optimizationProfile, r.task_kind AS taskKind, r.outcome,
+        MAX(0, strftime('%s', r.ended_at) - strftime('%s', r.started_at)) AS durationSeconds,
+        u.input_new AS inputNew, u.input_cached AS inputCached, u.cache_created AS cacheCreated,
+        u.output AS output, u.reasoning AS reasoning,
+        COALESCE(e.compactions, 0) AS compactions, COALESCE(e.retries, 0) AS retries
+      FROM runs r JOIN usage u ON u.run_id = r.id LEFT JOIN events e ON e.run_id = r.id
+      WHERE r.started_at >= ? AND r.ended_at IS NOT NULL
+      ORDER BY r.provider, r.task_kind, r.started_at
+    `).all(since) as unknown as Array<Omit<SessionSummary, "optimizationApplied"> & { optimizationApplied: number }>).map((row) => ({
+      ...row,
+      optimizationApplied: Boolean(row.optimizationApplied)
+    }));
   }
 
   close(): void {

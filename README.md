@@ -11,11 +11,20 @@ kimi
 
 It does **not** create a shared cache, proxy model traffic, receive provider credentials, or persist prompts, replies, code, tool output, command arguments, or working directories. Provider caches remain provider-side.
 
-## Current scope: personal observation
+## Current scope: personal measurement and reduction
 
-Version 0.1 is intentionally conservative. It records a session envelope and reads numeric counters from local session telemetry after the CLI exits. Its default mode is `observe`; it never changes model, effort, tools, prompt, session, or context.
+Version 0.1 records a session envelope and reads numeric counters from local session telemetry after the CLI exits. Its default mode is `observe`; it never changes model, effort, tools, prompt, session, or context.
 
-`balanced` is a stored 50/50 experimental assignment only. It still injects no provider flags until an adapter has been independently validated. This prevents the tool from silently degrading a developer's work while baseline data is collected.
+`balanced` is a stored 50/50 experimental assignment and a real token-reduction treatment. Before every treated session, TokenPilot asks only the installed provider CLI for `--help`. It injects a policy only if that exact local version advertises the required flag. A failed probe or missing capability starts the original CLI unchanged.
+
+| Provider | `balanced` policy | Safety boundary |
+| --- | --- | --- |
+| Claude | Excludes dynamic system-prompt sections, sets medium effort, and keeps the `Read,Edit,Glob,Grep,Bash` core tool set. | Session arguments only; no MCP or provider config is edited. |
+| Codex | Sets medium reasoning effort, low verbosity, and automatic compaction at 64k tokens. | Session `--config` overrides only; prompt OTEL export remains disabled. |
+| Grok | Sets medium reasoning effort. | Does not use API-only cache keys. |
+| Kimi | Disables thinking and bounds steps/retries only when the local CLI exposes all three session flags. | Current Kimi 0.29.x is observed unchanged because it does not advertise those flags. |
+
+The wrapper prints a one-line notice when a treatment is active. It never stores the injected arguments; reports retain only the TokenPilot policy name.
 
 ## Requirements
 
@@ -96,22 +105,22 @@ The four adapters are all available for observation:
 
 | Provider | Source | V0.1 optimisation |
 | --- | --- | --- |
-| Claude | local session files | observe only |
-| Codex | local rollout/session files | observe only |
-| Grok | local session files | observe only |
-| Kimi | local session/Wire files | observe only |
+| Claude | local session files | cache-stable prefix, medium effort, core tools |
+| Codex | local rollout/session files | medium effort, low verbosity, 64k compaction |
+| Grok | local session files | medium effort |
+| Kimi | local session/Wire files | version-gated only |
 
 Claude handles prompt caching itself, and its cache prefix is sensitive to model, tools, MCP connections, and context changes. [Claude Code documentation](https://code.claude.com/docs/en/prompt-caching) explains these limits. Codex exposes user-level profiles, reasoning effort, automatic compaction, and telemetry configuration; its official configuration reference is the source of truth for any later adapter experiment. [OpenAI Docs](https://learn.chatgpt.com/docs/config-file/config-reference)
 
 ## Seven-day personal experiment
 
-1. Run `tokenpilot mode observe` for seven days on personal accounts only.
+1. Run `tokenpilot mode observe` for seven days on personal accounts only to establish a clean baseline.
 2. Use the CLIs normally and classify sessions only when you are comfortable doing so.
 3. Run `tokenpilot report --days 7 > personal-week-1.md`; review the file before retaining or sharing it.
-4. Confirm parser quality and task outcome data before enabling `balanced`.
-5. Enable provider-specific changes only after their adapter has a documented capability, an isolated test, and a rollback path.
+4. Set `tokenpilot mode balanced` for the next period. Every new session receives a stored 50/50 assignment to `observe` or the verified provider treatment.
+5. Use `TOKENPILOT_BYPASS=1 <provider>` or `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.
 
-There is intentionally no pre-set savings target. The report should show the observed result, uncertainty, retries, duration, and quality signals separately for each provider and task class.
+There is intentionally no pre-set savings target. The report names the policy actually applied and provides matched within-provider comparisons of median token pressure, variation, duration, and classified completion rate.
 
 ## Removing TokenPilot
 

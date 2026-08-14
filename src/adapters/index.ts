@@ -6,14 +6,14 @@ function adapter(
   provider: Provider,
   telemetry: ProviderAdapter["capabilities"]["telemetry"],
   paths: string[],
-  notes: string
+  notes: string,
+  supportsBalancedOptimization: boolean
 ): ProviderAdapter {
   return {
     provider,
     capabilities: {
       telemetry,
-      // V1 intentionally applies no CLI mutation until a provider-specific experiment validates it.
-      supportsBalancedOptimization: false,
+      supportsBalancedOptimization,
       notes
     },
     telemetryRoots(homeDir: string): string[] {
@@ -24,10 +24,10 @@ function adapter(
 }
 
 export const ADAPTERS: Record<Provider, ProviderAdapter> = {
-  claude: adapter("claude", "session-files", [".claude", ".config/claude"], "Observe local Claude session metrics only."),
-  codex: adapter("codex", "session-files", [".codex/sessions"], "Observe local Codex rollout metrics only."),
-  grok: adapter("grok", "session-files", [".grok/sessions"], "Observe local Grok session metrics only."),
-  kimi: adapter("kimi", "wire", [".kimi-code/sessions", ".kimi/sessions"], "Observe Kimi session and Wire metrics only.")
+  claude: adapter("claude", "session-files", [".claude", ".config/claude"], "Use validated cache-prefix, effort, and core-tool controls when the installed CLI advertises them.", true),
+  codex: adapter("codex", "session-files", [".codex/sessions"], "Use validated session-only reasoning, verbosity, and compaction controls when --config is available.", true),
+  grok: adapter("grok", "session-files", [".grok/sessions"], "Use a validated CLI reasoning-effort control; do not assume API cache keys apply to the CLI.", true),
+  kimi: adapter("kimi", "wire", [".kimi-code/sessions", ".kimi/sessions"], "Use validated session controls only when the installed CLI advertises them; otherwise observe without mutating Kimi config.", true)
 };
 
 export function getAdapter(provider: Provider): ProviderAdapter {

@@ -5,6 +5,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { getAdapter } from "./adapters/index.js";
 import { ensureConfig, rememberProviderPath, selectMode } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
+import { planForInstalledCli, planFromHelp } from "./optimization.js";
 import type { TokenPilotPaths } from "./paths.js";
 import type { Provider, RunMode } from "./types.js";
 
@@ -104,6 +105,13 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     return result ?? 1;
   }
 
+  const optimization = planForInstalledCli(provider, mode, binary);
+  if (mode === "balanced" && optimization.applied) {
+    process.stderr.write(`TokenPilot: balanced optimization active for ${provider} (${optimization.summary}).\n`);
+  } else if (mode === "balanced") {
+    process.stderr.write(`TokenPilot: ${optimization.unavailableReason}; starting ${provider} without injected settings.\n`);
+  }
+
   const runId = randomUUID();
   const database = new TelemetryDatabase(paths);
   try {
@@ -113,6 +121,8 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       mode,
       startedAt: new Date().toISOString(),
       cliVersion: binaryVersion(binary),
+      optimizationApplied: optimization.applied,
+      optimizationProfile: optimization.profile,
       collectionState: "pending",
       taskKind: "unknown",
       outcome: "unknown"
@@ -122,12 +132,12 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     // Fail open: a telemetry failure must never prevent access to the original CLI.
     process.stderr.write(`TokenPilot: telemetry unavailable; starting ${provider} normally.\n`);
     database.close();
-    const result = await launchChild(binary, args, paths);
+    const result = await launchChild(binary, [...optimization.args, ...args], paths);
     return result ?? 1;
   }
 
   try {
-    const code = await launchChild(binary, args, paths);
+    const code = await launchChild(binary, [...optimization.args, ...args], paths);
     database.finishRun(runId, code, new Date().toISOString());
     return code ?? 1;
   } finally {
@@ -139,7 +149,8 @@ export function providerCapabilities(provider: Provider): string {
   return getAdapter(provider).capabilities.notes;
 }
 
-export function profileArguments(_provider: Provider, _mode: RunMode): string[] {
-  // Intentionally empty in V1. A provider must pass an explicit adapter experiment before arguments are injected.
-  return [];
+export function profileArguments(provider: Provider, mode: RunMode, help = ""): string[] {
+  // Exported for deterministic tests and external adapter review. Runtime calls
+  // planForInstalledCli so an upgraded or incompatible CLI is never guessed.
+  return planFromHelp(provider, mode, help).args;
 }

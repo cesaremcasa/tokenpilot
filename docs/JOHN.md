@@ -16,6 +16,7 @@ No company prompt, code, account identifier, credential, raw session log, or usa
 
 - Same terminal, provider command, authentication, and UI.
 - `observe` is the default and makes no provider setting changes.
+- `balanced` is a version-gated personal treatment: it applies only documented CLI controls for cache stability, reasoning, verbosity, tool breadth, and compaction. It never writes a provider config file or changes authentication.
 - `TOKENPILOT_BYPASS=1 <provider>` bypasses the layer immediately.
 - If telemetry fails, the original CLI opens normally.
 - A developer may classify a finished task as completed, rework, or abandoned without entering task content.
@@ -27,7 +28,7 @@ The personal experiment reports, per provider and task type:
 - input/cache/output/reasoning counters;
 - duration, retries, and compactions;
 - completed, rework, and abandoned task signals; and
-- observed differences between `observe` and any later provider-specific treatment.
+- observed differences between `observe` and the named provider-specific treatment, including whether a policy was actually applied.
 
 There is no pre-declared savings percentage. The decision is based on measured results and quality signals, not a token-reduction promise.
 
@@ -37,7 +38,7 @@ There is no pre-declared savings percentage. The decision is based on measured r
 2. Recreate or transfer approved code into a company-owned repository; do not deploy directly from the personal GitHub repository.
 3. Deploy an opt-in, per-user agent for a small volunteer group in `observe` mode.
 4. Send only approved aggregate numeric metrics to company-owned storage.
-5. Introduce one provider-specific optimization at a time, with a documented rollback and a global kill switch.
+5. Introduce one provider-specific optimization at a time, with a documented rollback and a global kill switch. Port only policies that have shown a reduction without deteriorating task outcome, retries, or duration.
 6. Compare usage per completed task, retries, duration, and user-reported quality before any broader rollout.
 
 ## Risk controls
