@@ -42,7 +42,7 @@ function quoteShell(value: string): string {
 }
 
 export function createInstallPlan(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
-  const shellFile = options.noShellConfig ? undefined : shellStartupFile(options.shell, paths.userHome);
+  const shellFile = options.noShellConfig ? undefined : shellStartupFile(options.shell ?? process.env.SHELL, paths.userHome);
   return {
     shims: PROVIDERS.map((provider) => path.join(paths.shimDir, provider)),
     shellFile,
@@ -56,6 +56,7 @@ function writeShim(target: string, provider: string, nodeExecutable: string, exe
 }
 
 function appendShellBlock(file: string, block: string): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
   if (existing.includes(SHELL_MARKER_START)) return;
   fs.appendFileSync(file, `${existing.endsWith("\n") || existing.length === 0 ? "" : "\n"}${block}`, { mode: 0o600 });

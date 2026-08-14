@@ -18,6 +18,22 @@ describe("installation and fail-open launcher lookup", () => {
     cleanup(paths);
   });
 
+  it("uses the active shell's startup file when shell setup is enabled", () => {
+    const paths = temporaryPaths();
+    const plan = install(paths, {
+      noAgent: true,
+      shell: "/bin/zsh",
+      executable: "/opt/tokenpilot/dist/cli.js",
+      nodeExecutable: "/usr/local/bin/node"
+    });
+    const shellFile = path.join(paths.userHome, ".zshrc");
+    expect(plan.shellFile).toBe(shellFile);
+    expect(fs.readFileSync(shellFile, "utf8")).toContain(paths.shimDir);
+    uninstall(paths);
+    expect(fs.readFileSync(shellFile, "utf8")).not.toContain("tokenpilot");
+    cleanup(paths);
+  });
+
   it("skips its own shim directory when locating the original provider binary", () => {
     const paths = temporaryPaths();
     const originalBin = path.join(paths.userHome, "original-bin");

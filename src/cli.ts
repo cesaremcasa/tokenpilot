@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { getPaths } from "./paths.js";
 import { install, uninstall } from "./installer.js";
 import { collectPendingRuns } from "./collector.js";
@@ -84,7 +85,12 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     return runProvider(provider, args.slice(2), paths);
   }
   if (command === "install") {
-    const plan = install(paths, { dryRun: has(args, "--dry-run"), noShellConfig: has(args, "--no-shell-config"), noAgent: has(args, "--no-agent") });
+    const plan = install(paths, {
+      dryRun: has(args, "--dry-run"),
+      noShellConfig: has(args, "--no-shell-config"),
+      noAgent: has(args, "--no-agent"),
+      executable: fileURLToPath(import.meta.url)
+    });
     printPlan(plan);
     return 0;
   }
