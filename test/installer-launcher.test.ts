@@ -2,11 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { install, uninstall } from "../src/installer.js";
+import { install, launchAgentServiceTarget, uninstall } from "../src/installer.js";
 import { findOriginalBinary, isPassthrough } from "../src/launcher.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("installation and fail-open launcher lookup", () => {
+  it("uses launchctl's single service-target form when replacing the local agent", () => {
+    expect(launchAgentServiceTarget("gui/501")).toBe("gui/501/com.tokenpilot.agent");
+  });
+
   it("creates removable per-provider shims without changing the shell when requested", () => {
     const paths = temporaryPaths();
     const plan = install(paths, { noShellConfig: true, noAgent: true, executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });

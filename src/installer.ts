@@ -184,11 +184,33 @@ function launchAgentPlist(nodeExecutable: string, executable: string): string {
 `;
 }
 
+export function launchAgentServiceTarget(domain: string): string {
+  return `${domain}/${LAUNCH_AGENT_LABEL}`;
+}
+
+function waitForAgentShutdown(milliseconds: number): void {
+  // `launchctl bootout` returns before the service has necessarily left its
+  // domain. A short bounded wait avoids a false install failure on an
+  // immediate reinstall, without using `bootout --wait` (which can block
+  // indefinitely when another program misbehaves).
+  const signal = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+  Atomics.wait(signal, 0, 0, milliseconds);
+}
+
 function bootstrapAgent(plist: string): void {
   const domain = `gui/${process.getuid?.() ?? process.env.UID ?? ""}`;
-  spawnSync(LAUNCHCTL, ["bootout", domain, LAUNCH_AGENT_LABEL], { stdio: "ignore" });
-  const result = spawnSync(LAUNCHCTL, ["bootstrap", domain, plist], { stdio: "ignore" });
-  if (result.status !== 0) throw new Error("launchctl could not start the TokenPilot agent");
+  // `bootout` accepts either a domain plus a plist path, or one complete
+  // service target. Passing the label as a separate argument makes it look
+  // like a plist path, leaves an existing agent running, and causes the
+  // following bootstrap to fail on a repeat install.
+  const serviceTarget = launchAgentServiceTarget(domain);
+  spawnSync(LAUNCHCTL, ["bootout", serviceTarget], { stdio: "ignore" });
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const result = spawnSync(LAUNCHCTL, ["bootstrap", domain, plist], { stdio: "ignore" });
+    if (result.status === 0) return;
+    waitForAgentShutdown(100);
+  }
+  throw new Error("launchctl could not start the TokenPilot agent");
 }
 
 export function install(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
@@ -233,7 +255,7 @@ export function uninstall(paths: TokenPilotPaths, dryRun = false): InstallPlan {
     && hasOwnedLaunchAgent(fs.readFileSync(plan.launchAgent, "utf8")));
   if (process.platform === "darwin" && ownsLaunchAgent) {
     const domain = `gui/${process.getuid?.() ?? process.env.UID ?? ""}`;
-    spawnSync(LAUNCHCTL, ["bootout", domain, LAUNCH_AGENT_LABEL], { stdio: "ignore" });
+    spawnSync(LAUNCHCTL, ["bootout", launchAgentServiceTarget(domain)], { stdio: "ignore" });
   }
   if (hasSafePrivateDirectory(paths, paths.shimDir)) {
     for (const shim of plan.shims) {
