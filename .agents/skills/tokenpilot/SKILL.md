@@ -10,7 +10,7 @@ metadata:
 Run exactly this read-only command:
 
 ```sh
-tokenpilot report --format md
+{{TOKENPILOT_COMMAND}} report --format md
 ```
 
 Present its result without inspecting the SQLite database, provider logs, prompts, transcripts, project files, account details, or environment variables.

@@ -20,6 +20,8 @@ describe("installation and fail-open launcher lookup", () => {
     expect(fs.readFileSync(plan.skills[0], "utf8")).toContain("tokenpilot-managed-skill");
     expect(fs.readFileSync(plan.skills[1], "utf8")).toContain("tokenpilot-managed-skill");
     expect(fs.readFileSync(plan.skills[2], "utf8")).toContain("tokenpilot-managed-skill");
+    expect(fs.readFileSync(plan.skills[0], "utf8")).toContain(`'${plan.command}' report --format md`);
+    expect(fs.readFileSync(plan.skills[0], "utf8")).not.toContain("{{TOKENPILOT_COMMAND}}");
     const shim = fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8");
     expect(shim).toContain("__shim codex");
     expect(shim).toContain("# tokenpilot-shim");

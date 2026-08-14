@@ -14,6 +14,7 @@ const LAUNCH_AGENT_MARKER = "<key>TokenPilotManaged</key><true/>";
 const LAUNCHCTL = "/bin/launchctl";
 const SKILL_MARKER = "tokenpilot-managed-skill";
 const SKILL_RELATIVE_PATH = path.join("tokenpilot", "SKILL.md");
+const SKILL_COMMAND_PLACEHOLDER = "{{TOKENPILOT_COMMAND}}";
 const COMMAND_MARKER = "# tokenpilot-command-shim";
 
 export interface InstallOptions {
@@ -107,7 +108,11 @@ function hasOwnedSkill(contents: string): boolean {
 
 function sourceSkillFile(): string {
   const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".agents", "skills", SKILL_RELATIVE_PATH);
-  if (!existingRegularFile(source) || !hasOwnedSkill(fs.readFileSync(source, "utf8"))) {
+  if (!existingRegularFile(source)) {
+    throw new Error("TokenPilot skill source is missing or invalid");
+  }
+  const contents = fs.readFileSync(source, "utf8");
+  if (!hasOwnedSkill(contents) || !contents.includes(SKILL_COMMAND_PLACEHOLDER)) {
     throw new Error("TokenPilot skill source is missing or invalid");
   }
   return source;
@@ -124,9 +129,10 @@ function assertSkillTarget(paths: TokenPilotPaths, target: string): void {
   }
 }
 
-function writeSkills(paths: TokenPilotPaths, targets: string[]): void {
+function writeSkills(paths: TokenPilotPaths, targets: string[], command: string): void {
   if (targets.length === 0) return;
-  const contents = fs.readFileSync(sourceSkillFile(), "utf8");
+  assertSafeText(command, "skill command path");
+  const contents = fs.readFileSync(sourceSkillFile(), "utf8").replaceAll(SKILL_COMMAND_PLACEHOLDER, quoteShell(command));
   for (const target of targets) {
     ensurePrivateDirectory(paths, path.dirname(target));
     fs.writeFileSync(target, contents, { mode: 0o600 });
@@ -234,7 +240,7 @@ export function install(paths: TokenPilotPaths, options: InstallOptions = {}): I
   ensureConfig(paths);
   for (const provider of PROVIDERS) writeShim(path.join(paths.shimDir, provider), provider, nodeExecutable, executable);
   writeCommandShim(plan.command, nodeExecutable, executable);
-  writeSkills(paths, plan.skills);
+  writeSkills(paths, plan.skills, plan.command);
   if (plan.shellFile) appendShellBlock(plan.shellFile, shellBlock(paths.shimDir));
   if (plan.launchAgent) {
     ensurePrivateDirectory(paths, path.dirname(plan.launchAgent));
