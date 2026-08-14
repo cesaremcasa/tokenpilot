@@ -16,6 +16,7 @@ describe("aggregate reporting", () => {
     const report = buildReport(paths, 7);
     expect(report.rows).toHaveLength(1);
     expect(report.rows[0]).toMatchObject({ provider: "codex", optimizationApplied: false, taskKind: "bugfix", sessions: 1, inputNew: 10, inputCached: 100, retries: 1 });
+    expect(report.coverage).toEqual([{ provider: "codex", sessions: 1, measuredSessions: 1, unavailableSessions: 0 }]);
     expect(reportMarkdown(report)).toContain("codex");
     cleanup(paths);
   });
@@ -33,7 +34,8 @@ describe("aggregate reporting", () => {
       optimizationProfile: "codex-balanced-v1",
       baselineSessions: 2,
       treatmentSessions: 1,
-      tokenPressureDeltaPercent: -40
+      tokenPressureDeltaPercent: -40,
+      readiness: "preliminary"
     });
   });
 });

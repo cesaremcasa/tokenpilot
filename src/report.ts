@@ -1,4 +1,4 @@
-import type { AggregateRow, SessionSummary, TreatmentComparison } from "./types.js";
+import type { AggregateRow, MeasurementCoverage, SessionSummary, TreatmentComparison } from "./types.js";
 import { TelemetryDatabase } from "./database.js";
 import type { TokenPilotPaths } from "./paths.js";
 
@@ -6,6 +6,7 @@ export interface Report {
   generatedAt: string;
   since: string;
   rows: AggregateRow[];
+  coverage: MeasurementCoverage[];
   comparisons: TreatmentComparison[];
 }
 
@@ -15,7 +16,13 @@ export function buildReport(paths: TokenPilotPaths, days: number): Report {
   const database = new TelemetryDatabase(paths);
   try {
     const summaries = database.sessionSummariesSince(since);
-    return { generatedAt: new Date().toISOString(), since, rows: database.aggregateSince(since), comparisons: treatmentComparisons(summaries) };
+    return {
+      generatedAt: new Date().toISOString(),
+      since,
+      rows: database.aggregateSince(since),
+      coverage: database.measurementCoverageSince(since),
+      comparisons: treatmentComparisons(summaries)
+    };
   } finally {
     database.close();
   }
@@ -88,7 +95,8 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       baselineMedianDurationSeconds: median(baseline.map((session) => session.durationSeconds)),
       treatmentMedianDurationSeconds: median(treatment.map((session) => session.durationSeconds)),
       baselineCompletionRate: completionRate(baseline),
-      treatmentCompletionRate: completionRate(treatment)
+      treatmentCompletionRate: completionRate(treatment),
+      readiness: baseline.length >= 5 && treatment.length >= 5 ? "ready" as const : "preliminary" as const
     }];
   }).sort((a, b) => a.provider.localeCompare(b.provider) || a.taskKind.localeCompare(b.taskKind));
 }
@@ -102,23 +110,36 @@ export function reportMarkdown(report: Report): string {
     "# TokenPilot — Personal telemetry report",
     "",
     `Generated: ${report.generatedAt}`,
-    `Window starts: ${report.since}`,
+    `Window: last seven days (starts ${report.since})`,
     "",
     "> This report contains aggregate numeric telemetry only. Do not compare raw token totals across providers.",
     "",
+    "## Measurement coverage",
+    "",
+    "| Provider | Sessions | Measured | Unavailable |",
+    "| --- | ---: | ---: | ---: |"
+  ];
+  for (const row of report.coverage) {
+    lines.push(`| ${row.provider} | ${integer(row.sessions)} | ${integer(row.measuredSessions)} | ${integer(row.unavailableSessions)} |`);
+  }
+  if (report.coverage.length === 0) lines.push("| — | 0 | 0 | 0 |");
+  lines.push(
+    "",
+    "## Session metrics",
+    "",
     "| Provider | Mode | Policy applied | Task type | Sessions | Complete | Rework | Abandoned | New input | Cached input | Cache created | Output | Reasoning | Retries |",
     "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
-  ];
+  );
   for (const row of report.rows) {
     const policy = row.optimizationApplied ? row.optimizationProfile ?? "validated policy" : "none";
     lines.push(`| ${row.provider} | ${row.mode} | ${policy} | ${row.taskKind} | ${integer(row.sessions)} | ${integer(row.completed)} | ${integer(row.rework)} | ${integer(row.abandoned)} | ${integer(row.inputNew)} | ${integer(row.inputCached)} | ${integer(row.cacheCreated)} | ${integer(row.output)} | ${integer(row.reasoning)} | ${integer(row.retries)} |`);
   }
   if (report.rows.length === 0) lines.push("| — | — | — | — | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |");
-  lines.push("", "## Matched treatment comparison", "", "> `Token pressure` is new input + cache creation + output + reasoning. It excludes cached reads and is compared only within the same provider and task type.", "", "| Provider | Task type | Policy | Baseline / treatment sessions | Baseline median | Treatment median | Change | Baseline / treatment IQR | Baseline / treatment median duration | Completion |", "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
+  lines.push("", "## Matched treatment comparison", "", "> `Token pressure` is new input + cache creation + output + reasoning. It excludes cached reads and is compared only within the same provider and task type. A result becomes `ready` after at least five measured baseline and five measured treatment sessions.", "", "| Provider | Task type | Policy | Status | Baseline / treatment sessions | Baseline median | Treatment median | Change | Baseline / treatment IQR | Baseline / treatment median duration | Completion |", "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
   for (const comparison of report.comparisons) {
-    lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.optimizationProfile} | ${integer(comparison.baselineSessions)} / ${integer(comparison.treatmentSessions)} | ${integer(comparison.baselineMedianTokenPressure)} | ${integer(comparison.treatmentMedianTokenPressure)} | ${comparison.tokenPressureDeltaPercent.toFixed(1)}% | ${integer(comparison.baselineIqrTokenPressure)} / ${integer(comparison.treatmentIqrTokenPressure)} | ${integer(comparison.baselineMedianDurationSeconds)}s / ${integer(comparison.treatmentMedianDurationSeconds)}s | ${percent(comparison.baselineCompletionRate)} / ${percent(comparison.treatmentCompletionRate)} |`);
+    lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.optimizationProfile} | ${comparison.readiness} | ${integer(comparison.baselineSessions)} / ${integer(comparison.treatmentSessions)} | ${integer(comparison.baselineMedianTokenPressure)} | ${integer(comparison.treatmentMedianTokenPressure)} | ${comparison.tokenPressureDeltaPercent.toFixed(1)}% | ${integer(comparison.baselineIqrTokenPressure)} / ${integer(comparison.treatmentIqrTokenPressure)} | ${integer(comparison.baselineMedianDurationSeconds)}s / ${integer(comparison.treatmentMedianDurationSeconds)}s | ${percent(comparison.baselineCompletionRate)} / ${percent(comparison.treatmentCompletionRate)} |`);
   }
-  if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — | — | — |");
-  lines.push("", "## Interpretation", "", "- `observe` establishes the personal baseline and does not change CLI behavior.", "- A `balanced` row with a named policy is a real provider-specific treatment. A `balanced` row with `none` means the installed CLI did not advertise a validated flag, so TokenPilot deliberately left it unchanged.", "- Compare a provider and task type only with its own `observe` rows; cached input is shown separately because it is not equivalent to newly created context.", "- `off` writes no telemetry. `TOKENPILOT_BYPASS=1 <provider>` bypasses TokenPilot immediately.", "");
+  if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — | — | — | — |");
+  lines.push("", "## Interpretation", "", "- `observe` establishes the personal baseline and does not change CLI behavior.", "- A `balanced` row with a named policy is a real provider-specific treatment. A `balanced` row with `none` means the installed CLI did not advertise a validated flag, so TokenPilot deliberately left it unchanged.", "- A `preliminary` comparison is visible for learning, not a savings claim. Treat a negative `ready` change as a measured reduction.", "- Compare a provider and task type only with its own `observe` rows; cached input is shown separately because it is not equivalent to newly created context.", "- `off` writes no telemetry. `TOKENPILOT_BYPASS=1 <provider>` bypasses TokenPilot immediately.", "");
   return lines.join("\n");
 }

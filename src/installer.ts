@@ -12,11 +12,14 @@ const SHELL_MARKER_END = "# <<< tokenpilot <<<";
 const LAUNCH_AGENT_LABEL = "com.tokenpilot.agent";
 const LAUNCH_AGENT_MARKER = "<key>TokenPilotManaged</key><true/>";
 const LAUNCHCTL = "/bin/launchctl";
+const SKILL_MARKER = "tokenpilot-managed-skill";
+const SKILL_RELATIVE_PATH = path.join("tokenpilot", "SKILL.md");
 
 export interface InstallOptions {
   dryRun?: boolean;
   noShellConfig?: boolean;
   noAgent?: boolean;
+  noSkills?: boolean;
   executable?: string;
   nodeExecutable?: string;
   shell?: string;
@@ -24,6 +27,7 @@ export interface InstallOptions {
 
 export interface InstallPlan {
   shims: string[];
+  skills: string[];
   shellFile?: string;
   launchAgent?: string;
 }
@@ -67,10 +71,47 @@ function hasOwnedLaunchAgent(contents: string): boolean {
   return contents.includes(`<string>${LAUNCH_AGENT_LABEL}</string>`) && contents.includes(LAUNCH_AGENT_MARKER);
 }
 
+function hasOwnedSkill(contents: string): boolean {
+  return contents.includes(SKILL_MARKER);
+}
+
+function sourceSkillFile(): string {
+  const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".agents", "skills", SKILL_RELATIVE_PATH);
+  if (!existingRegularFile(source) || !hasOwnedSkill(fs.readFileSync(source, "utf8"))) {
+    throw new Error("TokenPilot skill source is missing or invalid");
+  }
+  return source;
+}
+
+function assertSkillTarget(paths: TokenPilotPaths, target: string): void {
+  const directory = path.dirname(target);
+  if (fs.existsSync(directory)) {
+    if (!hasSafePrivateDirectory(paths, directory)) throw new Error(`Refusing unsafe TokenPilot skill directory: ${directory}`);
+    if (!fs.existsSync(target)) throw new Error(`Refusing to add a TokenPilot skill to an existing foreign directory: ${directory}`);
+  }
+  if (fs.existsSync(target) && (!existingRegularFile(target) || !hasOwnedSkill(fs.readFileSync(target, "utf8")))) {
+    throw new Error(`Refusing to overwrite non-TokenPilot skill: ${target}`);
+  }
+}
+
+function writeSkills(paths: TokenPilotPaths, targets: string[]): void {
+  if (targets.length === 0) return;
+  const contents = fs.readFileSync(sourceSkillFile(), "utf8");
+  for (const target of targets) {
+    ensurePrivateDirectory(paths, path.dirname(target));
+    fs.writeFileSync(target, contents, { mode: 0o600 });
+  }
+}
+
 export function createInstallPlan(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
   const shellFile = options.noShellConfig ? undefined : shellStartupFile(options.shell ?? process.env.SHELL, paths.userHome);
   return {
     shims: PROVIDERS.map((provider) => path.join(paths.shimDir, provider)),
+    skills: options.noSkills ? [] : [
+      path.join(paths.userHome, ".agents", "skills", SKILL_RELATIVE_PATH),
+      path.join(paths.userHome, ".claude", "skills", SKILL_RELATIVE_PATH),
+      path.join(paths.userHome, ".kimi", "skills", SKILL_RELATIVE_PATH)
+    ],
     shellFile,
     launchAgent: options.noAgent ? undefined : paths.launchAgentFile
   };
@@ -126,7 +167,13 @@ export function install(paths: TokenPilotPaths, options: InstallOptions = {}): I
   ensurePrivateDirectory(paths, paths.runtimeDir);
   ensureConfig(paths);
 
+  // Validate all user-owned targets before creating a shim or changing shell
+  // configuration. A pre-existing unrelated skill must never be overwritten.
+  sourceSkillFile();
+  for (const target of plan.skills) assertSkillTarget(paths, target);
+
   for (const provider of PROVIDERS) writeShim(path.join(paths.shimDir, provider), provider, nodeExecutable, executable);
+  writeSkills(paths, plan.skills);
   if (plan.shellFile) appendShellBlock(plan.shellFile, shellBlock(paths.shimDir));
   if (plan.launchAgent) {
     ensurePrivateDirectory(paths, path.dirname(plan.launchAgent));
@@ -154,6 +201,17 @@ export function uninstall(paths: TokenPilotPaths, dryRun = false): InstallPlan {
   if (hasSafePrivateDirectory(paths, paths.shimDir)) {
     for (const shim of plan.shims) {
       if (existingRegularFile(shim) && hasOwnedShim(fs.readFileSync(shim, "utf8"), path.basename(shim))) fs.rmSync(shim);
+    }
+  }
+  for (const skill of plan.skills) {
+    const skillDirectory = path.dirname(skill);
+    if (!hasSafePrivateDirectory(paths, skillDirectory) || !existingRegularFile(skill)) continue;
+    if (!hasOwnedSkill(fs.readFileSync(skill, "utf8"))) continue;
+    fs.rmSync(skill);
+    try {
+      fs.rmdirSync(skillDirectory);
+    } catch {
+      // Keep a directory containing user-owned supporting files.
     }
   }
   if (plan.launchAgent && ownsLaunchAgent) fs.rmSync(plan.launchAgent);

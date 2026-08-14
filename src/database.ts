@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import type { AggregateRow, RunRecord, SessionEvent, SessionSummary, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
+import type { AggregateRow, MeasurementCoverage, RunRecord, SessionEvent, SessionSummary, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
 import { safeEvent, safeRun, safeUsage } from "./privacy.js";
 import { assertSafeStateFile, ensurePrivateDirectory, type TokenPilotPaths } from "./paths.js";
 
@@ -160,6 +160,19 @@ export class TelemetryDatabase {
       ...(row as unknown as AggregateRow),
       optimizationApplied: Boolean((row as { optimizationApplied: number }).optimizationApplied)
     }));
+  }
+
+  measurementCoverageSince(since: string): MeasurementCoverage[] {
+    return this.db.prepare(`
+      WITH measured AS (SELECT DISTINCT run_id FROM usage_records)
+      SELECT r.provider AS provider, COUNT(*) AS sessions,
+        SUM(CASE WHEN m.run_id IS NOT NULL THEN 1 ELSE 0 END) AS measuredSessions,
+        SUM(CASE WHEN r.collection_state = 'unavailable' THEN 1 ELSE 0 END) AS unavailableSessions
+      FROM runs r LEFT JOIN measured m ON m.run_id = r.id
+      WHERE r.started_at >= ?
+      GROUP BY r.provider
+      ORDER BY r.provider
+    `).all(since) as unknown as MeasurementCoverage[];
   }
 
   sessionSummariesSince(since: string): SessionSummary[] {

@@ -31,6 +31,14 @@ describe("local launcher and collector", () => {
     return originalBin;
   }
 
+  function writeFakeClaude(paths: ReturnType<typeof temporaryPaths>, contents: string): string {
+    const originalBin = path.join(paths.userHome, "original-claude-bin");
+    const original = path.join(originalBin, "claude");
+    fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(original, contents, { mode: 0o700 });
+    return originalBin;
+  }
+
   it("records an envelope but never imports ambient provider telemetry", async () => {
     const paths = temporaryPaths();
     const originalBin = writeFakeCodex(paths, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'fake-codex 1.0\\n'; fi\nexit 0\n");
@@ -71,6 +79,25 @@ describe("local launcher and collector", () => {
       optimizationApplied: true,
       optimizationProfile: "codex-balanced-v1"
     });
+    database.close();
+    cleanup(paths);
+  });
+
+  it("scopes Claude to authenticated local metrics with content signals disabled", async () => {
+    const paths = temporaryPaths();
+    const environmentFile = path.join(paths.userHome, "claude-environment");
+    const originalBin = writeFakeClaude(paths, `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'claude 2.1.300'; exit 0; fi
+if [ "$1" = "--help" ]; then exit 0; fi
+printf '%s|%s|%s|%s|%s|%s|%s|%s' "$CLAUDE_CODE_ENABLE_TELEMETRY" "$OTEL_METRICS_EXPORTER" "$OTEL_LOGS_EXPORTER" "$OTEL_TRACES_EXPORTER" "$OTEL_LOG_USER_PROMPTS" "$OTEL_METRICS_INCLUDE_ACCOUNT_UUID" "$OTEL_EXPORTER_OTLP_METRICS_PROTOCOL" "$OTEL_METRIC_EXPORT_INTERVAL" > '${environmentFile}'
+exit 0
+`);
+
+    expect(await withProviderPath(originalBin, () => runProvider("claude", ["run"], paths))).toBe(0);
+    expect(fs.readFileSync(environmentFile, "utf8")).toBe("1|otlp|none|none|0|false|http/json|1000");
+    const database = new TelemetryDatabase(paths);
+    expect(database.getPendingRuns()).toHaveLength(0);
+    expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ provider: "claude", inputNew: 0 });
     database.close();
     cleanup(paths);
   });

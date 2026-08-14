@@ -13,7 +13,7 @@ import { PROVIDERS, type Provider, type TaskKind, type TaskOutcome } from "./typ
 const HELP = `TokenPilot — local-first CLI telemetry
 
 Usage:
-  tokenpilot install [--dry-run] [--no-shell-config] [--no-agent]
+  tokenpilot install [--dry-run] [--no-shell-config] [--no-agent] [--no-skills]
   tokenpilot uninstall [--dry-run]
   tokenpilot mode <observe|balanced|deep|off>
   tokenpilot agent [--once] [--interval <seconds>]
@@ -98,6 +98,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
       dryRun: has(args, "--dry-run"),
       noShellConfig: has(args, "--no-shell-config"),
       noAgent: has(args, "--no-agent"),
+      noSkills: has(args, "--no-skills"),
       executable: fileURLToPath(import.meta.url)
     });
     printPlan(plan);

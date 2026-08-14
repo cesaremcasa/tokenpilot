@@ -10,11 +10,18 @@ describe("installation and fail-open launcher lookup", () => {
     const paths = temporaryPaths();
     const plan = install(paths, { noShellConfig: true, noAgent: true, executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
     expect(plan.shims).toHaveLength(4);
+    expect(plan.skills).toHaveLength(3);
+    expect(fs.readFileSync(plan.skills[0], "utf8")).toContain("tokenpilot-managed-skill");
+    expect(fs.readFileSync(plan.skills[1], "utf8")).toContain("tokenpilot-managed-skill");
+    expect(fs.readFileSync(plan.skills[2], "utf8")).toContain("tokenpilot-managed-skill");
     const shim = fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8");
     expect(shim).toContain("__shim codex");
     expect(shim).toContain("# tokenpilot-shim");
     uninstall(paths);
     expect(fs.existsSync(path.join(paths.shimDir, "codex"))).toBe(false);
+    expect(fs.existsSync(plan.skills[0])).toBe(false);
+    expect(fs.existsSync(plan.skills[1])).toBe(false);
+    expect(fs.existsSync(plan.skills[2])).toBe(false);
     cleanup(paths);
   });
 
@@ -57,6 +64,17 @@ describe("installation and fail-open launcher lookup", () => {
 
     expect(() => install(paths, { noShellConfig: true, noAgent: true })).toThrow("Refusing to overwrite non-TokenPilot shim");
     expect(fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8")).toContain("foreign");
+    cleanup(paths);
+  });
+
+  it("refuses to overwrite a non-TokenPilot personal skill", () => {
+    const paths = temporaryPaths();
+    const skill = path.join(paths.userHome, ".agents", "skills", "tokenpilot", "SKILL.md");
+    fs.mkdirSync(path.dirname(skill), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(skill, "---\nname: tokenpilot\n---\nforeign\n", { mode: 0o600 });
+
+    expect(() => install(paths, { noShellConfig: true, noAgent: true })).toThrow("Refusing to overwrite non-TokenPilot skill");
+    expect(fs.readFileSync(skill, "utf8")).toContain("foreign");
     cleanup(paths);
   });
 

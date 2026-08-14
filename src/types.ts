@@ -51,7 +51,7 @@ export interface SessionEvent {
 }
 
 export interface ProviderCapabilities {
-  telemetry: "session-files" | "wire" | "unknown";
+  telemetry: "otlp-metrics" | "session-files" | "wire" | "unknown";
   supportsBalancedOptimization: boolean;
   notes: string;
 }
@@ -88,6 +88,13 @@ export interface AggregateRow {
   retries: number;
 }
 
+export interface MeasurementCoverage {
+  provider: Provider;
+  sessions: number;
+  measuredSessions: number;
+  unavailableSessions: number;
+}
+
 export interface SessionSummary {
   id: string;
   provider: Provider;
@@ -121,4 +128,5 @@ export interface TreatmentComparison {
   treatmentMedianDurationSeconds: number;
   baselineCompletionRate?: number;
   treatmentCompletionRate?: number;
+  readiness: "ready" | "preliminary";
 }

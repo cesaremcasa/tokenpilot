@@ -8,6 +8,7 @@ import { ensureConfig, selectMode } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
 import { planForInstalledCli, planFromHelp } from "./optimization.js";
 import type { TokenPilotPaths } from "./paths.js";
+import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
 import type { Provider, RunMode } from "./types.js";
 
 const PASSTHROUGH_ARGUMENTS = new Set(["login", "logout", "auth", "--help", "-h", "--version", "-V", "version"]);
@@ -46,9 +47,10 @@ function hasMacAcl(target: string): boolean {
   return result.stdout.trim().split(/\r?\n/).length > 1;
 }
 
-function providerEnvironment(): NodeJS.ProcessEnv {
-  const { PATH: _path, TOKENPILOT_BYPASS: _bypass, TOKENPILOT_PERSONAL_SESSION: _personalSession, ...environment } = process.env;
-  return { ...environment, PATH: PROVIDER_PATH };
+function providerEnvironment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const environment = Object.fromEntries(Object.entries(process.env)
+    .filter(([name]) => name !== "PATH" && !name.startsWith("TOKENPILOT_")));
+  return { ...environment, ...overrides, PATH: PROVIDER_PATH };
 }
 
 function canonicalDirectory(directory: string): string {
@@ -93,7 +95,7 @@ function binaryVersion(binary: string): string | undefined {
   return result.stdout.match(/\b\d+(?:\.\d+){0,3}(?:[-+][A-Za-z0-9._-]+)?\b/)?.[0];
 }
 
-function launchChild(binary: string, args: string[]): Promise<number | null> {
+function launchChild(binary: string, args: string[], environment = providerEnvironment()): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const trusted = trustedExecutable(binary);
     if (!trusted) {
@@ -102,7 +104,7 @@ function launchChild(binary: string, args: string[]): Promise<number | null> {
     }
     const child = spawn(trusted, args, {
       stdio: "inherit",
-      env: providerEnvironment(),
+      env: environment,
       cwd: process.cwd()
     });
     let settled = false;
@@ -142,6 +144,8 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   let database: TelemetryDatabase | undefined;
   let runId: string | undefined;
   let launchArgs = args;
+  let launchEnvironment = providerEnvironment();
+  let claudeMetrics: ClaudeMetricsReceiver | undefined;
   try {
     const config = ensureConfig(paths);
     const mode = selectMode(config, false);
@@ -172,6 +176,10 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
         taskKind: "unknown",
         outcome: "unknown"
       });
+      if (provider === "claude") {
+        claudeMetrics = await startClaudeMetricsReceiver(database, runId);
+        launchEnvironment = providerEnvironment(claudeMetrics.environment);
+      }
       launchArgs = [...optimization.args, ...args];
     }
   } catch {
@@ -180,20 +188,25 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     database?.close();
     database = undefined;
     runId = undefined;
+    await claudeMetrics?.close().catch(() => undefined);
+    claudeMetrics = undefined;
     launchArgs = args;
   }
 
   try {
-    const code = await launchChild(binary, launchArgs);
+    const code = await launchChild(binary, launchArgs, launchEnvironment);
+    await claudeMetrics?.close().catch(() => undefined);
     if (database && runId) {
       try {
         database.finishRun(runId, code, new Date().toISOString());
+        if (provider === "claude") database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
       } catch {
         process.stderr.write("TokenPilot: telemetry completion unavailable.\n");
       }
     }
     return code ?? 1;
   } finally {
+    await claudeMetrics?.close().catch(() => undefined);
     database?.close();
   }
 }

@@ -10,6 +10,10 @@ import type { TokenPilotPaths } from "./paths.js";
  * is allowed to add usage to the database.
  */
 export function collectRun(_paths: TokenPilotPaths, database: TelemetryDatabase, run: RunRecord): boolean {
+  if (database.hasUsage(run.id)) {
+    database.markCollection(run.id, "collected");
+    return true;
+  }
   database.markCollection(run.id, "unavailable");
   return false;
 }

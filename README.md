@@ -41,7 +41,18 @@ node dist/cli.js install
 exec "$SHELL" -l
 ```
 
-The installer creates per-user shims at `~/.tokenpilot/bin`, adds that directory to `~/.zshrc` or `~/.bashrc`, and starts a user-only macOS LaunchAgent. It never uses `sudo`.
+The installer creates per-user shims at `~/.tokenpilot/bin`, adds that directory to `~/.zshrc` or `~/.bashrc`, starts a user-only macOS LaunchAgent, and installs the `tokenpilot` report skill automatically. It never uses `sudo`.
+
+The same versioned skill is installed per user, not per repository or company account:
+
+| Provider | Open the seven-day report |
+| --- | --- |
+| Claude Code | `/tokenpilot` |
+| Codex | `$tokenpilot` (or select it after typing `/`) |
+| Kimi Code CLI | `/skill:tokenpilot` |
+| Grok | `tokenpilot report` in the terminal until its CLI exposes a documented skill extension |
+
+The skill always calls `tokenpilot report --format md`, whose default window is the latest seven days. It never reads transcripts, prompts, provider logs, project files, environment variables, or the SQLite database directly. Use `tokenpilot install --no-skills` only when a managed environment must distribute the skill separately.
 
 Before measuring or applying a treatment, explicitly mark the terminal as personal. Provider CLIs do not expose a reliable account-scope signal, so TokenPilot defaults to transparent pass-through with no record and no optimization. Set this only in a VS Code terminal profile used exclusively with your personal accounts; do not put it in a shared shell profile or a company terminal.
 
@@ -92,8 +103,9 @@ tokenpilot collect
 # Optional, content-free session classification for the experiment.
 tokenpilot classify <run-id> --kind bugfix --outcome completed
 
-# Aggregate report. It intentionally never compares raw token totals across providers.
-tokenpilot report --days 7 --format md
+# Aggregate report for the latest seven days. It intentionally never compares
+# raw token totals across providers.
+tokenpilot report
 ```
 
 `off`, an absent `TOKENPILOT_PERSONAL_SESSION=1`, and `TOKENPILOT_BYPASS=1` are fail-open bypasses. If TokenPilot cannot initialize its telemetry database, it starts the original CLI normally.
@@ -113,13 +125,17 @@ Before sharing an aggregate report, review it manually. Do not put company telem
 
 ## Telemetry quality
 
-TokenPilot treats provider logs as an evolving local interface. V0.1 does **not** scan provider folders, timestamps, JSONL, or Wire output: none of those sources alone proves a log line belongs to the current wrapper session. `tokenpilot collect` consequently marks finished envelopes `unavailable` rather than inventing numbers or mixing activity. A future adapter may add counters only after it has a provider-documented, tested run correlation and explicit privacy review.
+TokenPilot treats provider logs as an evolving local interface. It never scans provider folders, timestamps, JSONL, or Wire output: none of those sources alone proves a log line belongs to the current wrapper session. `tokenpilot collect` consequently marks a finished envelope `unavailable` rather than inventing numbers or mixing activity.
+
+For an explicitly personal Claude session, TokenPilot starts a short-lived receiver on `127.0.0.1` and configures Claude's documented OTLP **metrics-only** exporter for that child process. It disables logs, traces, prompt/response logging, tool-detail logging, raw API bodies, account UUIDs, session IDs, and custom resource labels. Each receiver has an unguessable per-run header and accepts only the documented `claude_code.token.usage` metric. It extracts only the numeric `input`, `cacheRead`, `cacheCreation`, and `output` counters; every other field is discarded before storage. It does not change Claude authentication or send telemetry over the network.
+
+Claude's metrics can still contain account identity attributes in the transient provider export. TokenPilot neither logs nor stores them, but this is why the receiver is local, authenticated per session, and destroyed when the CLI exits.
 
 The four adapters are all available for observation:
 
-| Provider | Automatic counter import | V0.1 optimisation |
+| Provider | Automatic counter import | Current optimisation |
 | --- | --- | --- |
-| Claude | Not yet enabled: documented run correlation required | cache-stable prefix, medium effort, core tools |
+| Claude | Metrics-only local OTLP receiver, correlated by the wrapper's unique per-run endpoint header | cache-stable prefix, medium effort, core tools |
 | Codex | Not yet enabled: documented run correlation required | medium effort, low verbosity, 64k compaction |
 | Grok | Not yet enabled: documented run correlation required | medium effort |
 | Kimi | Not yet enabled: documented run correlation required | version-gated only |
@@ -130,9 +146,9 @@ Claude handles prompt caching itself, and its cache prefix is sensitive to model
 
 1. In a VS Code terminal profile used only with personal accounts, set `TOKENPILOT_PERSONAL_SESSION=1` and run `tokenpilot mode observe` for seven days to establish a session and quality baseline.
 2. Use the CLIs normally and classify sessions only when you are comfortable doing so.
-3. Do not use the current reports for token-savings claims: automatic counters will be zero/unavailable until a documented per-provider correlator is added and tested.
+3. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for the fixed seven-day report. Only Claude has a measured token counter in this version; all other providers will show unavailable until their documented correlators are added and tested.
 4. Set `tokenpilot mode balanced` only to validate the version-gated optimization and the immediate bypass. It applies a verified provider treatment when the CLI advertises the necessary flags.
-5. Once a correlator passes privacy review, repeat the baseline and the persisted 50/50 `balanced` experiment before claiming savings.
+5. A comparison becomes `ready` only after five measured baseline and five measured treatment sessions for the same provider and task type. Until then it is shown as preliminary rather than a savings claim.
 6. Use `TOKENPILOT_BYPASS=1 <provider>`, remove `TOKENPILOT_PERSONAL_SESSION`, or use `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.
 
 There is intentionally no pre-set savings target. The report names the policy actually applied and provides matched within-provider comparisons of median token pressure, variation, duration, and classified completion rate.
