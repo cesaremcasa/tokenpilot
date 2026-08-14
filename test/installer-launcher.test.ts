@@ -31,9 +31,11 @@ describe("installation and fail-open launcher lookup", () => {
     const shim = fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8");
     expect(shim).toContain("__shim codex");
     expect(shim).toContain("# tokenpilot-shim");
+    expect(shim).toContain("NODE_NO_WARNINGS=1");
     const command = fs.readFileSync(plan.command, "utf8");
     expect(command).toContain("# tokenpilot-command-shim");
     expect(command).toContain('"$@"');
+    expect(command).toContain("NODE_NO_WARNINGS=1");
     uninstall(paths);
     expect(fs.existsSync(path.join(paths.shimDir, "codex"))).toBe(false);
     expect(fs.existsSync(plan.command)).toBe(false);
