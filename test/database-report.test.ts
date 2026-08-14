@@ -58,6 +58,18 @@ describe("aggregate reporting", () => {
     expect(comparisons).toEqual([]);
   });
 
+  it("lists only content-free run metadata for optional classification", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    const now = new Date().toISOString();
+    database.createRun({ id: "newer", provider: "grok", mode: "balanced", startedAt: now, optimizationApplied: true, optimizationProfile: "grok-balanced-v1", comparisonProfile: "grok-balanced-v1", collectionState: "pending", taskKind: "unknown", outcome: "unknown" });
+    database.createRun({ id: "classified", provider: "claude", mode: "observe", startedAt: now, optimizationApplied: false, comparisonProfile: "claude-balanced-v2", collectionState: "pending", taskKind: "feature", outcome: "completed" });
+    expect(database.recentRunsSince(new Date(Date.now() - 60_000).toISOString())).toHaveLength(2);
+    expect(database.recentRunsSince(new Date(Date.now() - 60_000).toISOString(), true)).toMatchObject([{ id: "newer", provider: "grok", comparisonProfile: "grok-balanced-v1", taskKind: "unknown" }]);
+    database.close();
+    cleanup(paths);
+  });
+
   it("opens an existing report database without changing its file", () => {
     const paths = temporaryPaths();
     const database = new TelemetryDatabase(paths);

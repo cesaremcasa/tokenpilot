@@ -2,7 +2,7 @@ export const PROVIDERS = ["claude", "codex", "grok", "kimi"] as const;
 
 export type Provider = (typeof PROVIDERS)[number];
 export type RunMode = "observe" | "balanced" | "deep" | "off";
-export type TaskKind = "feature" | "bugfix" | "research" | "operations" | "other" | "unknown";
+export type TaskKind = "feature" | "bugfix" | "research" | "operations" | "benchmark" | "other" | "unknown";
 export type TaskOutcome = "completed" | "rework" | "abandoned" | "unknown";
 export type CollectionState = "pending" | "collected" | "unavailable";
 

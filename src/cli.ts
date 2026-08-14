@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import process from "node:process";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getPaths } from "./paths.js";
 import { install, uninstall } from "./installer.js";
@@ -18,7 +19,8 @@ Usage:
   tokenpilot mode <observe|balanced|deep|off>
   tokenpilot agent [--once] [--interval <seconds>]
   tokenpilot collect
-  tokenpilot classify <run-id> --kind <feature|bugfix|research|operations|other> --outcome <completed|rework|abandoned>
+  tokenpilot sessions [--days <1-365>] [--unclassified]
+  tokenpilot classify <run-id> --kind <feature|bugfix|research|operations|benchmark|other> --outcome <completed|rework|abandoned>
   tokenpilot report [--days <1-365>] [--format <md|json>]
   tokenpilot status
 
@@ -80,6 +82,37 @@ function status(): void {
   process.stdout.write(`TokenPilot state: ${paths.dataDir}\nTelemetry database: ${paths.databaseFile}\nShim directory: ${paths.shimDir}\n`);
 }
 
+function daysArgument(args: string[]): number {
+  const days = Number(flag(args, "--days") ?? 7);
+  if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error("--days must be a whole number between 1 and 365");
+  return days;
+}
+
+function sessions(args: string[]): void {
+  const paths = getPaths();
+  const days = daysArgument(args);
+  if (!fs.existsSync(paths.databaseFile)) {
+    process.stdout.write("No local TokenPilot sessions yet.\n");
+    return;
+  }
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1_000).toISOString();
+  const database = new TelemetryDatabase(paths, { readOnly: true });
+  try {
+    const rows = database.recentRunsSince(since, has(args, "--unclassified"));
+    if (rows.length === 0) {
+      process.stdout.write("No matching TokenPilot sessions.\n");
+      return;
+    }
+    process.stdout.write("Run ID                              Provider  Started                   Mode      Policy                 Task        Outcome\n");
+    for (const row of rows) {
+      const policy = row.optimizationProfile ?? row.comparisonProfile ?? "none";
+      process.stdout.write(`${row.id}  ${row.provider.padEnd(8)}  ${row.startedAt.slice(0, 19)}  ${row.mode.padEnd(8)}  ${policy.padEnd(21)}  ${row.taskKind.padEnd(10)}  ${row.outcome}\n`);
+    }
+  } finally {
+    database.close();
+  }
+}
+
 export async function main(args = process.argv.slice(2)): Promise<number> {
   const command = args[0];
   const paths = getPaths();
@@ -116,12 +149,16 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   }
   if (command === "agent") return runAgent(args.slice(1));
   if (command === "collect") return runAgent(["--once"]);
+  if (command === "sessions") {
+    sessions(args.slice(1));
+    return 0;
+  }
   if (command === "classify") {
     const id = args[1];
     const kind = flag(args, "--kind") as TaskKind | undefined;
     const outcome = flag(args, "--outcome") as TaskOutcome | undefined;
-    if (!id || !["feature", "bugfix", "research", "operations", "other"].includes(kind ?? "") || !["completed", "rework", "abandoned"].includes(outcome ?? "")) {
-      throw new Error("Use tokenpilot classify <run-id> --kind <feature|bugfix|research|operations|other> --outcome <completed|rework|abandoned>");
+    if (!id || !["feature", "bugfix", "research", "operations", "benchmark", "other"].includes(kind ?? "") || !["completed", "rework", "abandoned"].includes(outcome ?? "")) {
+      throw new Error("Use tokenpilot classify <run-id> --kind <feature|bugfix|research|operations|benchmark|other> --outcome <completed|rework|abandoned>");
     }
     const database = new TelemetryDatabase(paths);
     try {
@@ -133,7 +170,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     return 0;
   }
   if (command === "report") {
-    const days = Number(flag(args, "--days") ?? 7);
+    const days = daysArgument(args);
     const report = buildReport(paths, days);
     const format = flag(args, "--format") ?? "md";
     if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

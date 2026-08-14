@@ -184,6 +184,22 @@ export class TelemetryDatabase {
       .all() as unknown as Array<RunRecord & { optimizationApplied?: number }>).map((row) => this.normalizeRun(row));
   }
 
+  /**
+   * Content-free session index for optional post-session classification. It
+   * intentionally exposes only the random run id and fields already in the
+   * database contract; prompts, paths, and provider output are unavailable.
+   */
+  recentRunsSince(since: string, unclassified = false, limit = 50): RunRecord[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Invalid TokenPilot session limit");
+    const filter = unclassified ? "AND task_kind = 'unknown'" : "";
+    return (this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
+        exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
+        optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile,
+        collection_state AS collectionState, task_kind AS taskKind, outcome
+        FROM runs WHERE started_at >= ? ${filter} ORDER BY started_at DESC LIMIT ?`)
+      .all(since, limit) as unknown as Array<RunRecord & { optimizationApplied?: number }>).map((row) => this.normalizeRun(row));
+  }
+
   hasUsage(runId: string): boolean {
     const row = this.db.prepare("SELECT 1 AS present FROM usage_records WHERE run_id = ? LIMIT 1").get(runId) as { present?: number } | undefined;
     return row?.present === 1;

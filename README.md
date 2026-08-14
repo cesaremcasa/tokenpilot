@@ -92,7 +92,10 @@ tokenpilot status
 tokenpilot collect
 
 # Optional, content-free session classification for the experiment.
+tokenpilot sessions --unclassified
 tokenpilot classify <run-id> --kind bugfix --outcome completed
+# Use benchmark only for controlled checks, never for ordinary work.
+tokenpilot classify <run-id> --kind benchmark --outcome completed
 
 # Aggregate report for the latest seven days. It intentionally never compares
 # raw token totals across providers.
