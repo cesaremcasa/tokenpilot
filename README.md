@@ -118,7 +118,7 @@ Normal interactive Codex and Grok sessions retain their original TTY streams and
 
 ## Data model and privacy
 
-Raw local telemetry stays in `~/.local/share/tokenpilot/telemetry.sqlite`, with user-only directory permissions. The database contains only:
+Raw local telemetry stays in `~/.local/share/tokenpilot/telemetry.sqlite` on macOS and `~/.tokenpilot/data/telemetry.sqlite` on Linux, with user-only directory permissions. The database contains only:
 
 - provider, mode, CLI version, timestamps, exit status, and collection status;
 - numeric usage counters (new/cached input, cache creation, output, reasoning, model calls, and a provider-reported total when no category breakdown exists);

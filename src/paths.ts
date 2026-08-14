@@ -17,6 +17,8 @@ export interface TokenPilotPaths {
 export interface PathOptions {
   /** Test-only escape hatch. The installed CLI must never honor mutable state roots. */
   allowEnvironmentOverrides?: boolean;
+  /** Test-only platform selector for validating platform-owned state paths. */
+  platform?: NodeJS.Platform;
 }
 
 export function getPaths(env: NodeJS.ProcessEnv = process.env, options: PathOptions = {}): TokenPilotPaths {
@@ -30,8 +32,15 @@ export function getPaths(env: NodeJS.ProcessEnv = process.env, options: PathOpti
   const accountHome = os.userInfo().homedir;
   const userHome = useOverrides ? env.HOME ?? accountHome : accountHome;
   const home = useOverrides ? env.TOKENPILOT_HOME ?? path.join(userHome, ".tokenpilot") : path.join(userHome, ".tokenpilot");
-  const configDir = useOverrides ? env.TOKENPILOT_CONFIG_HOME ?? path.join(userHome, ".config", "tokenpilot") : path.join(userHome, ".config", "tokenpilot");
-  const dataDir = useOverrides ? env.TOKENPILOT_DATA_HOME ?? path.join(userHome, ".local", "share", "tokenpilot") : path.join(userHome, ".local", "share", "tokenpilot");
+  const platform = options.platform ?? process.platform;
+  // Linux accounts commonly make ~/.config and ~/.local group-writable for
+  // desktop tooling. TokenPilot must never weaken that protection or modify
+  // those shared directories, so Linux state lives entirely below its own
+  // 0700 home. macOS retains the existing per-user locations for compatibility.
+  const defaultConfigDir = platform === "linux" ? path.join(home, "config") : path.join(userHome, ".config", "tokenpilot");
+  const defaultDataDir = platform === "linux" ? path.join(home, "data") : path.join(userHome, ".local", "share", "tokenpilot");
+  const configDir = useOverrides ? env.TOKENPILOT_CONFIG_HOME ?? defaultConfigDir : defaultConfigDir;
+  const dataDir = useOverrides ? env.TOKENPILOT_DATA_HOME ?? defaultDataDir : defaultDataDir;
   const runtimeDir = path.join(home, "run");
 
   return {
