@@ -1,6 +1,7 @@
+import fs from "node:fs";
 import type { AggregateRow, MeasurementCoverage, SessionSummary, TreatmentComparison } from "./types.js";
 import { TelemetryDatabase } from "./database.js";
-import type { TokenPilotPaths } from "./paths.js";
+import { assertSafeStateFile, hasSafePrivateDirectory, type TokenPilotPaths } from "./paths.js";
 
 export interface Report {
   generatedAt: string;
@@ -10,10 +11,43 @@ export interface Report {
   comparisons: TreatmentComparison[];
 }
 
+function emptyReport(since: string): Report {
+  return {
+    generatedAt: new Date().toISOString(),
+    since,
+    rows: [],
+    coverage: [],
+    comparisons: []
+  };
+}
+
+function usesLegacyWalDatabase(databaseFile: string): boolean {
+  const descriptor = fs.openSync(databaseFile, "r");
+  try {
+    const header = Buffer.alloc(20);
+    const bytesRead = fs.readSync(descriptor, header, 0, header.length, 0);
+    // SQLite database-header offsets 18 and 19 are the file-format read and
+    // write versions. A value of 2 selects WAL. Opening it can create -wal or
+    // -shm files even with a read-only connection, so never open it here.
+    return bytesRead === header.length && (header[18] === 2 || header[19] === 2);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 export function buildReport(paths: TokenPilotPaths, days: number): Report {
   if (!Number.isFinite(days) || days <= 0 || days > 365) throw new Error("--days must be between 1 and 365");
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1_000).toISOString();
-  const database = new TelemetryDatabase(paths);
+  // A report is intentionally read-only. Opening a missing SQLite file would
+  // create personal state merely by invoking the installed skill, so return an
+  // empty report until the first explicitly personal session creates data.
+  if (!fs.existsSync(paths.databaseFile)) return emptyReport(since);
+  if (!hasSafePrivateDirectory(paths, paths.dataDir)) throw new Error("TokenPilot telemetry directory is unsafe");
+  assertSafeStateFile(paths, paths.databaseFile);
+  if (usesLegacyWalDatabase(paths.databaseFile)) {
+    throw new Error("TokenPilot telemetry uses a legacy WAL database; start one personal session to migrate it before requesting a read-only report");
+  }
+  const database = new TelemetryDatabase(paths, { readOnly: true });
   try {
     const summaries = database.sessionSummariesSince(since);
     return {

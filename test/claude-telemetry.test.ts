@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
 import { parseClaudeOtlpMetrics, startClaudeMetricsReceiver } from "../src/telemetry/claude.js";
@@ -10,6 +11,7 @@ const payload = {
       metrics: [{
         name: "claude_code.token.usage",
         sum: {
+          aggregationTemporality: 2,
           dataPoints: [
             { attributes: [{ key: "type", value: { stringValue: "input" } }], asInt: "11" },
             { attributes: [{ key: "type", value: { stringValue: "cacheRead" } }], asInt: "13" },
@@ -26,6 +28,12 @@ describe("Claude metrics-only receiver", () => {
   it("extracts only documented numeric token counters", () => {
     expect(parseClaudeOtlpMetrics(payload)).toEqual({ inputNew: 11, inputCached: 13, cacheCreated: 17, output: 19 });
     expect(parseClaudeOtlpMetrics({ resourceMetrics: [] })).toBeUndefined();
+  });
+
+  it("rejects cumulative counters so repeated exports cannot overstate usage", () => {
+    const cumulative = structuredClone(payload);
+    cumulative.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.aggregationTemporality = 3;
+    expect(parseClaudeOtlpMetrics(cumulative)).toBeUndefined();
   });
 
   it("accepts authenticated local OTLP JSON and stores no payload fields", async () => {
@@ -51,6 +59,7 @@ describe("Claude metrics-only receiver", () => {
     expect(rejected.status).toBe(404);
     await receiver.close();
     database.close();
+    expect(fs.readFileSync(paths.databaseFile).toString("latin1")).not.toContain("person@example.test");
     cleanup(paths);
   });
 });

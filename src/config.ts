@@ -6,8 +6,7 @@ import { assertSafeStateFile, ensurePrivateDirectory, type TokenPilotPaths } fro
 
 export const DEFAULT_CONFIG: TokenPilotConfig = {
   version: 1,
-  defaultMode: "observe",
-  balancedSamplingRate: 0.5
+  defaultMode: "observe"
 };
 
 export function ensureConfig(paths: TokenPilotPaths): TokenPilotConfig {
@@ -20,18 +19,14 @@ export function ensureConfig(paths: TokenPilotPaths): TokenPilotConfig {
 
   const parsed = JSON.parse(fs.readFileSync(paths.configFile, "utf8")) as TokenPilotConfig;
   if (parsed.version !== 1
-    || !["observe", "balanced", "deep", "off"].includes(parsed.defaultMode)
-    || !Number.isFinite(parsed.balancedSamplingRate)
-    || parsed.balancedSamplingRate < 0
-    || parsed.balancedSamplingRate > 1) {
+    || !["observe", "balanced", "deep", "off"].includes(parsed.defaultMode)) {
     throw new Error(`Unsupported TokenPilot configuration: ${paths.configFile}`);
   }
   // Older local configs may contain provider paths. Never use or preserve
   // them: a mutable config must not become executable authority.
   return {
     version: 1,
-    defaultMode: parsed.defaultMode,
-    balancedSamplingRate: parsed.balancedSamplingRate
+    defaultMode: parsed.defaultMode
   };
 }
 
@@ -48,10 +43,4 @@ export function setMode(paths: TokenPilotPaths, mode: RunMode): TokenPilotConfig
   config.defaultMode = mode;
   writeConfig(paths, config);
   return config;
-}
-
-export function selectMode(config: TokenPilotConfig, bypass: boolean, random = Math.random): RunMode {
-  if (bypass || config.defaultMode === "off") return "off";
-  if (config.defaultMode !== "balanced") return config.defaultMode;
-  return random() < config.balancedSamplingRate ? "balanced" : "observe";
 }

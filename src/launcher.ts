@@ -4,7 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { getAdapter } from "./adapters/index.js";
-import { ensureConfig, selectMode } from "./config.js";
+import { ensureConfig } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
 import { planForInstalledCli, planFromHelp } from "./optimization.js";
 import type { TokenPilotPaths } from "./paths.js";
@@ -148,13 +148,15 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   let claudeMetrics: ClaudeMetricsReceiver | undefined;
   try {
     const config = ensureConfig(paths);
-    const mode = selectMode(config, false);
+    let mode = config.defaultMode;
     if (mode === "off") {
       // The launch itself happens below, outside the optional telemetry setup.
       launchArgs = args;
     } else {
       const trusted = trustedExecutable(binary);
       if (!trusted) throw new Error("Provider executable no longer meets TokenPilot trust checks");
+      database = new TelemetryDatabase(paths);
+      if (mode === "balanced") mode = database.allocateBalancedMode(provider);
       const optimization = planForInstalledCli(provider, mode, trusted, providerEnvironment(), (candidate) => trustedExecutable(candidate) !== undefined);
       if (mode === "balanced" && optimization.applied) {
         process.stderr.write(`TokenPilot: balanced optimization active for ${provider} (${optimization.summary}).\n`);
@@ -163,7 +165,6 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       }
 
       runId = randomUUID();
-      database = new TelemetryDatabase(paths);
       database.createRun({
         id: runId,
         provider,

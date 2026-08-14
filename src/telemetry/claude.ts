@@ -53,6 +53,17 @@ function pointType(value: unknown): "inputNew" | "inputCached" | "cacheCreated" 
   return undefined;
 }
 
+function deltaSum(metric: JsonObject): JsonObject | undefined {
+  const sum = object(metric.sum);
+  if (!sum) return undefined;
+  // OTLP protobuf JSON encodes this enum as 2. Some exporters emit the enum
+  // name instead, so accept both documented representations. Never add a
+  // cumulative counter: repeated exports would otherwise overstate usage.
+  const temporality = sum.aggregationTemporality;
+  if (temporality !== 2 && temporality !== "AGGREGATION_TEMPORALITY_DELTA") return undefined;
+  return sum;
+}
+
 /**
  * Extracts only four numeric counters from the documented Claude OTLP metric.
  * All resource attributes and every unknown metric are deliberately ignored.
@@ -77,7 +88,9 @@ export function parseClaudeOtlpMetrics(payload: unknown): UsageMetrics | undefin
       for (const metric of metrics) {
         const metricObject = object(metric);
         if (metricObject?.name !== METRIC_NAME) continue;
-        const points = limitedArray(object(metricObject.sum)?.dataPoints, MAX_DATA_POINTS);
+        const sum = deltaSum(metricObject);
+        if (!sum) continue;
+        const points = limitedArray(sum.dataPoints, MAX_DATA_POINTS);
         if (!points) return undefined;
         for (const point of points) {
           const type = pointType(point);

@@ -1,9 +1,20 @@
+import fs from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
 import { buildReport, reportMarkdown, treatmentComparisons } from "../src/report.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("aggregate reporting", () => {
+  it("returns an empty report without creating telemetry state", () => {
+    const paths = temporaryPaths();
+    const report = buildReport(paths, 7);
+    expect(report).toMatchObject({ rows: [], coverage: [], comparisons: [] });
+    expect(fs.existsSync(paths.dataDir)).toBe(false);
+    expect(fs.existsSync(paths.databaseFile)).toBe(false);
+    cleanup(paths);
+  });
+
   it("groups only aggregate numeric data by provider, mode, and task kind", () => {
     const paths = temporaryPaths();
     const database = new TelemetryDatabase(paths);
@@ -37,5 +48,38 @@ describe("aggregate reporting", () => {
       tokenPressureDeltaPercent: -40,
       readiness: "preliminary"
     });
+  });
+
+  it("opens an existing report database without changing its file", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    database.close();
+    const before = fs.statSync(paths.databaseFile).mtimeMs;
+    const walFile = `${paths.databaseFile}-wal`;
+    const walBefore = fs.existsSync(walFile) ? fs.statSync(walFile).mtimeMs : undefined;
+
+    buildReport(paths, 7);
+
+    expect(fs.statSync(paths.databaseFile).mtimeMs).toBe(before);
+    expect(fs.existsSync(walFile)).toBe(walBefore !== undefined);
+    if (walBefore !== undefined) expect(fs.statSync(walFile).mtimeMs).toBe(walBefore);
+    cleanup(paths);
+  });
+
+  it("refuses a legacy WAL database rather than creating report sidecar files", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    database.close();
+    const legacy = new DatabaseSync(paths.databaseFile);
+    legacy.exec("PRAGMA journal_mode = WAL;");
+    legacy.close();
+    const before = fs.statSync(paths.databaseFile).mtimeMs;
+    const walFile = `${paths.databaseFile}-wal`;
+    const walBefore = fs.existsSync(walFile);
+
+    expect(() => buildReport(paths, 7)).toThrow("legacy WAL database");
+    expect(fs.statSync(paths.databaseFile).mtimeMs).toBe(before);
+    expect(fs.existsSync(walFile)).toBe(walBefore);
+    cleanup(paths);
   });
 });

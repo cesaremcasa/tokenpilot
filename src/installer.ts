@@ -14,6 +14,7 @@ const LAUNCH_AGENT_MARKER = "<key>TokenPilotManaged</key><true/>";
 const LAUNCHCTL = "/bin/launchctl";
 const SKILL_MARKER = "tokenpilot-managed-skill";
 const SKILL_RELATIVE_PATH = path.join("tokenpilot", "SKILL.md");
+const COMMAND_MARKER = "# tokenpilot-command-shim";
 
 export interface InstallOptions {
   dryRun?: boolean;
@@ -27,6 +28,7 @@ export interface InstallOptions {
 
 export interface InstallPlan {
   shims: string[];
+  command: string;
   skills: string[];
   shellFile?: string;
   launchAgent?: string;
@@ -65,6 +67,34 @@ function existingRegularFile(target: string): boolean {
 function hasOwnedShim(contents: string, provider: string): boolean {
   return contents.includes("# tokenpilot-shim")
     || (contents.includes("TOKENPILOT_SHIM_DIR=") && contents.includes(`__shim ${provider}`));
+}
+
+function hasOwnedCommand(contents: string): boolean {
+  return contents.includes(COMMAND_MARKER);
+}
+
+function assertShimTarget(target: string, provider: string): void {
+  assertSafeText(target, "shim path");
+  if (existingRegularFile(target) && !hasOwnedShim(fs.readFileSync(target, "utf8"), provider)) {
+    throw new Error(`Refusing to overwrite non-TokenPilot shim: ${target}`);
+  }
+}
+
+function assertCommandTarget(target: string): void {
+  assertSafeText(target, "command shim path");
+  if (existingRegularFile(target) && !hasOwnedCommand(fs.readFileSync(target, "utf8"))) {
+    throw new Error(`Refusing to overwrite non-TokenPilot command shim: ${target}`);
+  }
+}
+
+function assertShellStartupFile(target: string): void {
+  if (fs.existsSync(target)) existingRegularFile(target);
+}
+
+function assertLaunchAgentTarget(target: string): void {
+  if (existingRegularFile(target) && !hasOwnedLaunchAgent(fs.readFileSync(target, "utf8"))) {
+    throw new Error(`Refusing to overwrite non-TokenPilot LaunchAgent: ${target}`);
+  }
 }
 
 function hasOwnedLaunchAgent(contents: string): boolean {
@@ -107,6 +137,7 @@ export function createInstallPlan(paths: TokenPilotPaths, options: InstallOption
   const shellFile = options.noShellConfig ? undefined : shellStartupFile(options.shell ?? process.env.SHELL, paths.userHome);
   return {
     shims: PROVIDERS.map((provider) => path.join(paths.shimDir, provider)),
+    command: path.join(paths.shimDir, "tokenpilot"),
     skills: options.noSkills ? [] : [
       path.join(paths.userHome, ".agents", "skills", SKILL_RELATIVE_PATH),
       path.join(paths.userHome, ".claude", "skills", SKILL_RELATIVE_PATH),
@@ -118,11 +149,14 @@ export function createInstallPlan(paths: TokenPilotPaths, options: InstallOption
 }
 
 function writeShim(target: string, provider: string, nodeExecutable: string, executable: string): void {
-  assertSafeText(target, "shim path");
-  if (existingRegularFile(target) && !hasOwnedShim(fs.readFileSync(target, "utf8"), provider)) {
-    throw new Error(`Refusing to overwrite non-TokenPilot shim: ${target}`);
-  }
+  assertShimTarget(target, provider);
   const contents = `#!/bin/sh\n# tokenpilot-shim\nexec ${quoteShell(nodeExecutable)} ${quoteShell(executable)} __shim ${provider} "$@"\n`;
+  fs.writeFileSync(target, contents, { mode: 0o700 });
+}
+
+function writeCommandShim(target: string, nodeExecutable: string, executable: string): void {
+  assertCommandTarget(target);
+  const contents = `#!/bin/sh\n${COMMAND_MARKER}\nexec ${quoteShell(nodeExecutable)} ${quoteShell(executable)} "$@"\n`;
   fs.writeFileSync(target, contents, { mode: 0o700 });
 }
 
@@ -163,23 +197,26 @@ export function install(paths: TokenPilotPaths, options: InstallOptions = {}): I
 
   const executable = options.executable ?? fileURLToPath(import.meta.url).replace(/installer\.js$/, "cli.js");
   const nodeExecutable = options.nodeExecutable ?? process.execPath;
+
+  // Validate all user-owned targets before creating any TokenPilot state,
+  // shim, or shell configuration. A foreign target leaves no partial install.
+  sourceSkillFile();
+  for (const target of plan.skills) assertSkillTarget(paths, target);
+  for (const provider of PROVIDERS) assertShimTarget(path.join(paths.shimDir, provider), provider);
+  assertCommandTarget(plan.command);
+  if (plan.shellFile) assertShellStartupFile(plan.shellFile);
+  if (plan.launchAgent) assertLaunchAgentTarget(plan.launchAgent);
+
   ensurePrivateDirectory(paths, paths.shimDir);
   ensurePrivateDirectory(paths, paths.runtimeDir);
   ensureConfig(paths);
-
-  // Validate all user-owned targets before creating a shim or changing shell
-  // configuration. A pre-existing unrelated skill must never be overwritten.
-  sourceSkillFile();
-  for (const target of plan.skills) assertSkillTarget(paths, target);
-
   for (const provider of PROVIDERS) writeShim(path.join(paths.shimDir, provider), provider, nodeExecutable, executable);
+  writeCommandShim(plan.command, nodeExecutable, executable);
   writeSkills(paths, plan.skills);
   if (plan.shellFile) appendShellBlock(plan.shellFile, shellBlock(paths.shimDir));
   if (plan.launchAgent) {
     ensurePrivateDirectory(paths, path.dirname(plan.launchAgent));
-    if (existingRegularFile(plan.launchAgent) && !hasOwnedLaunchAgent(fs.readFileSync(plan.launchAgent, "utf8"))) {
-      throw new Error(`Refusing to overwrite non-TokenPilot LaunchAgent: ${plan.launchAgent}`);
-    }
+    assertLaunchAgentTarget(plan.launchAgent);
     fs.writeFileSync(plan.launchAgent, launchAgentPlist(nodeExecutable, executable), { mode: 0o600 });
     if (process.platform === "darwin") bootstrapAgent(plan.launchAgent);
   }
@@ -202,6 +239,7 @@ export function uninstall(paths: TokenPilotPaths, dryRun = false): InstallPlan {
     for (const shim of plan.shims) {
       if (existingRegularFile(shim) && hasOwnedShim(fs.readFileSync(shim, "utf8"), path.basename(shim))) fs.rmSync(shim);
     }
+    if (existingRegularFile(plan.command) && hasOwnedCommand(fs.readFileSync(plan.command, "utf8"))) fs.rmSync(plan.command);
   }
   for (const skill of plan.skills) {
     const skillDirectory = path.dirname(skill);

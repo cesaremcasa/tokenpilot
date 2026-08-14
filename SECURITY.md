@@ -2,11 +2,16 @@
 
 TokenPilot is a local measurement tool. It must remain outside the provider authentication path and outside model request/response traffic.
 
-## Never collect
+## Never persist or export
 
 - API keys, OAuth tokens, cookies, passwords, or account emails;
 - prompts, replies, model reasoning text, source code, file paths, tool results, shell commands, or command-line arguments;
 - raw provider session logs or any unreviewed export.
+
+The personal Claude metrics receiver can transiently receive provider-supplied
+resource attributes in process memory. It immediately discards every resource
+attribute and writes only the allowed numeric counters below. It never logs,
+stores, or exports those transient fields.
 
 ## Allowed local fields
 

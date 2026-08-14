@@ -1,16 +1,30 @@
 import { DatabaseSync } from "node:sqlite";
-import type { AggregateRow, MeasurementCoverage, RunRecord, SessionEvent, SessionSummary, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
+import type { AggregateRow, MeasurementCoverage, Provider, RunMode, RunRecord, SessionEvent, SessionSummary, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
 import { safeEvent, safeRun, safeUsage } from "./privacy.js";
-import { assertSafeStateFile, ensurePrivateDirectory, type TokenPilotPaths } from "./paths.js";
+import { assertSafeStateFile, ensurePrivateDirectory, hasSafePrivateDirectory, type TokenPilotPaths } from "./paths.js";
+
+export interface TelemetryDatabaseOptions {
+  /** A report must never create, migrate, or journal a database. */
+  readOnly?: boolean;
+}
 
 export class TelemetryDatabase {
   private readonly db: DatabaseSync;
 
-  constructor(paths: TokenPilotPaths) {
+  constructor(paths: TokenPilotPaths, options: TelemetryDatabaseOptions = {}) {
+    if (options.readOnly) {
+      if (!hasSafePrivateDirectory(paths, paths.dataDir)) throw new Error("TokenPilot telemetry directory is unavailable");
+      assertSafeStateFile(paths, paths.databaseFile);
+      this.db = new DatabaseSync(paths.databaseFile, { readOnly: true });
+      return;
+    }
     ensurePrivateDirectory(paths, paths.dataDir);
     assertSafeStateFile(paths, paths.databaseFile);
     this.db = new DatabaseSync(paths.databaseFile);
-    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+    // Keep the report command genuinely read-only. SQLite WAL readers create
+    // sidecar files even in read-only mode, while the default rollback journal
+    // leaves no state behind after a completed local write transaction.
+    this.db.exec("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON;");
     this.migrate();
   }
 
@@ -50,6 +64,10 @@ export class TelemetryDatabase {
         type TEXT NOT NULL,
         count INTEGER NOT NULL
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS experiment_allocators (
+        provider TEXT PRIMARY KEY,
+        next_mode TEXT NOT NULL CHECK(next_mode IN ('observe', 'balanced'))
+      ) STRICT;
       CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at);
       CREATE INDEX IF NOT EXISTS idx_usage_run_id ON usage_records(run_id);
       CREATE INDEX IF NOT EXISTS idx_events_run_id ON session_events(run_id);
@@ -62,6 +80,38 @@ export class TelemetryDatabase {
     const columns = this.db.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === name)) {
       this.db.exec(`ALTER TABLE runs ADD COLUMN ${name} ${definition}`);
+    }
+  }
+
+  /**
+   * Assign a new balanced-experiment session in a durable, provider-local
+   * sequence. The first assignment is random; every later assignment for that
+   * provider alternates, so concurrent terminals cannot silently bias the
+   * 50/50 split. Task type is deliberately not used here because it is an
+   * optional post-session classification and is never available at launch.
+   */
+  allocateBalancedMode(provider: Provider, random = Math.random): Extract<RunMode, "observe" | "balanced"> {
+    let transactionStarted = false;
+    try {
+      this.db.exec("BEGIN IMMEDIATE");
+      transactionStarted = true;
+      const row = this.db.prepare("SELECT next_mode AS nextMode FROM experiment_allocators WHERE provider = ?")
+        .get(provider) as { nextMode?: "observe" | "balanced" } | undefined;
+      const mode = row?.nextMode ?? (random() < 0.5 ? "balanced" : "observe");
+      const nextMode = mode === "balanced" ? "observe" : "balanced";
+      this.db.prepare(`INSERT INTO experiment_allocators (provider, next_mode) VALUES (?, ?)
+        ON CONFLICT(provider) DO UPDATE SET next_mode = excluded.next_mode`).run(provider, nextMode);
+      this.db.exec("COMMIT");
+      return mode;
+    } catch (error) {
+      if (transactionStarted) {
+        try {
+          this.db.exec("ROLLBACK");
+        } catch {
+          // Preserve the original allocation failure for fail-open launcher handling.
+        }
+      }
+      throw error;
     }
   }
 

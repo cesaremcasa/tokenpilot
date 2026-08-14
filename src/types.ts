@@ -9,7 +9,6 @@ export type CollectionState = "pending" | "collected" | "unavailable";
 export interface TokenPilotConfig {
   version: 1;
   defaultMode: RunMode;
-  balancedSamplingRate: number;
 }
 
 export interface RunRecord {

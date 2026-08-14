@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { install, uninstall } from "../src/installer.js";
 import { findOriginalBinary, isPassthrough } from "../src/launcher.js";
@@ -10,6 +11,7 @@ describe("installation and fail-open launcher lookup", () => {
     const paths = temporaryPaths();
     const plan = install(paths, { noShellConfig: true, noAgent: true, executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
     expect(plan.shims).toHaveLength(4);
+    expect(plan.command).toBe(path.join(paths.shimDir, "tokenpilot"));
     expect(plan.skills).toHaveLength(3);
     expect(fs.readFileSync(plan.skills[0], "utf8")).toContain("tokenpilot-managed-skill");
     expect(fs.readFileSync(plan.skills[1], "utf8")).toContain("tokenpilot-managed-skill");
@@ -17,8 +19,12 @@ describe("installation and fail-open launcher lookup", () => {
     const shim = fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8");
     expect(shim).toContain("__shim codex");
     expect(shim).toContain("# tokenpilot-shim");
+    const command = fs.readFileSync(plan.command, "utf8");
+    expect(command).toContain("# tokenpilot-command-shim");
+    expect(command).toContain('"$@"');
     uninstall(paths);
     expect(fs.existsSync(path.join(paths.shimDir, "codex"))).toBe(false);
+    expect(fs.existsSync(plan.command)).toBe(false);
     expect(fs.existsSync(plan.skills[0])).toBe(false);
     expect(fs.existsSync(plan.skills[1])).toBe(false);
     expect(fs.existsSync(plan.skills[2])).toBe(false);
@@ -38,6 +44,24 @@ describe("installation and fail-open launcher lookup", () => {
     expect(fs.readFileSync(shellFile, "utf8")).toContain(paths.shimDir);
     uninstall(paths);
     expect(fs.readFileSync(shellFile, "utf8")).not.toContain("tokenpilot");
+    cleanup(paths);
+  });
+
+  it("installs a working tokenpilot command for the report skill", () => {
+    const paths = temporaryPaths();
+    const fakeCli = path.join(paths.userHome, "fake-cli.sh");
+    fs.writeFileSync(fakeCli, "#!/bin/sh\nprintf '%s' \"$*\"\n", { mode: 0o700 });
+    const plan = install(paths, {
+      noShellConfig: true,
+      noAgent: true,
+      executable: fakeCli,
+      nodeExecutable: "/bin/sh"
+    });
+
+    const result = spawnSync(plan.command, ["report", "--format", "md"], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("report --format md");
+    uninstall(paths);
     cleanup(paths);
   });
 
@@ -64,6 +88,18 @@ describe("installation and fail-open launcher lookup", () => {
 
     expect(() => install(paths, { noShellConfig: true, noAgent: true })).toThrow("Refusing to overwrite non-TokenPilot shim");
     expect(fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8")).toContain("foreign");
+    cleanup(paths);
+  });
+
+  it("refuses a foreign TokenPilot command before creating a partial installation", () => {
+    const paths = temporaryPaths();
+    fs.mkdirSync(paths.shimDir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(paths.shimDir, "tokenpilot"), "#!/bin/sh\necho foreign\n", { mode: 0o700 });
+
+    expect(() => install(paths, { noShellConfig: true, noAgent: true })).toThrow("Refusing to overwrite non-TokenPilot command shim");
+    expect(fs.readFileSync(path.join(paths.shimDir, "tokenpilot"), "utf8")).toContain("foreign");
+    expect(fs.existsSync(path.join(paths.shimDir, "codex"))).toBe(false);
+    expect(fs.existsSync(paths.configFile)).toBe(false);
     cleanup(paths);
   });
 

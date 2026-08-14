@@ -13,9 +13,9 @@ It does **not** create a shared cache, proxy model traffic, receive provider cre
 
 ## Current scope: personal measurement and reduction
 
-Version 0.1 records a content-free session envelope. Its default mode is `observe`; it never changes model, effort, tools, prompt, session, or context. Automatic token-counter import is deliberately disabled until an adapter can prove, using a provider-documented session identifier, that a local event belongs to the wrapper invocation. This prevents a personal database from accidentally collecting unrelated or company activity.
+Version 0.1 records a content-free session envelope. Its default mode is `observe`; it never changes model, effort, tools, prompt, session, or context. Automatic token-counter import is disabled for Codex, Grok, and Kimi until an adapter can prove, using a provider-documented session identifier, that a local event belongs to the wrapper invocation. Personal Claude sessions use a separate, authenticated metrics-only receiver described below. This prevents a personal database from accidentally collecting unrelated or company activity.
 
-`balanced` is a stored 50/50 experimental assignment and a real token-reduction treatment. Before every treated session, TokenPilot asks only the installed provider CLI for `--help`. It injects a policy only if that exact local version advertises the required flag. A failed probe or missing capability starts the original CLI unchanged.
+`balanced` is a durable 50/50 provider-local experimental assignment and a real token-reduction treatment. Its first assignment per provider is random; later personal sessions alternate between `observe` and `balanced`, even across terminal restarts. Task type is intentionally classified only after a session, so it never influences launch-time assignment. Before every treated session, TokenPilot asks only the installed provider CLI for `--help`. It injects a policy only if that exact local version advertises the required flag. A failed probe or missing capability starts the original CLI unchanged.
 
 | Provider | `balanced` policy | Safety boundary |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ node dist/cli.js install
 exec "$SHELL" -l
 ```
 
-The installer creates per-user shims at `~/.tokenpilot/bin`, adds that directory to `~/.zshrc` or `~/.bashrc`, starts a user-only macOS LaunchAgent, and installs the `tokenpilot` report skill automatically. It never uses `sudo`.
+The installer creates the `tokenpilot` command and per-provider shims at `~/.tokenpilot/bin`, adds that directory to `~/.zshrc` or `~/.bashrc`, starts a user-only macOS LaunchAgent, and installs the `tokenpilot` report skill automatically. It never uses `sudo`.
 
 The same versioned skill is installed per user, not per repository or company account:
 
@@ -52,7 +52,7 @@ The same versioned skill is installed per user, not per repository or company ac
 | Kimi Code CLI | `/skill:tokenpilot` |
 | Grok | `tokenpilot report` in the terminal until its CLI exposes a documented skill extension |
 
-The skill always calls `tokenpilot report --format md`, whose default window is the latest seven days. It never reads transcripts, prompts, provider logs, project files, environment variables, or the SQLite database directly. Use `tokenpilot install --no-skills` only when a managed environment must distribute the skill separately.
+The skill always calls `tokenpilot report --format md`, whose default window is the latest seven days. This command is read-only: before the first personal session it returns an empty report without creating a database or directory. A legacy WAL database is deliberately not opened by the report because SQLite would create sidecar files; start one personal session once to migrate it. The skill never reads transcripts, prompts, provider logs, project files, environment variables, or the SQLite database directly. Use `tokenpilot install --no-skills` only when a managed environment must distribute the skill separately.
 
 Before measuring or applying a treatment, explicitly mark the terminal as personal. Provider CLIs do not expose a reliable account-scope signal, so TokenPilot defaults to transparent pass-through with no record and no optimization. Set this only in a VS Code terminal profile used exclusively with your personal accounts; do not put it in a shared shell profile or a company terminal.
 
@@ -142,12 +142,12 @@ The four adapters are all available for observation:
 
 Claude handles prompt caching itself, and its cache prefix is sensitive to model, tools, MCP connections, and context changes. [Claude Code documentation](https://code.claude.com/docs/en/prompt-caching) explains these limits. Codex exposes user-level profiles, reasoning effort, automatic compaction, and telemetry configuration; its official configuration reference is the source of truth for any later adapter experiment. [OpenAI Docs](https://learn.chatgpt.com/docs/config-file/config-reference)
 
-## Seven-day personal experiment
+## Personal experiment
 
-1. In a VS Code terminal profile used only with personal accounts, set `TOKENPILOT_PERSONAL_SESSION=1` and run `tokenpilot mode observe` for seven days to establish a session and quality baseline.
+1. In a VS Code terminal profile used only with personal accounts, set `TOKENPILOT_PERSONAL_SESSION=1` and use `tokenpilot mode observe` to establish a baseline. There is no required waiting period.
 2. Use the CLIs normally and classify sessions only when you are comfortable doing so.
-3. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for the fixed seven-day report. Only Claude has a measured token counter in this version; all other providers will show unavailable until their documented correlators are added and tested.
-4. Set `tokenpilot mode balanced` only to validate the version-gated optimization and the immediate bypass. It applies a verified provider treatment when the CLI advertises the necessary flags.
+3. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for the rolling seven-day report. Only Claude has a measured token counter in this version; all other providers will show unavailable until their documented correlators are added and tested.
+4. Set `tokenpilot mode balanced` to activate the version-gated treatment and immediate bypass controls. It applies a verified provider policy only when the CLI advertises the necessary flags.
 5. A comparison becomes `ready` only after five measured baseline and five measured treatment sessions for the same provider and task type. Until then it is shown as preliminary rather than a savings claim.
 6. Use `TOKENPILOT_BYPASS=1 <provider>`, remove `TOKENPILOT_PERSONAL_SESSION`, or use `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.
 

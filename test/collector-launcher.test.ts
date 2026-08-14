@@ -68,8 +68,10 @@ describe("local launcher and collector", () => {
     const originalBin = writeFakeCodex(paths, "#!/bin/sh\nif [ \"$1\" = \"--help\" ]; then echo '--config'; exit 0; fi\nif [ \"$1\" = \"--version\" ]; then echo 'fake-codex 1.0'; exit 0; fi\nexit 0\n");
     const config = ensureConfig(paths);
     config.defaultMode = "balanced";
-    config.balancedSamplingRate = 1;
     writeConfig(paths, config);
+    const allocator = new TelemetryDatabase(paths);
+    expect(allocator.allocateBalancedMode("codex", () => 0.9)).toBe("observe");
+    allocator.close();
 
     expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "test"], paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
