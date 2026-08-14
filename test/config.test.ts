@@ -42,6 +42,14 @@ describe("configuration and balanced allocation", () => {
     expect(testOnly.userHome).toBe(redirected);
   });
 
+  it("keeps Linux configuration and telemetry below TokenPilot-owned state", () => {
+    const home = path.join(os.tmpdir(), "tokenpilot-linux-user");
+    const linux = getPaths({ HOME: home }, { allowEnvironmentOverrides: true, platform: "linux" });
+    expect(linux.home).toBe(path.join(home, ".tokenpilot"));
+    expect(linux.configDir).toBe(path.join(home, ".tokenpilot", "config"));
+    expect(linux.dataDir).toBe(path.join(home, ".tokenpilot", "data"));
+  });
+
   it("drops legacy executable paths and rejects invalid modes", () => {
     const paths = temporaryPaths();
     fs.mkdirSync(path.dirname(paths.configFile), { recursive: true, mode: 0o700 });
