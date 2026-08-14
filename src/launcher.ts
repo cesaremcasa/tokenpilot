@@ -131,12 +131,8 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   }
 
   const bypass = process.env.TOKENPILOT_BYPASS === "1";
-  // Provider CLIs do not expose a trustworthy personal-vs-company account
-  // boundary to this wrapper. Recording therefore requires an explicit
-  // personal-session opt-in; every other invocation is transparent.
-  const personalSession = process.env.TOKENPILOT_PERSONAL_SESSION === "1";
   // Authentication and support commands always pass through without a database record.
-  if (bypass || !personalSession || isPassthrough(args)) {
+  if (bypass || isPassthrough(args)) {
     const result = await launchChild(binary, args);
     return result ?? 1;
   }

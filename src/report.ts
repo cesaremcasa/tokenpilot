@@ -40,7 +40,7 @@ export function buildReport(paths: TokenPilotPaths, days: number): Report {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1_000).toISOString();
   // A report is intentionally read-only. Opening a missing SQLite file would
   // create personal state merely by invoking the installed skill, so return an
-  // empty report until the first explicitly personal session creates data.
+  // empty report until the first tracked provider session creates data.
   if (!fs.existsSync(paths.databaseFile)) return emptyReport(since);
   if (!hasSafePrivateDirectory(paths, paths.dataDir)) throw new Error("TokenPilot telemetry directory is unsafe");
   assertSafeStateFile(paths, paths.databaseFile);

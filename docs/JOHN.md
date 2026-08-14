@@ -15,7 +15,7 @@ No company prompt, code, account identifier, credential, raw session log, or usa
 ## Developer experience
 
 - Same terminal, provider command, authentication, and UI.
-- `observe` is the default and makes no provider setting changes. A personal installation records only terminals explicitly marked with `TOKENPILOT_PERSONAL_SESSION=1`; unmarked terminals are transparent pass-through.
+- `observe` is the default and makes no provider setting changes. The personal installation records a content-free local envelope automatically for each wrapped terminal session; `TOKENPILOT_BYPASS=1` and `mode off` are immediate opt-outs.
 - `balanced` is a version-gated personal treatment: it applies only documented CLI controls for cache stability, reasoning, verbosity, tool breadth, and compaction. It never writes a provider config file or changes authentication.
 - `TOKENPILOT_BYPASS=1 <provider>` bypasses the layer immediately.
 - If telemetry fails, the original CLI opens normally.

@@ -15,7 +15,7 @@ It does **not** create a shared cache, proxy model traffic, receive provider cre
 
 Version 0.1 records a content-free session envelope. Its default mode is `observe`; it never changes model, effort, tools, prompt, session, or context. Automatic token-counter import is disabled for Codex, Grok, and Kimi until an adapter can prove, using a provider-documented session identifier, that a local event belongs to the wrapper invocation. Personal Claude sessions use a separate, authenticated metrics-only receiver described below. This prevents a personal database from accidentally collecting unrelated or company activity.
 
-`balanced` is a durable 50/50 provider-local experimental assignment and a real token-reduction treatment. Its first assignment per provider is random; later personal sessions alternate between `observe` and `balanced`, even across terminal restarts. Task type is intentionally classified only after a session, so it never influences launch-time assignment. Before every treated session, TokenPilot asks only the installed provider CLI for `--help`. It injects a policy only if that exact local version advertises the required flag. A failed probe or missing capability starts the original CLI unchanged.
+`balanced` is a durable 50/50 provider-local experimental assignment and a real token-reduction treatment. Its first assignment per provider is random; later sessions alternate between `observe` and `balanced`, even across terminal restarts. Task type is intentionally classified only after a session, so it never influences launch-time assignment. Before every treated session, TokenPilot asks only the installed provider CLI for `--help`. It injects a policy only if that exact local version advertises the required flag. A failed probe or missing capability starts the original CLI unchanged.
 
 | Provider | `balanced` policy | Safety boundary |
 | --- | --- | --- |
@@ -54,13 +54,7 @@ The same versioned skill is installed per user, not per repository or company ac
 
 The installed skill calls its user-owned TokenPilot executable directly rather than relying on `PATH`; it therefore works in Codex and other GUI skill runners that do not load an interactive shell. Its report command defaults to the latest seven days and is read-only: before the first personal session it returns an empty report without creating a database or directory. A legacy WAL database is deliberately not opened by the report because SQLite would create sidecar files; start one personal session once to migrate it. The skill never reads transcripts, prompts, provider logs, project files, environment variables, or the SQLite database directly. Use `tokenpilot install --no-skills` only when a managed environment must distribute the skill separately.
 
-Before measuring or applying a treatment, explicitly mark the terminal as personal. Provider CLIs do not expose a reliable account-scope signal, so TokenPilot defaults to transparent pass-through with no record and no optimization. Set this only in a VS Code terminal profile used exclusively with your personal accounts; do not put it in a shared shell profile or a company terminal.
-
-```sh
-export TOKENPILOT_PERSONAL_SESSION=1
-```
-
-After that one-time terminal-profile setup, typing `claude`, `codex`, `grok`, or `kimi` is unchanged. To run a single personal session without changing the profile, prefix the command with `TOKENPILOT_PERSONAL_SESSION=1`.
+After installation, typing `claude`, `codex`, `grok`, or `kimi` records a content-free local session automatically and applies the selected mode. No terminal environment flag or extra login is required. Use this personal deployment only with the accounts and data that belong in its local experiment; a company rollout must use its own approved deployment and storage.
 
 Preview its changes without writing anything:
 
@@ -78,16 +72,13 @@ Normal use is unchanged:
 codex
 ```
 
-Without `TOKENPILOT_PERSONAL_SESSION=1`, the command remains a transparent provider launch and writes no TokenPilot state. This is intentional: it prevents a personal installation from recording an accidentally opened company-account session.
+The normal provider command is automatically measured after installation. `login`, `logout`, help, and version commands remain transparent and never create a session record.
 
 The original CLI continues to own authentication. Commands such as `codex login`, `claude auth`, `grok --help`, and `kimi --version` pass through without telemetry.
 
 ```sh
 # Immediate, process-only bypass: run the original CLI and write nothing.
 TOKENPILOT_BYPASS=1 codex
-
-# Explicit personal session: permits measurement and a verified treatment.
-TOKENPILOT_PERSONAL_SESSION=1 codex
 
 # Set the default mode for future sessions.
 tokenpilot mode observe
@@ -108,7 +99,7 @@ tokenpilot classify <run-id> --kind bugfix --outcome completed
 tokenpilot report
 ```
 
-`off`, an absent `TOKENPILOT_PERSONAL_SESSION=1`, and `TOKENPILOT_BYPASS=1` are fail-open bypasses. If TokenPilot cannot initialize its telemetry database, it starts the original CLI normally.
+`off` and `TOKENPILOT_BYPASS=1` are immediate no-telemetry bypasses. If TokenPilot cannot initialize its telemetry database, it starts the original CLI normally.
 
 ## Data model and privacy
 
@@ -127,7 +118,7 @@ Before sharing an aggregate report, review it manually. Do not put company telem
 
 TokenPilot treats provider logs as an evolving local interface. It never scans provider folders, timestamps, JSONL, or Wire output: none of those sources alone proves a log line belongs to the current wrapper session. `tokenpilot collect` consequently marks a finished envelope `unavailable` rather than inventing numbers or mixing activity.
 
-For an explicitly personal Claude session, TokenPilot starts a short-lived receiver on `127.0.0.1` and configures Claude's documented OTLP **metrics-only** exporter for that child process. It disables logs, traces, prompt/response logging, tool-detail logging, raw API bodies, account UUIDs, session IDs, and custom resource labels. Each receiver has an unguessable per-run header and accepts only the documented `claude_code.token.usage` metric. It extracts only the numeric `input`, `cacheRead`, `cacheCreation`, and `output` counters; every other field is discarded before storage. It does not change Claude authentication or send telemetry over the network.
+For a local Claude session, TokenPilot starts a short-lived receiver on `127.0.0.1` and configures Claude's documented OTLP **metrics-only** exporter for that child process. It disables logs, traces, prompt/response logging, tool-detail logging, raw API bodies, account UUIDs, session IDs, and custom resource labels. Each receiver has an unguessable per-run header and accepts only the documented `claude_code.token.usage` metric. It extracts only the numeric `input`, `cacheRead`, `cacheCreation`, and `output` counters; every other field is discarded before storage. It does not change Claude authentication or send telemetry over the network.
 
 Claude's metrics can still contain account identity attributes in the transient provider export. TokenPilot neither logs nor stores them, but this is why the receiver is local, authenticated per session, and destroyed when the CLI exits.
 
@@ -144,12 +135,11 @@ Claude handles prompt caching itself, and its cache prefix is sensitive to model
 
 ## Personal experiment
 
-1. In a VS Code terminal profile used only with personal accounts, set `TOKENPILOT_PERSONAL_SESSION=1` and use `tokenpilot mode observe` to establish a baseline. There is no required waiting period.
-2. Use the CLIs normally and classify sessions only when you are comfortable doing so.
-3. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for the rolling seven-day report. Only Claude has a measured token counter in this version; all other providers will show unavailable until their documented correlators are added and tested.
-4. Set `tokenpilot mode balanced` to activate the version-gated treatment and immediate bypass controls. It applies a verified provider policy only when the CLI advertises the necessary flags.
-5. A comparison becomes `ready` only after five measured baseline and five measured treatment sessions for the same provider and task type. Until then it is shown as preliminary rather than a savings claim.
-6. Use `TOKENPILOT_BYPASS=1 <provider>`, remove `TOKENPILOT_PERSONAL_SESSION`, or use `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.
+1. Install once, then use the CLIs normally. Sessions are measured automatically and can be classified only when you are comfortable doing so.
+2. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for the rolling seven-day report. Only Claude has a measured token counter in this version; all other providers will show unavailable until their documented correlators are added and tested.
+3. Set `tokenpilot mode balanced` to activate the version-gated treatment and immediate bypass controls. It applies a verified provider policy only when the CLI advertises the necessary flags.
+4. A comparison becomes `ready` only after five measured baseline and five measured treatment sessions for the same provider and task type. Until then it is shown as preliminary rather than a savings claim.
+5. Use `TOKENPILOT_BYPASS=1 <provider>` or `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.
 
 There is intentionally no pre-set savings target. The report names the policy actually applied and provides matched within-provider comparisons of median token pressure, variation, duration, and classified completion rate.
 

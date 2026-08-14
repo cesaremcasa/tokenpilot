@@ -24,7 +24,6 @@ Usage:
 
 Daily usage after install is unchanged: claude, codex, grok, or kimi.
 Immediate bypass: TOKENPILOT_BYPASS=1 codex
-Personal measurement boundary: TOKENPILOT_PERSONAL_SESSION=1 codex
 `;
 
 function flag(args: string[], name: string): string | undefined {

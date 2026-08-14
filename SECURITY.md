@@ -32,4 +32,4 @@ If configuration, telemetry storage, or collection fails, the launcher starts th
 
 ## Enterprise boundary
 
-No company account, account identifier, prompt, code, or metric may be copied to this personal repository. The provider CLIs do not expose a reliable account-scope signal, so this installation records or optimizes a session only when `TOKENPILOT_PERSONAL_SESSION=1` is explicitly set in a terminal profile used exclusively for personal accounts. A company pilot requires a company-owned codebase, approved storage, Security review, and user-visible opt-in/rollback controls.
+No company account identifier, prompt, code, or metric may be copied to this personal repository. The personal deployment records only its content-free local session envelope and never uploads it; use it only with accounts and data approved for that personal experiment. A company pilot requires a company-owned codebase, approved storage, Security review, and user-visible opt-in/rollback controls.

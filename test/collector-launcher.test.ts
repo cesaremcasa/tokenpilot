@@ -8,18 +8,13 @@ import { runProvider } from "../src/launcher.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("local launcher and collector", () => {
-  async function withProviderPath<T>(providerPath: string, action: () => Promise<T>, personal = true): Promise<T> {
+  async function withProviderPath<T>(providerPath: string, action: () => Promise<T>): Promise<T> {
     const originalPath = process.env.PATH;
-    const originalPersonalSession = process.env.TOKENPILOT_PERSONAL_SESSION;
     process.env.PATH = providerPath;
-    if (personal) process.env.TOKENPILOT_PERSONAL_SESSION = "1";
-    else delete process.env.TOKENPILOT_PERSONAL_SESSION;
     try {
       return await action();
     } finally {
       process.env.PATH = originalPath;
-      if (originalPersonalSession === undefined) delete process.env.TOKENPILOT_PERSONAL_SESSION;
-      else process.env.TOKENPILOT_PERSONAL_SESSION = originalPersonalSession;
     }
   }
 
@@ -126,13 +121,21 @@ exit 0
     cleanup(paths);
   });
 
-  it("does not record or optimize a session without the explicit personal boundary", async () => {
+  it("records a local session automatically without a terminal environment flag", async () => {
     const paths = temporaryPaths();
     const originalBin = writeFakeCodex(paths, "#!/bin/sh\nexit 0\n");
 
-    expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths), false)).toBe(0);
-    expect(fs.existsSync(paths.configFile)).toBe(false);
-    expect(fs.existsSync(paths.databaseFile)).toBe(false);
+    const originalPersonalSession = process.env.TOKENPILOT_PERSONAL_SESSION;
+    delete process.env.TOKENPILOT_PERSONAL_SESSION;
+    try {
+      expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
+      const database = new TelemetryDatabase(paths);
+      expect(database.getPendingRuns()).toHaveLength(1);
+      database.close();
+    } finally {
+      if (originalPersonalSession === undefined) delete process.env.TOKENPILOT_PERSONAL_SESSION;
+      else process.env.TOKENPILOT_PERSONAL_SESSION = originalPersonalSession;
+    }
     cleanup(paths);
   });
 
