@@ -9,7 +9,7 @@ import { TelemetryDatabase } from "./database.js";
 import { planForInstalledCli, planFromHelp } from "./optimization.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
-import { CodexExecTokenParser, isCodexExec } from "./telemetry/codex.js";
+import { CodexExecTokenParser, isCodexExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
 import { GrokJsonUsageParser, isGrokJsonSingle } from "./telemetry/grok.js";
 import type { Provider, RunMode } from "./types.js";
 
@@ -102,6 +102,18 @@ function binaryVersion(binary: string): string | undefined {
   return result.stdout.match(/\b\d+(?:\.\d+){0,3}(?:[-+][A-Za-z0-9._-]+)?\b/)?.[0];
 }
 
+function supportsCodexSessionConfiguration(binary: string): boolean {
+  const trusted = trustedExecutable(binary);
+  if (!trusted) return false;
+  const result = spawnSync(trusted, ["--help"], {
+    encoding: "utf8",
+    timeout: 4_000,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: providerEnvironment()
+  });
+  return !result.error && result.status === 0 && result.stdout.includes("--config");
+}
+
 interface ChildObservation {
   consume(chunk: Buffer): void;
 }
@@ -165,7 +177,8 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   let launchArgs = args;
   let launchEnvironment = providerEnvironment();
   let claudeMetrics: ClaudeMetricsReceiver | undefined;
-  const codexMetrics = provider === "codex" && isCodexExec(args) ? new CodexExecTokenParser() : undefined;
+  let codexOtelMetrics: CodexMetricsReceiver | undefined;
+  const codexExecMetrics = provider === "codex" && isCodexExec(args) ? new CodexExecTokenParser() : undefined;
   const grokMetrics = provider === "grok" && isGrokJsonSingle(args) ? new GrokJsonUsageParser() : undefined;
   try {
     const config = ensureConfig(paths);
@@ -208,7 +221,17 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
         claudeMetrics = await startClaudeMetricsReceiver(database, runId);
         launchEnvironment = providerEnvironment(claudeMetrics.environment);
       }
-      launchArgs = [...optimization.args, ...args];
+      if (provider === "codex" && supportsCodexSessionConfiguration(trusted)) {
+        // Codex's documented OTLP configuration is per invocation. If a
+        // local receiver cannot start, preserve the existing `exec` parser
+        // rather than failing the provider session or touching user config.
+        try {
+          codexOtelMetrics = await startCodexMetricsReceiver(database, runId);
+        } catch {
+          codexOtelMetrics = undefined;
+        }
+      }
+      launchArgs = [...(codexOtelMetrics?.args ?? []), ...optimization.args, ...args];
     }
   } catch {
     // All optional state, telemetry, and optimization failures fail open.
@@ -218,23 +241,32 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     runId = undefined;
     await claudeMetrics?.close().catch(() => undefined);
     claudeMetrics = undefined;
+    await codexOtelMetrics?.close().catch(() => undefined);
+    codexOtelMetrics = undefined;
     launchArgs = args;
   }
 
   try {
-    const observer = codexMetrics ?? grokMetrics;
+    const observer = codexExecMetrics ?? grokMetrics;
     const code = await launchChild(binary, launchArgs, launchEnvironment, observer ? { consume: (chunk) => observer.accept(chunk) } : undefined);
     await claudeMetrics?.close().catch(() => undefined);
+    await codexOtelMetrics?.close().catch(() => undefined);
     if (database && runId) {
       try {
         database.finishRun(runId, code, new Date().toISOString());
         if (provider === "claude") database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
         if (provider === "codex") {
-          const total = codexMetrics?.finish();
-          if (total !== undefined) {
+          // OTLP gives interactive and exec sessions category-level metrics.
+          // Preserve the old `exec` total only when the receiver did not
+          // deliver a correlated sample, never double-count both sources.
+          const total = codexExecMetrics?.finish();
+          if (!database.hasUsage(runId) && total !== undefined) {
             database.addUsage({ runId, observedAt: new Date().toISOString(), source: "codex-cli-reported-total-v1", reportedTotal: total });
-            database.markCollection(runId, "collected");
           }
+          // Leave a no-sample run pending for the existing local collector to
+          // mark unavailable. This preserves a single collection lifecycle
+          // across current and older Codex CLI versions.
+          if (database.hasUsage(runId)) database.markCollection(runId, "collected");
         }
         if (provider === "grok") {
           const usage = grokMetrics?.finish();
@@ -250,6 +282,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     return code ?? 1;
   } finally {
     await claudeMetrics?.close().catch(() => undefined);
+    await codexOtelMetrics?.close().catch(() => undefined);
     database?.close();
   }
 }

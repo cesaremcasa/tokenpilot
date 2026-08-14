@@ -129,12 +129,29 @@ export interface TreatmentComparison {
   treatmentSessions: number;
   baselineMedianTokenPressure: number;
   treatmentMedianTokenPressure: number;
+  /**
+   * Counterfactual treatment total using the matched observe median. This is
+   * deliberately a within-provider token estimate, never a money estimate.
+   */
+  baselineExpectedTreatmentTokens: number;
+  /** Tokens actually reported by the matched treatment sessions. */
+  treatmentRecordedTokens: number;
+  /** Matched-baseline estimate minus measured treatment use; may be negative. */
+  estimatedTokensAvoided: number;
+  /** Positive means the treatment's median used fewer tokens. */
+  tokenReductionPercent: number;
   tokenPressureDeltaPercent: number;
   baselineIqrTokenPressure: number;
   treatmentIqrTokenPressure: number;
   baselineMedianDurationSeconds: number;
   treatmentMedianDurationSeconds: number;
+  /** Positive means the treatment took longer end-to-end in the local CLI. */
+  latencyDeltaSeconds: number;
+  latencyDeltaPercent: number;
+  latencyResult: "faster" | "slower" | "unchanged";
   baselineCompletionRate?: number;
   treatmentCompletionRate?: number;
   readiness: "ready" | "preliminary";
+  /** A token-only conclusion. Preliminary results are intentionally not claims. */
+  tokenResult: "preliminary" | "measured-reduction" | "no-reduction";
 }

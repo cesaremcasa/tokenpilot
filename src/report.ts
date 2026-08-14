@@ -84,6 +84,10 @@ function interquartileRange(values: number[]): number {
   return percentile(0.75) - percentile(0.25);
 }
 
+function sum(values: number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}
+
 function tokenPressure(session: SessionSummary): number {
   // Cache reads are shown separately in the main table. This measure isolates
   // newly created context and generated work within one provider.
@@ -126,6 +130,23 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const treatmentPressure = treatment.map(measurementValue).filter((value): value is number => value !== undefined);
     const baselineMedian = median(baselinePressure);
     const treatmentMedian = median(treatmentPressure);
+    // There is no provider-side counterfactual for a live treated task. The
+    // closest honest token-only estimate is the matched observe median applied
+    // to the number of treatment sessions, minus the tokens actually measured
+    // for those treatment sessions. Cached reads remain outside this measure.
+    const baselineExpectedTreatmentTokens = baselineMedian * treatmentPressure.length;
+    const treatmentRecordedTokens = sum(treatmentPressure);
+    const estimatedTokensAvoided = baselineExpectedTreatmentTokens - treatmentRecordedTokens;
+    const tokenReductionPercent = baselineMedian === 0 ? 0 : ((baselineMedian - treatmentMedian) / baselineMedian) * 100;
+    const baselineMedianDurationSeconds = median(baseline.map((session) => session.durationSeconds));
+    const treatmentMedianDurationSeconds = median(treatment.map((session) => session.durationSeconds));
+    const latencyDeltaSeconds = treatmentMedianDurationSeconds - baselineMedianDurationSeconds;
+    const latencyDeltaPercent = baselineMedianDurationSeconds === 0 ? 0 : (latencyDeltaSeconds / baselineMedianDurationSeconds) * 100;
+    const latencyResult: TreatmentComparison["latencyResult"] = latencyDeltaSeconds < 0 ? "faster" : latencyDeltaSeconds > 0 ? "slower" : "unchanged";
+    const readiness = baseline.length >= 5 && treatment.length >= 5 ? "ready" as const : "preliminary" as const;
+    const tokenResult: TreatmentComparison["tokenResult"] = readiness === "preliminary"
+      ? "preliminary"
+      : estimatedTokensAvoided > 0 ? "measured-reduction" : "no-reduction";
     return [{
       provider,
       taskKind,
@@ -135,20 +156,38 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       treatmentSessions: treatment.length,
       baselineMedianTokenPressure: baselineMedian,
       treatmentMedianTokenPressure: treatmentMedian,
+      baselineExpectedTreatmentTokens,
+      treatmentRecordedTokens,
+      estimatedTokensAvoided,
+      tokenReductionPercent,
       tokenPressureDeltaPercent: baselineMedian === 0 ? 0 : ((treatmentMedian - baselineMedian) / baselineMedian) * 100,
       baselineIqrTokenPressure: interquartileRange(baselinePressure),
       treatmentIqrTokenPressure: interquartileRange(treatmentPressure),
-      baselineMedianDurationSeconds: median(baseline.map((session) => session.durationSeconds)),
-      treatmentMedianDurationSeconds: median(treatment.map((session) => session.durationSeconds)),
+      baselineMedianDurationSeconds,
+      treatmentMedianDurationSeconds,
+      latencyDeltaSeconds,
+      latencyDeltaPercent,
+      latencyResult,
       baselineCompletionRate: completionRate(baseline),
       treatmentCompletionRate: completionRate(treatment),
-      readiness: baseline.length >= 5 && treatment.length >= 5 ? "ready" as const : "preliminary" as const
+      readiness,
+      tokenResult
     }];
   }).sort((a, b) => a.provider.localeCompare(b.provider) || a.taskKind.localeCompare(b.taskKind));
 }
 
 function percent(value: number | undefined): string {
   return value === undefined ? "—" : `${(value * 100).toFixed(0)}%`;
+}
+
+function reduction(value: number): string {
+  return value >= 0 ? `${value.toFixed(1)}% reduction` : `${Math.abs(value).toFixed(1)}% increase`;
+}
+
+function latency(comparison: TreatmentComparison): string {
+  const direction = comparison.latencyResult === "unchanged" ? "unchanged" : comparison.latencyResult;
+  const seconds = comparison.latencyDeltaSeconds > 0 ? `+${integer(comparison.latencyDeltaSeconds)}s` : `${integer(comparison.latencyDeltaSeconds)}s`;
+  return `${seconds} (${comparison.latencyDeltaPercent > 0 ? "+" : ""}${comparison.latencyDeltaPercent.toFixed(1)}%; ${direction})`;
 }
 
 export function reportMarkdown(report: Report): string {
@@ -169,6 +208,11 @@ export function reportMarkdown(report: Report): string {
     lines.push(`| ${row.provider} | ${integer(row.sessions)} | ${integer(row.measuredSessions)} | ${integer(row.unavailableSessions)} |`);
   }
   if (report.coverage.length === 0) lines.push("| — | 0 | 0 | 0 |");
+  lines.push("", "## Reduction and latency summary", "", "> Positive token reduction means fewer tokens. Latency is end-to-end local CLI duration, so it includes provider, network, and tool time; a positive latency change means slower.", "", "| Provider | Task type | Policy | Token result | Token reduction | Estimated tokens avoided | Median latency | Latency change |", "| --- | --- | --- | --- | ---: | ---: | ---: | --- |");
+  for (const comparison of report.comparisons) {
+    lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.optimizationProfile} | ${comparison.tokenResult} | ${reduction(comparison.tokenReductionPercent)} | ${integer(comparison.estimatedTokensAvoided)} | ${integer(comparison.baselineMedianDurationSeconds)}s → ${integer(comparison.treatmentMedianDurationSeconds)}s | ${latency(comparison)} |`);
+  }
+  if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — |");
   lines.push(
     "",
     "## Session metrics",
@@ -186,6 +230,11 @@ export function reportMarkdown(report: Report): string {
     lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.metricLabel} | ${comparison.optimizationProfile} | ${comparison.readiness} | ${integer(comparison.baselineSessions)} / ${integer(comparison.treatmentSessions)} | ${integer(comparison.baselineMedianTokenPressure)} | ${integer(comparison.treatmentMedianTokenPressure)} | ${comparison.tokenPressureDeltaPercent.toFixed(1)}% | ${integer(comparison.baselineIqrTokenPressure)} / ${integer(comparison.treatmentIqrTokenPressure)} | ${integer(comparison.baselineMedianDurationSeconds)}s / ${integer(comparison.treatmentMedianDurationSeconds)}s | ${percent(comparison.baselineCompletionRate)} / ${percent(comparison.treatmentCompletionRate)} |`);
   }
   if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — | — | — | — | — |");
-  lines.push("", "## Interpretation", "", "- `observe` establishes the personal baseline and does not change CLI behavior.", "- A `balanced` row with a named policy is a real provider-specific treatment. A `balanced` row with `none` means the installed CLI did not advertise a validated flag, so TokenPilot deliberately left it unchanged.", "- A `preliminary` comparison is visible for learning, not a savings claim. Treat a negative `ready` change as a measured reduction.", "- Compare a provider and task type only with its own `observe` rows; cached input is shown separately because it is not equivalent to newly created context.", "- `off` writes no telemetry. `TOKENPILOT_BYPASS=1 <provider>` bypasses TokenPilot immediately.", "");
+  lines.push("", "## Estimated token avoidance", "", "> This is a token-only counterfactual estimate, not a provider invoice and not a money calculation. For each matched treatment group: `(matched observe median × treatment sessions) − treatment tokens actually recorded`. A negative number means the policy used more tokens.", "", "| Provider | Task type | Metric | Policy | Token result | Expected without policy | Treatment tokens recorded | Estimated tokens avoided |", "| --- | --- | --- | --- | --- | ---: | ---: | ---: |");
+  for (const comparison of report.comparisons) {
+    lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.metricLabel} | ${comparison.optimizationProfile} | ${comparison.tokenResult} | ${integer(comparison.baselineExpectedTreatmentTokens)} | ${integer(comparison.treatmentRecordedTokens)} | ${integer(comparison.estimatedTokensAvoided)} |`);
+  }
+  if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — |");
+  lines.push("", "## Interpretation", "", "- `observe` establishes the personal baseline and does not change CLI behavior.", "- A `balanced` row with a named policy is a real provider-specific treatment. A `balanced` row with `none` means the installed CLI did not advertise a validated flag, so TokenPilot deliberately left it unchanged.", "- `estimated tokens avoided` is calculated only against matched sessions from the same provider, task type, metric, and policy version. It is not a cross-provider total and never converts tokens to money.", "- A `preliminary` token result is visible for learning, not a savings claim. `measured-reduction` requires a ready comparison with positive estimated tokens avoided; `no-reduction` is shown when a ready treatment does not lower tokens.", "- Compare a provider and task type only with its own `observe` rows; cached input is shown separately because it is not equivalent to newly created context.", "- `off` writes no telemetry. `TOKENPILOT_BYPASS=1 <provider>` bypasses TokenPilot immediately.", "");
   return lines.join("\n");
 }
