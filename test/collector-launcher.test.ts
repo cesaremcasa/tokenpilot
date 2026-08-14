@@ -48,17 +48,17 @@ describe("local launcher and collector", () => {
 
     expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
     const before = new TelemetryDatabase(paths);
-    const pending = before.getPendingRuns();
-    expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({ provider: "codex", mode: "observe", collectionState: "pending" });
-    const runId = pending[0].id;
+    const recorded = before.recentRunsSince(new Date(0).toISOString());
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({ provider: "codex", mode: "observe", collectionState: "unavailable" });
+    const runId = recorded[0].id;
     before.close();
 
     const sessionDir = path.join(paths.userHome, ".codex", "sessions", "test");
     fs.mkdirSync(sessionDir, { recursive: true });
     fs.writeFileSync(path.join(sessionDir, "rollout.jsonl"), '{"payload":{"info":{"last_token_usage":{"input_tokens":7,"cached_input_tokens":19,"output_tokens":4}}},"message":"do not store this"}\n');
 
-    expect(collectPendingRuns(paths)).toEqual({ collected: 0, unavailable: 1 });
+    expect(collectPendingRuns(paths)).toEqual({ collected: 0, unavailable: 0 });
     const after = new TelemetryDatabase(paths);
     expect(after.getRun(runId)).toMatchObject({ collectionState: "unavailable" });
     expect(after.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ inputNew: 0, inputCached: 0, output: 0 });
@@ -78,11 +78,12 @@ describe("local launcher and collector", () => {
 
     expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "test"], paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
-    expect(database.getPendingRuns()[0]).toMatchObject({
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v1"
+      optimizationProfile: "codex-balanced-v1",
+      collectionState: "unavailable"
     });
     database.close();
     cleanup(paths);
@@ -164,7 +165,8 @@ exit 0
     try {
       expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
       const database = new TelemetryDatabase(paths);
-      expect(database.getPendingRuns()).toHaveLength(1);
+      expect(database.getPendingRuns()).toHaveLength(0);
+      expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({ collectionState: "unavailable" });
       database.close();
     } finally {
       if (originalPersonalSession === undefined) delete process.env.TOKENPILOT_PERSONAL_SESSION;
@@ -179,7 +181,7 @@ exit 0
 
     expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
-    expect(database.getPendingRuns()[0]?.cliVersion).toBeNull();
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]?.cliVersion).toBeNull();
     database.close();
     cleanup(paths);
   });

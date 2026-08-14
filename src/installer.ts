@@ -37,6 +37,15 @@ export interface InstallPlan {
   launchAgent?: string;
 }
 
+/**
+ * The background collector is a macOS LaunchAgent. Linux sessions finalize
+ * their own collection state, so an install there must not write an inert
+ * plist under a Linux home directory.
+ */
+export function shouldInstallLaunchAgent(platform = process.platform, noAgent = false): boolean {
+  return platform === "darwin" && !noAgent;
+}
+
 function shellStartupFile(shell: string | undefined, home = os.homedir()): string | undefined {
   const name = path.basename(shell ?? "");
   if (name === "zsh") return path.join(home, ".zshrc");
@@ -216,7 +225,7 @@ export function createInstallPlan(paths: TokenPilotPaths, options: InstallOption
       path.join(paths.userHome, ".kimi", "skills", SKILL_RELATIVE_PATH)
     ],
     shellFile,
-    launchAgent: options.noAgent ? undefined : paths.launchAgentFile
+    launchAgent: shouldInstallLaunchAgent(process.platform, options.noAgent === true) ? paths.launchAgentFile : undefined
   };
 }
 
