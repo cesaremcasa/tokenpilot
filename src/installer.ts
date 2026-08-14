@@ -231,13 +231,13 @@ export function createInstallPlan(paths: TokenPilotPaths, options: InstallOption
 
 function writeShim(target: string, provider: string, nodeExecutable: string, executable: string): void {
   assertShimTarget(target, provider);
-  const contents = `#!/bin/sh\n# tokenpilot-shim\nexec ${quoteShell(nodeExecutable)} ${quoteShell(executable)} __shim ${provider} "$@"\n`;
+  const contents = `#!/bin/sh\n# tokenpilot-shim\nNODE_NO_WARNINGS=1\nexport NODE_NO_WARNINGS\nexec ${quoteShell(nodeExecutable)} ${quoteShell(executable)} __shim ${provider} "$@"\n`;
   fs.writeFileSync(target, contents, { mode: 0o700 });
 }
 
 function writeCommandShim(target: string, nodeExecutable: string, executable: string): void {
   assertCommandTarget(target);
-  const contents = `#!/bin/sh\n${COMMAND_MARKER}\nexec ${quoteShell(nodeExecutable)} ${quoteShell(executable)} "$@"\n`;
+  const contents = `#!/bin/sh\n${COMMAND_MARKER}\nNODE_NO_WARNINGS=1\nexport NODE_NO_WARNINGS\nexec ${quoteShell(nodeExecutable)} ${quoteShell(executable)} "$@"\n`;
   fs.writeFileSync(target, contents, { mode: 0o700 });
 }
 

@@ -56,7 +56,7 @@ function hasMacAcl(target: string): boolean {
 
 function providerEnvironment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const environment = Object.fromEntries(Object.entries(process.env)
-    .filter(([name]) => name !== "PATH" && !name.startsWith("TOKENPILOT_")));
+    .filter(([name]) => name !== "PATH" && name !== "NODE_NO_WARNINGS" && !name.startsWith("TOKENPILOT_")));
   return { ...environment, ...overrides, PATH: PROVIDER_PATH };
 }
 
@@ -136,8 +136,14 @@ function launchChild(binary: string, args: string[], environment = providerEnvir
     const forward = (signal: NodeJS.Signals) => {
       if (!child.killed) child.kill(signal);
     };
-    process.once("SIGINT", () => forward("SIGINT"));
-    process.once("SIGTERM", () => forward("SIGTERM"));
+    const onInterrupt = () => forward("SIGINT");
+    const onTerminate = () => forward("SIGTERM");
+    const removeSignalHandlers = () => {
+      process.removeListener("SIGINT", onInterrupt);
+      process.removeListener("SIGTERM", onTerminate);
+    };
+    process.once("SIGINT", onInterrupt);
+    process.once("SIGTERM", onTerminate);
     if (observation) {
       child.stdout?.on("data", (chunk: Buffer) => {
         observation.consume(chunk);
@@ -148,10 +154,14 @@ function launchChild(binary: string, args: string[], environment = providerEnvir
         process.stderr.write(chunk);
       });
     }
-    child.on("error", reject);
+    child.on("error", (error) => {
+      removeSignalHandlers();
+      reject(error);
+    });
     child.on("close", (code) => {
       if (!settled) {
         settled = true;
+        removeSignalHandlers();
         resolve(code);
       }
     });

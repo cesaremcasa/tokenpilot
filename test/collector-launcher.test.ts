@@ -198,4 +198,31 @@ exit 0
     expect(await withProviderPath(`${hostileBin}${path.delimiter}${providerBin}`, () => runProvider("codex", ["run"], paths))).toBe(0);
     cleanup(paths);
   });
+
+  it("does not pass TokenPilot's Node warning suppression to the provider", async () => {
+    const paths = temporaryPaths();
+    const observed = path.join(paths.userHome, "provider-environment");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh\nprintf '%s' "\${NODE_NO_WARNINGS-unset}" > '${observed}'\nexit 0\n`);
+    const prior = process.env.NODE_NO_WARNINGS;
+    process.env.NODE_NO_WARNINGS = "1";
+    try {
+      expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
+      expect(fs.readFileSync(observed, "utf8")).toBe("unset");
+    } finally {
+      if (prior === undefined) delete process.env.NODE_NO_WARNINGS;
+      else process.env.NODE_NO_WARNINGS = prior;
+    }
+    cleanup(paths);
+  });
+
+  it("removes its process signal handlers after the wrapped CLI exits", async () => {
+    const paths = temporaryPaths();
+    const originalBin = writeFakeCodex(paths, "#!/bin/sh\nexit 0\n");
+    const interrupts = process.listenerCount("SIGINT");
+    const terminations = process.listenerCount("SIGTERM");
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
+    expect(process.listenerCount("SIGINT")).toBe(interrupts);
+    expect(process.listenerCount("SIGTERM")).toBe(terminations);
+    cleanup(paths);
+  });
 });
