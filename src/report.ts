@@ -90,6 +90,14 @@ function tokenPressure(session: SessionSummary): number {
   return session.inputNew + session.cacheCreated + session.output + session.reasoning;
 }
 
+function measurementValue(session: SessionSummary): number | undefined {
+  return session.measurementBasis === "provider-total" ? session.reportedTotal : tokenPressure(session);
+}
+
+function metricLabel(session: SessionSummary): TreatmentComparison["metricLabel"] {
+  return session.measurementBasis === "provider-total" ? "provider-reported total" : "token pressure";
+}
+
 function completionRate(sessions: SessionSummary[]): number | undefined {
   const classified = sessions.filter((session) => session.outcome !== "unknown");
   if (classified.length === 0) return undefined;
@@ -100,7 +108,9 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
   const baselines = new Map<string, SessionSummary[]>();
   const treatments = new Map<string, SessionSummary[]>();
   for (const session of summaries) {
-    const scope = `${session.provider}\u0000${session.taskKind}`;
+    if (measurementValue(session) === undefined) continue;
+    const basis = session.measurementBasis ?? "token-pressure";
+    const scope = `${session.provider}\u0000${session.taskKind}\u0000${basis}`;
     if (session.mode === "observe") baselines.set(scope, [...(baselines.get(scope) ?? []), session]);
     if (session.mode === "balanced" && session.optimizationApplied && session.optimizationProfile) {
       const key = `${scope}\u0000${session.optimizationProfile}`;
@@ -108,17 +118,18 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     }
   }
   return [...treatments.entries()].flatMap(([key, treatment]) => {
-    const [provider, taskKind, optimizationProfile] = key.split("\u0000") as [TreatmentComparison["provider"], TreatmentComparison["taskKind"], string];
-    const baseline = baselines.get(`${provider}\u0000${taskKind}`) ?? [];
+    const [provider, taskKind, basis, optimizationProfile] = key.split("\u0000") as [TreatmentComparison["provider"], TreatmentComparison["taskKind"], NonNullable<SessionSummary["measurementBasis"]>, string];
+    const baseline = baselines.get(`${provider}\u0000${taskKind}\u0000${basis}`) ?? [];
     if (baseline.length === 0) return [];
-    const baselinePressure = baseline.map(tokenPressure);
-    const treatmentPressure = treatment.map(tokenPressure);
+    const baselinePressure = baseline.map(measurementValue).filter((value): value is number => value !== undefined);
+    const treatmentPressure = treatment.map(measurementValue).filter((value): value is number => value !== undefined);
     const baselineMedian = median(baselinePressure);
     const treatmentMedian = median(treatmentPressure);
     return [{
       provider,
       taskKind,
       optimizationProfile,
+      metricLabel: metricLabel(treatment[0]),
       baselineSessions: baseline.length,
       treatmentSessions: treatment.length,
       baselineMedianTokenPressure: baselineMedian,
@@ -161,19 +172,19 @@ export function reportMarkdown(report: Report): string {
     "",
     "## Session metrics",
     "",
-    "| Provider | Mode | Policy applied | Task type | Sessions | Complete | Rework | Abandoned | New input | Cached input | Cache created | Output | Reasoning | Retries |",
+    "| Provider | Mode | Policy applied | Task type | Sessions | Complete | Rework | Abandoned | New input | Cached input | Cache created | Output | Reasoning | Provider-reported total | Retries |",
     "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
   );
   for (const row of report.rows) {
     const policy = row.optimizationApplied ? row.optimizationProfile ?? "validated policy" : "none";
-    lines.push(`| ${row.provider} | ${row.mode} | ${policy} | ${row.taskKind} | ${integer(row.sessions)} | ${integer(row.completed)} | ${integer(row.rework)} | ${integer(row.abandoned)} | ${integer(row.inputNew)} | ${integer(row.inputCached)} | ${integer(row.cacheCreated)} | ${integer(row.output)} | ${integer(row.reasoning)} | ${integer(row.retries)} |`);
+    lines.push(`| ${row.provider} | ${row.mode} | ${policy} | ${row.taskKind} | ${integer(row.sessions)} | ${integer(row.completed)} | ${integer(row.rework)} | ${integer(row.abandoned)} | ${integer(row.inputNew)} | ${integer(row.inputCached)} | ${integer(row.cacheCreated)} | ${integer(row.output)} | ${integer(row.reasoning)} | ${integer(row.reportedTotal)} | ${integer(row.retries)} |`);
   }
-  if (report.rows.length === 0) lines.push("| — | — | — | — | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |");
-  lines.push("", "## Matched treatment comparison", "", "> `Token pressure` is new input + cache creation + output + reasoning. It excludes cached reads and is compared only within the same provider and task type. A result becomes `ready` after at least five measured baseline and five measured treatment sessions.", "", "| Provider | Task type | Policy | Status | Baseline / treatment sessions | Baseline median | Treatment median | Change | Baseline / treatment IQR | Baseline / treatment median duration | Completion |", "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
+  if (report.rows.length === 0) lines.push("| — | — | — | — | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |");
+  lines.push("", "## Matched treatment comparison", "", "> `Token pressure` is new input + cache creation + output + reasoning. It excludes cached reads. `Provider-reported total` is the provider's own final session total when no category breakdown is published. Each metric is compared only with the same provider, task type, and metric. A result becomes `ready` after at least five measured baseline and five measured treatment sessions.", "", "| Provider | Task type | Metric | Policy | Status | Baseline / treatment sessions | Baseline median | Treatment median | Change | Baseline / treatment IQR | Baseline / treatment median duration | Completion |", "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
   for (const comparison of report.comparisons) {
-    lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.optimizationProfile} | ${comparison.readiness} | ${integer(comparison.baselineSessions)} / ${integer(comparison.treatmentSessions)} | ${integer(comparison.baselineMedianTokenPressure)} | ${integer(comparison.treatmentMedianTokenPressure)} | ${comparison.tokenPressureDeltaPercent.toFixed(1)}% | ${integer(comparison.baselineIqrTokenPressure)} / ${integer(comparison.treatmentIqrTokenPressure)} | ${integer(comparison.baselineMedianDurationSeconds)}s / ${integer(comparison.treatmentMedianDurationSeconds)}s | ${percent(comparison.baselineCompletionRate)} / ${percent(comparison.treatmentCompletionRate)} |`);
+    lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.metricLabel} | ${comparison.optimizationProfile} | ${comparison.readiness} | ${integer(comparison.baselineSessions)} / ${integer(comparison.treatmentSessions)} | ${integer(comparison.baselineMedianTokenPressure)} | ${integer(comparison.treatmentMedianTokenPressure)} | ${comparison.tokenPressureDeltaPercent.toFixed(1)}% | ${integer(comparison.baselineIqrTokenPressure)} / ${integer(comparison.treatmentIqrTokenPressure)} | ${integer(comparison.baselineMedianDurationSeconds)}s / ${integer(comparison.treatmentMedianDurationSeconds)}s | ${percent(comparison.baselineCompletionRate)} / ${percent(comparison.treatmentCompletionRate)} |`);
   }
-  if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — | — | — | — |");
+  if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — | — | — | — | — |");
   lines.push("", "## Interpretation", "", "- `observe` establishes the personal baseline and does not change CLI behavior.", "- A `balanced` row with a named policy is a real provider-specific treatment. A `balanced` row with `none` means the installed CLI did not advertise a validated flag, so TokenPilot deliberately left it unchanged.", "- A `preliminary` comparison is visible for learning, not a savings claim. Treat a negative `ready` change as a measured reduction.", "- Compare a provider and task type only with its own `observe` rows; cached input is shown separately because it is not equivalent to newly created context.", "- `off` writes no telemetry. `TOKENPILOT_BYPASS=1 <provider>` bypasses TokenPilot immediately.", "");
   return lines.join("\n");
 }

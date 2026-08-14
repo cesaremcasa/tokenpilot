@@ -20,13 +20,13 @@ describe("aggregate reporting", () => {
     const database = new TelemetryDatabase(paths);
     const now = new Date().toISOString();
     database.createRun({ id: "run-1", provider: "codex", mode: "observe", startedAt: now, endedAt: now, exitCode: 0, optimizationApplied: false, collectionState: "pending", taskKind: "bugfix", outcome: "completed" });
-    database.addUsage({ runId: "run-1", observedAt: now, source: "codex", inputNew: 10, inputCached: 100, output: 4 });
+    database.addUsage({ runId: "run-1", observedAt: now, source: "codex", inputNew: 10, inputCached: 100, output: 4, reportedTotal: 114 });
     database.addEvent({ runId: "run-1", observedAt: now, source: "codex", type: "retry", count: 1 });
     database.close();
 
     const report = buildReport(paths, 7);
     expect(report.rows).toHaveLength(1);
-    expect(report.rows[0]).toMatchObject({ provider: "codex", optimizationApplied: false, taskKind: "bugfix", sessions: 1, inputNew: 10, inputCached: 100, retries: 1 });
+    expect(report.rows[0]).toMatchObject({ provider: "codex", optimizationApplied: false, taskKind: "bugfix", sessions: 1, inputNew: 10, inputCached: 100, reportedTotal: 114, retries: 1 });
     expect(report.coverage).toEqual([{ provider: "codex", sessions: 1, measuredSessions: 1, unavailableSessions: 0 }]);
     expect(reportMarkdown(report)).toContain("codex");
     cleanup(paths);

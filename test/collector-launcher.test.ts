@@ -34,6 +34,14 @@ describe("local launcher and collector", () => {
     return originalBin;
   }
 
+  function writeFakeGrok(paths: ReturnType<typeof temporaryPaths>, contents: string): string {
+    const originalBin = path.join(paths.userHome, "original-grok-bin");
+    const original = path.join(originalBin, "grok");
+    fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(original, contents, { mode: 0o700 });
+    return originalBin;
+  }
+
   it("records an envelope but never imports ambient provider telemetry", async () => {
     const paths = temporaryPaths();
     const originalBin = writeFakeCodex(paths, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'fake-codex 1.0\\n'; fi\nexit 0\n");
@@ -76,6 +84,32 @@ describe("local launcher and collector", () => {
       optimizationApplied: true,
       optimizationProfile: "codex-balanced-v1"
     });
+    database.close();
+    cleanup(paths);
+  });
+
+  it("records only Codex exec's provider-published final numeric total", async () => {
+    const paths = temporaryPaths();
+    const originalBin = writeFakeCodex(paths, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'fake-codex 1.0'; exit 0; fi\nprintf 'response that must not persist\\ntokens used\\n7,675\\n'\nexit 0\n");
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "test"], paths))).toBe(0);
+    const database = new TelemetryDatabase(paths);
+    const run = database.getPendingRuns();
+    expect(run).toHaveLength(0);
+    const aggregate = database.aggregateSince(new Date(Date.now() - 60_000).toISOString());
+    expect(aggregate[0]).toMatchObject({ provider: "codex", reportedTotal: 7675, inputNew: 0, output: 0 });
+    database.close();
+    cleanup(paths);
+  });
+
+  it("records only the numeric usage object from explicit Grok JSON single-turn output", async () => {
+    const paths = temporaryPaths();
+    const originalBin = writeFakeGrok(paths, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'grok 1.0'; exit 0; fi\nprintf '{\\n  \"text\": \"must not persist\",\\n  \"usage\": {\\n    \"input_tokens\": 12,\\n    \"cache_read_input_tokens\": 34,\\n    \"cache_creation_input_tokens\": 0,\\n    \"output_tokens\": 5,\\n    \"reasoning_tokens\": 6,\\n    \"total_tokens\": 57\\n  }\\n}\\n'\nexit 0\n");
+
+    expect(await withProviderPath(originalBin, () => runProvider("grok", ["--output-format", "json", "--single", "test"], paths))).toBe(0);
+    const database = new TelemetryDatabase(paths);
+    expect(database.getPendingRuns()).toHaveLength(0);
+    expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ provider: "grok", inputNew: 12, inputCached: 34, output: 5, reasoning: 6, reportedTotal: 57 });
     database.close();
     cleanup(paths);
   });

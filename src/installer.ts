@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { ensureConfig } from "./config.js";
 import { assertSafeUserHome, ensurePrivateDirectory, hasSafePrivateDirectory, type TokenPilotPaths } from "./paths.js";
 import { PROVIDERS } from "./types.js";
@@ -16,6 +17,7 @@ const SKILL_MARKER = "tokenpilot-managed-skill";
 const SKILL_RELATIVE_PATH = path.join("tokenpilot", "SKILL.md");
 const SKILL_COMMAND_PLACEHOLDER = "{{TOKENPILOT_COMMAND}}";
 const COMMAND_MARKER = "# tokenpilot-command-shim";
+const RUNTIME_RELEASES_DIRECTORY = "releases";
 
 export interface InstallOptions {
   dryRun?: boolean;
@@ -139,6 +141,70 @@ function writeSkills(paths: TokenPilotPaths, targets: string[], command: string)
   }
 }
 
+/**
+ * A launcher must not keep executing a file inside the cloned checkout. Apart
+ * from breaking when that checkout is moved, macOS can deny a later read of a
+ * file that was created by another application or restored from quarantine.
+ * We therefore copy the small, dependency-free compiled bundle into TokenPilot
+ * private state during installation and point every managed entry point there.
+ */
+function runtimeBundleSource(executable: string): string | undefined {
+  const normalized = path.resolve(executable);
+  const dist = path.dirname(normalized);
+  const root = path.dirname(dist);
+  if (path.basename(dist) !== "dist" || path.basename(normalized) !== "cli.js") return undefined;
+  const skill = path.join(root, ".agents", "skills", SKILL_RELATIVE_PATH);
+  try {
+    if (!existingRegularFile(normalized) || !existingRegularFile(skill)) return undefined;
+    return root;
+  } catch {
+    return undefined;
+  }
+}
+
+function copyPrivateTree(source: string, destination: string): void {
+  const stat = fs.lstatSync(source);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`Invalid TokenPilot runtime source: ${source}`);
+  fs.mkdirSync(destination, { mode: 0o700 });
+  for (const name of fs.readdirSync(source)) {
+    const childSource = path.join(source, name);
+    const childDestination = path.join(destination, name);
+    const child = fs.lstatSync(childSource);
+    if (child.isSymbolicLink()) throw new Error(`Invalid TokenPilot runtime source: ${childSource}`);
+    if (child.isDirectory()) {
+      copyPrivateTree(childSource, childDestination);
+    } else if (child.isFile() && child.nlink === 1) {
+      // Reading then writing creates a fresh, private file rather than
+      // preserving an ACL, extended attribute, or filesystem clone from the
+      // development checkout.
+      fs.writeFileSync(childDestination, fs.readFileSync(childSource), { mode: 0o600 });
+    } else {
+      throw new Error(`Invalid TokenPilot runtime source: ${childSource}`);
+    }
+  }
+}
+
+function stageRuntimeBundle(paths: TokenPilotPaths, executable: string): string {
+  const source = runtimeBundleSource(executable);
+  if (!source) return executable;
+  const releases = path.join(paths.runtimeDir, RUNTIME_RELEASES_DIRECTORY);
+  ensurePrivateDirectory(paths, releases);
+  const release = path.join(releases, randomUUID());
+  try {
+    fs.mkdirSync(release, { mode: 0o700 });
+    copyPrivateTree(path.join(source, "dist"), path.join(release, "dist"));
+    copyPrivateTree(path.join(source, ".agents"), path.join(release, ".agents"));
+    const stagedCli = path.join(release, "dist", "cli.js");
+    if (!existingRegularFile(stagedCli)) throw new Error("TokenPilot runtime bundle is incomplete");
+    return stagedCli;
+  } catch (error) {
+    // This directory was freshly created with an unpredictable name in a
+    // private TokenPilot-owned parent, so it is safe to clean up on failure.
+    fs.rmSync(release, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 export function createInstallPlan(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
   const shellFile = options.noShellConfig ? undefined : shellStartupFile(options.shell ?? process.env.SHELL, paths.userHome);
   return {
@@ -238,14 +304,15 @@ export function install(paths: TokenPilotPaths, options: InstallOptions = {}): I
   ensurePrivateDirectory(paths, paths.shimDir);
   ensurePrivateDirectory(paths, paths.runtimeDir);
   ensureConfig(paths);
-  for (const provider of PROVIDERS) writeShim(path.join(paths.shimDir, provider), provider, nodeExecutable, executable);
-  writeCommandShim(plan.command, nodeExecutable, executable);
+  const installedExecutable = stageRuntimeBundle(paths, executable);
+  for (const provider of PROVIDERS) writeShim(path.join(paths.shimDir, provider), provider, nodeExecutable, installedExecutable);
+  writeCommandShim(plan.command, nodeExecutable, installedExecutable);
   writeSkills(paths, plan.skills, plan.command);
   if (plan.shellFile) appendShellBlock(plan.shellFile, shellBlock(paths.shimDir));
   if (plan.launchAgent) {
     ensurePrivateDirectory(paths, path.dirname(plan.launchAgent));
     assertLaunchAgentTarget(plan.launchAgent);
-    fs.writeFileSync(plan.launchAgent, launchAgentPlist(nodeExecutable, executable), { mode: 0o600 });
+    fs.writeFileSync(plan.launchAgent, launchAgentPlist(nodeExecutable, installedExecutable), { mode: 0o600 });
     if (process.platform === "darwin") bootstrapAgent(plan.launchAgent);
   }
   return plan;

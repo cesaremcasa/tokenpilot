@@ -9,6 +9,8 @@ import { TelemetryDatabase } from "./database.js";
 import { planForInstalledCli, planFromHelp } from "./optimization.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
+import { CodexExecTokenParser, isCodexExec } from "./telemetry/codex.js";
+import { GrokJsonUsageParser, isGrokJsonSingle } from "./telemetry/grok.js";
 import type { Provider, RunMode } from "./types.js";
 
 const PASSTHROUGH_ARGUMENTS = new Set([
@@ -100,7 +102,11 @@ function binaryVersion(binary: string): string | undefined {
   return result.stdout.match(/\b\d+(?:\.\d+){0,3}(?:[-+][A-Za-z0-9._-]+)?\b/)?.[0];
 }
 
-function launchChild(binary: string, args: string[], environment = providerEnvironment()): Promise<number | null> {
+interface ChildObservation {
+  consume(chunk: Buffer): void;
+}
+
+function launchChild(binary: string, args: string[], environment = providerEnvironment(), observation?: ChildObservation): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const trusted = trustedExecutable(binary);
     if (!trusted) {
@@ -108,7 +114,9 @@ function launchChild(binary: string, args: string[], environment = providerEnvir
       return;
     }
     const child = spawn(trusted, args, {
-      stdio: "inherit",
+      // Codex `exec` is non-interactive; normal provider sessions retain their
+      // inherited TTY streams exactly as before.
+      stdio: observation ? ["inherit", "pipe", "pipe"] : "inherit",
       env: environment,
       cwd: process.cwd()
     });
@@ -118,8 +126,18 @@ function launchChild(binary: string, args: string[], environment = providerEnvir
     };
     process.once("SIGINT", () => forward("SIGINT"));
     process.once("SIGTERM", () => forward("SIGTERM"));
+    if (observation) {
+      child.stdout?.on("data", (chunk: Buffer) => {
+        observation.consume(chunk);
+        process.stdout.write(chunk);
+      });
+      child.stderr?.on("data", (chunk: Buffer) => {
+        observation.consume(chunk);
+        process.stderr.write(chunk);
+      });
+    }
     child.on("error", reject);
-    child.on("exit", (code) => {
+    child.on("close", (code) => {
       if (!settled) {
         settled = true;
         resolve(code);
@@ -147,6 +165,8 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   let launchArgs = args;
   let launchEnvironment = providerEnvironment();
   let claudeMetrics: ClaudeMetricsReceiver | undefined;
+  const codexMetrics = provider === "codex" && isCodexExec(args) ? new CodexExecTokenParser() : undefined;
+  const grokMetrics = provider === "grok" && isGrokJsonSingle(args) ? new GrokJsonUsageParser() : undefined;
   try {
     const config = ensureConfig(paths);
     let mode = config.defaultMode;
@@ -196,12 +216,27 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   }
 
   try {
-    const code = await launchChild(binary, launchArgs, launchEnvironment);
+    const observer = codexMetrics ?? grokMetrics;
+    const code = await launchChild(binary, launchArgs, launchEnvironment, observer ? { consume: (chunk) => observer.accept(chunk) } : undefined);
     await claudeMetrics?.close().catch(() => undefined);
     if (database && runId) {
       try {
         database.finishRun(runId, code, new Date().toISOString());
         if (provider === "claude") database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
+        if (provider === "codex") {
+          const total = codexMetrics?.finish();
+          if (total !== undefined) {
+            database.addUsage({ runId, observedAt: new Date().toISOString(), source: "codex-cli-reported-total-v1", reportedTotal: total });
+            database.markCollection(runId, "collected");
+          }
+        }
+        if (provider === "grok") {
+          const usage = grokMetrics?.finish();
+          if (usage) {
+            database.addUsage({ runId, observedAt: new Date().toISOString(), source: "grok-cli-json-usage-v1", ...usage });
+            database.markCollection(runId, "collected");
+          }
+        }
       } catch {
         process.stderr.write("TokenPilot: telemetry completion unavailable.\n");
       }

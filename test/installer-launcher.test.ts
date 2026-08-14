@@ -71,6 +71,34 @@ describe("installation and fail-open launcher lookup", () => {
     cleanup(paths);
   });
 
+  it("runs from a private runtime bundle after the development checkout is gone", () => {
+    const paths = temporaryPaths();
+    const source = path.join(paths.userHome, "checkout");
+    const sourceCli = path.join(source, "dist", "cli.js");
+    const sourceSkill = path.join(source, ".agents", "skills", "tokenpilot", "SKILL.md");
+    fs.mkdirSync(path.dirname(sourceCli), { recursive: true, mode: 0o700 });
+    fs.mkdirSync(path.dirname(sourceSkill), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(sourceCli, "process.stdout.write(`runtime ${process.argv.slice(2).join(' ')}`);\n", { mode: 0o600 });
+    fs.writeFileSync(sourceSkill, "tokenpilot-managed-skill\n{{TOKENPILOT_COMMAND}}\n", { mode: 0o600 });
+
+    const plan = install(paths, {
+      noShellConfig: true,
+      noAgent: true,
+      executable: sourceCli,
+      nodeExecutable: process.execPath
+    });
+    const command = fs.readFileSync(plan.command, "utf8");
+    expect(command).not.toContain(source);
+    expect(command).toContain(path.join(paths.runtimeDir, "releases"));
+
+    fs.rmSync(source, { recursive: true, force: true });
+    const result = spawnSync(plan.command, ["report", "--format", "md"], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("runtime report --format md");
+    uninstall(paths);
+    cleanup(paths);
+  });
+
   it("skips its own shim directory when locating the original provider binary", () => {
     const paths = temporaryPaths();
     const originalBin = path.join(paths.userHome, "original-bin");

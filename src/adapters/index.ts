@@ -21,7 +21,7 @@ function adapter(
 export const ADAPTERS: Record<Provider, ProviderAdapter> = {
   claude: adapter("claude", "otlp-metrics", "Personal Claude sessions use a per-run, metrics-only local OTLP receiver. Prompt, response, event, and trace export remain disabled.", true),
   codex: adapter("codex", "unknown", "Use validated session-only reasoning, verbosity, and compaction controls when --config is available. Automatic telemetry remains disabled until a documented session correlation is validated.", true),
-  grok: adapter("grok", "unknown", "Use a validated CLI reasoning-effort control; do not assume API cache keys apply to the CLI. Automatic telemetry remains disabled until a documented session correlation is validated.", true),
+  grok: adapter("grok", "cli-json", "Grok single-turn JSON output exposes provider-published numeric usage and is collected only in that explicit non-interactive mode. Normal TTY sessions remain observe-only; do not assume API cache keys apply to the CLI.", true),
   kimi: adapter("kimi", "unknown", "Use validated session controls only when the installed CLI advertises them; otherwise observe without mutating Kimi config. Automatic telemetry remains disabled until a documented session correlation is validated.", true)
 };
 

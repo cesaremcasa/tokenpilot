@@ -6,7 +6,8 @@ const NUMBER_KEYS: Record<keyof UsageMetrics, string[]> = {
   cacheCreated: ["cache_creation_input_tokens", "input_cache_creation", "inputcachecreation", "cache_write_input_tokens"],
   output: ["output_tokens", "output", "outputtokens"],
   reasoning: ["reasoning_output_tokens", "reasoning_tokens", "reasoning", "reasoningoutputtokens"],
-  modelCalls: ["model_calls", "num_turns", "num_requests", "requests"]
+  modelCalls: ["model_calls", "num_turns", "num_requests", "requests"],
+  reportedTotal: ["total_tokens", "tokens_used", "token_count"]
 };
 
 function normaliseKey(key: string): string {

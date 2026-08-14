@@ -33,6 +33,8 @@ export interface UsageMetrics {
   output?: number;
   reasoning?: number;
   modelCalls?: number;
+  /** A provider-published session total that has no safe category breakdown. */
+  reportedTotal?: number;
 }
 
 export interface UsageRecord extends UsageMetrics {
@@ -50,7 +52,7 @@ export interface SessionEvent {
 }
 
 export interface ProviderCapabilities {
-  telemetry: "otlp-metrics" | "session-files" | "wire" | "unknown";
+  telemetry: "otlp-metrics" | "session-files" | "wire" | "cli-json" | "unknown";
   supportsBalancedOptimization: boolean;
   notes: string;
 }
@@ -83,6 +85,7 @@ export interface AggregateRow {
   output: number;
   reasoning: number;
   modelCalls: number;
+  reportedTotal: number;
   compactions: number;
   retries: number;
 }
@@ -108,6 +111,8 @@ export interface SessionSummary {
   cacheCreated: number;
   output: number;
   reasoning: number;
+  reportedTotal?: number;
+  measurementBasis?: "token-pressure" | "provider-total";
   compactions: number;
   retries: number;
 }
@@ -116,6 +121,7 @@ export interface TreatmentComparison {
   provider: Provider;
   taskKind: TaskKind;
   optimizationProfile: string;
+  metricLabel: "token pressure" | "provider-reported total";
   baselineSessions: number;
   treatmentSessions: number;
   baselineMedianTokenPressure: number;

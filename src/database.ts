@@ -10,12 +10,14 @@ export interface TelemetryDatabaseOptions {
 
 export class TelemetryDatabase {
   private readonly db: DatabaseSync;
+  private readonly hasReportedTotalColumn: boolean;
 
   constructor(paths: TokenPilotPaths, options: TelemetryDatabaseOptions = {}) {
     if (options.readOnly) {
       if (!hasSafePrivateDirectory(paths, paths.dataDir)) throw new Error("TokenPilot telemetry directory is unavailable");
       assertSafeStateFile(paths, paths.databaseFile);
       this.db = new DatabaseSync(paths.databaseFile, { readOnly: true });
+      this.hasReportedTotalColumn = this.usageColumnExists("reported_total");
       return;
     }
     ensurePrivateDirectory(paths, paths.dataDir);
@@ -26,6 +28,7 @@ export class TelemetryDatabase {
     // leaves no state behind after a completed local write transaction.
     this.db.exec("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON;");
     this.migrate();
+    this.hasReportedTotalColumn = this.usageColumnExists("reported_total");
   }
 
   private migrate(): void {
@@ -54,7 +57,8 @@ export class TelemetryDatabase {
         cache_created INTEGER,
         output INTEGER,
         reasoning INTEGER,
-        model_calls INTEGER
+        model_calls INTEGER,
+        reported_total INTEGER
       ) STRICT;
       CREATE TABLE IF NOT EXISTS session_events (
         id INTEGER PRIMARY KEY,
@@ -74,6 +78,16 @@ export class TelemetryDatabase {
     `);
     this.ensureRunColumn("optimization_applied", "INTEGER NOT NULL DEFAULT 0");
     this.ensureRunColumn("optimization_profile", "TEXT");
+    this.ensureUsageColumn("reported_total", "INTEGER");
+  }
+
+  private usageColumnExists(name: string): boolean {
+    const columns = this.db.prepare("PRAGMA table_info(usage_records)").all() as Array<{ name: string }>;
+    return columns.some((column) => column.name === name);
+  }
+
+  private ensureUsageColumn(name: "reported_total", definition: string): void {
+    if (!this.usageColumnExists(name)) this.db.exec(`ALTER TABLE usage_records ADD COLUMN ${name} ${definition}`);
   }
 
   private ensureRunColumn(name: "optimization_applied" | "optimization_profile", definition: string): void {
@@ -137,10 +151,11 @@ export class TelemetryDatabase {
   addUsage(record: UsageRecord): void {
     safeUsage(record);
     this.db.prepare(`INSERT INTO usage_records
-      (run_id, observed_at, source, input_new, input_cached, cache_created, output, reasoning, model_calls)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (run_id, observed_at, source, input_new, input_cached, cache_created, output, reasoning, model_calls, reported_total)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(record.runId, record.observedAt, record.source, record.inputNew ?? null, record.inputCached ?? null,
-        record.cacheCreated ?? null, record.output ?? null, record.reasoning ?? null, record.modelCalls ?? null);
+        record.cacheCreated ?? null, record.output ?? null, record.reasoning ?? null, record.modelCalls ?? null,
+        record.reportedTotal ?? null);
   }
 
   addEvent(record: SessionEvent): void {
@@ -181,11 +196,12 @@ export class TelemetryDatabase {
   }
 
   aggregateSince(since: string): AggregateRow[] {
+    const reportedTotal = this.hasReportedTotalColumn ? "SUM(COALESCE(u.reported_total, 0))" : "0";
     return this.db.prepare(`
       WITH usage AS (
         SELECT run_id, SUM(COALESCE(input_new, 0)) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
           SUM(COALESCE(cache_created, 0)) AS cache_created, SUM(COALESCE(output, 0)) AS output,
-          SUM(COALESCE(reasoning, 0)) AS reasoning, SUM(COALESCE(model_calls, 0)) AS model_calls
+          SUM(COALESCE(reasoning, 0)) AS reasoning, SUM(COALESCE(model_calls, 0)) AS model_calls${this.hasReportedTotalColumn ? ", SUM(COALESCE(reported_total, 0)) AS reported_total" : ""}
         FROM usage_records GROUP BY run_id
       ), events AS (
         SELECT run_id,
@@ -202,6 +218,7 @@ export class TelemetryDatabase {
         SUM(COALESCE(u.input_new, 0)) AS inputNew, SUM(COALESCE(u.input_cached, 0)) AS inputCached,
         SUM(COALESCE(u.cache_created, 0)) AS cacheCreated, SUM(COALESCE(u.output, 0)) AS output,
         SUM(COALESCE(u.reasoning, 0)) AS reasoning, SUM(COALESCE(u.model_calls, 0)) AS modelCalls,
+        ${reportedTotal} AS reportedTotal,
         SUM(COALESCE(e.compactions, 0)) AS compactions, SUM(COALESCE(e.retries, 0)) AS retries
       FROM runs r LEFT JOIN usage u ON u.run_id = r.id LEFT JOIN events e ON e.run_id = r.id
       WHERE r.started_at >= ? GROUP BY r.provider, r.mode, r.optimization_applied, r.optimization_profile, r.task_kind
@@ -226,11 +243,13 @@ export class TelemetryDatabase {
   }
 
   sessionSummariesSince(since: string): SessionSummary[] {
+    const reportedTotal = this.hasReportedTotalColumn ? "u.reported_total" : "NULL";
     return (this.db.prepare(`
       WITH usage AS (
         SELECT run_id, SUM(COALESCE(input_new, 0)) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
           SUM(COALESCE(cache_created, 0)) AS cache_created, SUM(COALESCE(output, 0)) AS output,
-          SUM(COALESCE(reasoning, 0)) AS reasoning
+          SUM(COALESCE(reasoning, 0)) AS reasoning,
+          MAX(CASE WHEN input_new IS NOT NULL OR input_cached IS NOT NULL OR cache_created IS NOT NULL OR output IS NOT NULL OR reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_detailed_usage${this.hasReportedTotalColumn ? ", SUM(COALESCE(reported_total, 0)) AS reported_total" : ""}
         FROM usage_records GROUP BY run_id
       ), events AS (
         SELECT run_id,
@@ -243,12 +262,15 @@ export class TelemetryDatabase {
         MAX(0, strftime('%s', r.ended_at) - strftime('%s', r.started_at)) AS durationSeconds,
         u.input_new AS inputNew, u.input_cached AS inputCached, u.cache_created AS cacheCreated,
         u.output AS output, u.reasoning AS reasoning,
+        ${reportedTotal} AS reportedTotal, COALESCE(u.has_detailed_usage, 0) AS hasDetailedUsage,
         COALESCE(e.compactions, 0) AS compactions, COALESCE(e.retries, 0) AS retries
       FROM runs r JOIN usage u ON u.run_id = r.id LEFT JOIN events e ON e.run_id = r.id
       WHERE r.started_at >= ? AND r.ended_at IS NOT NULL
       ORDER BY r.provider, r.task_kind, r.started_at
-    `).all(since) as unknown as Array<Omit<SessionSummary, "optimizationApplied"> & { optimizationApplied: number }>).map((row) => ({
+    `).all(since) as unknown as Array<Omit<SessionSummary, "optimizationApplied" | "measurementBasis"> & { optimizationApplied: number; hasDetailedUsage: number }>).map((row) => ({
       ...row,
+      reportedTotal: row.reportedTotal ?? undefined,
+      measurementBasis: row.hasDetailedUsage === 1 ? "token-pressure" : "provider-total",
       optimizationApplied: Boolean(row.optimizationApplied)
     }));
   }
