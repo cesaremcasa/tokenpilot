@@ -83,6 +83,8 @@ describe("installation and fail-open launcher lookup", () => {
     expect(fs.realpathSync(findOriginalBinary("codex", paths, `${paths.shimDir}${path.delimiter}${originalBin}`)!)).toBe(fs.realpathSync(original));
     expect(isPassthrough(["login"])).toBe(true);
     expect(isPassthrough(["--version"])).toBe(true);
+    expect(isPassthrough(["update"])).toBe(true);
+    expect(isPassthrough(["mcp"])).toBe(true);
     expect(isPassthrough([])).toBe(false);
     cleanup(paths);
   });

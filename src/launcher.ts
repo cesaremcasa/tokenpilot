@@ -11,7 +11,12 @@ import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
 import type { Provider, RunMode } from "./types.js";
 
-const PASSTHROUGH_ARGUMENTS = new Set(["login", "logout", "auth", "--help", "-h", "--version", "-V", "version"]);
+const PASSTHROUGH_ARGUMENTS = new Set([
+  "login", "logout", "auth", "--help", "-h", "--version", "-V", "version",
+  // Provider maintenance and configuration commands are not AI sessions.
+  "update", "upgrade", "doctor", "completion", "completions", "mcp", "plugin", "plugins",
+  "config", "setup", "models", "sessions", "trace", "inspect", "du", "leader"
+]);
 const PROVIDER_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
 export function isPassthrough(args: string[]): boolean {
