@@ -18,6 +18,13 @@ TokenPilot is a local measurement tool. It must remain outside the provider auth
 
 If configuration, telemetry storage, or collection fails, the launcher starts the original provider CLI without optimization. `TOKENPILOT_BYPASS=1` bypasses the launcher for one command and records nothing.
 
+## Installation and executable boundary
+
+- The installed CLI ignores `HOME` and `TOKENPILOT_*` state-directory overrides. Test-only overrides are unavailable to normal commands.
+- Installation and removal refuse to overwrite or delete a non-TokenPilot shim, LaunchAgent, or shell startup file symlink.
+- The launcher never loads a provider executable path from configuration. It accepts only a regular executable outside its own shim directory, with a containing directory that is not group- or world-writable.
+- V0.1 does not scan ambient provider logs. A provider-specific adapter must prove a documented run correlation before it can write numeric usage records.
+
 ## Enterprise boundary
 
-No company account, account identifier, prompt, code, or metric may be copied to this personal repository. A company pilot requires a company-owned codebase, approved storage, Security review, and user-visible opt-in/rollback controls.
+No company account, account identifier, prompt, code, or metric may be copied to this personal repository. The provider CLIs do not expose a reliable account-scope signal, so this installation records or optimizes a session only when `TOKENPILOT_PERSONAL_SESSION=1` is explicitly set in a terminal profile used exclusively for personal accounts. A company pilot requires a company-owned codebase, approved storage, Security review, and user-visible opt-in/rollback controls.

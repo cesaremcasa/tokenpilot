@@ -89,13 +89,21 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
  * Probe only the installed provider binary. If the probe fails, do not mutate
  * the invocation: the wrapper remains fail-open and telemetry still works.
  */
-export function planForInstalledCli(provider: Provider, mode: RunMode, binary: string): OptimizationPlan {
+export function planForInstalledCli(
+  provider: Provider,
+  mode: RunMode,
+  binary: string,
+  environment: NodeJS.ProcessEnv = process.env,
+  verifyBinary: (candidate: string) => boolean = () => true
+): OptimizationPlan {
   if (mode !== "balanced") return NONE;
   try {
+    if (!verifyBinary(binary)) return { ...NONE, unavailableReason: "could not verify this CLI executable before applying a policy" };
     const result = spawnSync(binary, ["--help"], {
       encoding: "utf8",
       timeout: 4_000,
-      stdio: ["ignore", "pipe", "ignore"]
+      stdio: ["ignore", "pipe", "ignore"],
+      env: environment
     });
     if (result.error || result.status !== 0) {
       return { ...NONE, unavailableReason: "could not verify this CLI version before applying a policy" };

@@ -1,14 +1,14 @@
-import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import type { AggregateRow, RunRecord, SessionEvent, SessionSummary, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
 import { safeEvent, safeRun, safeUsage } from "./privacy.js";
-import type { TokenPilotPaths } from "./paths.js";
+import { assertSafeStateFile, ensurePrivateDirectory, type TokenPilotPaths } from "./paths.js";
 
 export class TelemetryDatabase {
   private readonly db: DatabaseSync;
 
   constructor(paths: TokenPilotPaths) {
-    fs.mkdirSync(paths.dataDir, { recursive: true, mode: 0o700 });
+    ensurePrivateDirectory(paths, paths.dataDir);
+    assertSafeStateFile(paths, paths.databaseFile);
     this.db = new DatabaseSync(paths.databaseFile);
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     this.migrate();

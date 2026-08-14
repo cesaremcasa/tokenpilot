@@ -24,6 +24,7 @@ Usage:
 
 Daily usage after install is unchanged: claude, codex, grok, or kimi.
 Immediate bypass: TOKENPILOT_BYPASS=1 codex
+Personal measurement boundary: TOKENPILOT_PERSONAL_SESSION=1 codex
 `;
 
 function flag(args: string[], name: string): string | undefined {
@@ -48,7 +49,15 @@ async function runAgent(args: string[]): Promise<number> {
   const interval = Number(flag(args, "--interval") ?? 60);
   if (!Number.isInteger(interval) || interval < 10 || interval > 3_600) throw new Error("--interval must be a whole number between 10 and 3600");
   const once = has(args, "--once");
-  const collect = () => collectPendingRuns(paths);
+  const collect = () => {
+    try {
+      return collectPendingRuns(paths);
+    } catch {
+      // A background collector must not leak a provider path or terminate the
+      // LaunchAgent when its local state is unavailable.
+      return { collected: 0, unavailable: 0 };
+    }
+  };
   if (once) {
     const result = collect();
     process.stdout.write(`TokenPilot collector: ${result.collected} collected, ${result.unavailable} unavailable.\n`);

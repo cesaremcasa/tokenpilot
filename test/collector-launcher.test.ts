@@ -3,20 +3,39 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { collectPendingRuns } from "../src/collector.js";
 import { TelemetryDatabase } from "../src/database.js";
-import { ensureConfig, rememberProviderPath, writeConfig } from "../src/config.js";
+import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("local launcher and collector", () => {
-  it("records a normal CLI envelope, then collects only numeric session counters", async () => {
-    const paths = temporaryPaths();
+  async function withProviderPath<T>(providerPath: string, action: () => Promise<T>, personal = true): Promise<T> {
+    const originalPath = process.env.PATH;
+    const originalPersonalSession = process.env.TOKENPILOT_PERSONAL_SESSION;
+    process.env.PATH = providerPath;
+    if (personal) process.env.TOKENPILOT_PERSONAL_SESSION = "1";
+    else delete process.env.TOKENPILOT_PERSONAL_SESSION;
+    try {
+      return await action();
+    } finally {
+      process.env.PATH = originalPath;
+      if (originalPersonalSession === undefined) delete process.env.TOKENPILOT_PERSONAL_SESSION;
+      else process.env.TOKENPILOT_PERSONAL_SESSION = originalPersonalSession;
+    }
+  }
+
+  function writeFakeCodex(paths: ReturnType<typeof temporaryPaths>, contents: string): string {
     const originalBin = path.join(paths.userHome, "original-bin");
     const original = path.join(originalBin, "codex");
-    fs.mkdirSync(originalBin, { recursive: true });
-    fs.writeFileSync(original, "#!/bin/sh\nprintf 'fake-codex 1.0\\n'\nexit 0\n", { mode: 0o700 });
-    rememberProviderPath(paths, "codex", original);
+    fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(original, contents, { mode: 0o700 });
+    return originalBin;
+  }
 
-    expect(await runProvider("codex", ["run"], paths)).toBe(0);
+  it("records an envelope but never imports ambient provider telemetry", async () => {
+    const paths = temporaryPaths();
+    const originalBin = writeFakeCodex(paths, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'fake-codex 1.0\\n'; fi\nexit 0\n");
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
     const before = new TelemetryDatabase(paths);
     const pending = before.getPendingRuns();
     expect(pending).toHaveLength(1);
@@ -28,27 +47,23 @@ describe("local launcher and collector", () => {
     fs.mkdirSync(sessionDir, { recursive: true });
     fs.writeFileSync(path.join(sessionDir, "rollout.jsonl"), '{"payload":{"info":{"last_token_usage":{"input_tokens":7,"cached_input_tokens":19,"output_tokens":4}}},"message":"do not store this"}\n');
 
-    expect(collectPendingRuns(paths, paths.userHome)).toEqual({ collected: 1, unavailable: 0 });
+    expect(collectPendingRuns(paths)).toEqual({ collected: 0, unavailable: 1 });
     const after = new TelemetryDatabase(paths);
-    expect(after.getRun(runId)).toMatchObject({ collectionState: "collected" });
-    expect(after.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ inputNew: 7, inputCached: 19, output: 4 });
+    expect(after.getRun(runId)).toMatchObject({ collectionState: "unavailable" });
+    expect(after.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ inputNew: 0, inputCached: 0, output: 0 });
     after.close();
     cleanup(paths);
   });
 
   it("injects a verified treatment and records its policy without retaining arguments", async () => {
     const paths = temporaryPaths();
-    const originalBin = path.join(paths.userHome, "original-bin");
-    const original = path.join(originalBin, "codex");
-    fs.mkdirSync(originalBin, { recursive: true });
-    fs.writeFileSync(original, "#!/bin/sh\nif [ \"$1\" = \"--help\" ]; then echo '--config'; exit 0; fi\nprintf 'fake-codex %s\\n' \"$*\"\nexit 0\n", { mode: 0o700 });
-    rememberProviderPath(paths, "codex", original);
+    const originalBin = writeFakeCodex(paths, "#!/bin/sh\nif [ \"$1\" = \"--help\" ]; then echo '--config'; exit 0; fi\nif [ \"$1\" = \"--version\" ]; then echo 'fake-codex 1.0'; exit 0; fi\nexit 0\n");
     const config = ensureConfig(paths);
     config.defaultMode = "balanced";
     config.balancedSamplingRate = 1;
     writeConfig(paths, config);
 
-    expect(await runProvider("codex", ["exec", "test"], paths)).toBe(0);
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "test"], paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
     expect(database.getPendingRuns()[0]).toMatchObject({
       provider: "codex",
@@ -57,6 +72,62 @@ describe("local launcher and collector", () => {
       optimizationProfile: "codex-balanced-v1"
     });
     database.close();
+    cleanup(paths);
+  });
+
+  it("launches the original CLI exactly once when optional state is invalid", async () => {
+    const paths = temporaryPaths();
+    const invocations = path.join(paths.userHome, "invocations");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh\nprintf x >> '${invocations}'\nexit 0\n`);
+    fs.mkdirSync(path.dirname(paths.configFile), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(paths.configFile, "{}\n", { mode: 0o600 });
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
+    expect(fs.readFileSync(invocations, "utf8")).toBe("x");
+    cleanup(paths);
+  });
+
+  it("does not initialize TokenPilot state for a passthrough command", async () => {
+    const paths = temporaryPaths();
+    const originalBin = writeFakeCodex(paths, "#!/bin/sh\nexit 0\n");
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["--version"], paths))).toBe(0);
+    expect(fs.existsSync(paths.configFile)).toBe(false);
+    expect(fs.existsSync(paths.databaseFile)).toBe(false);
+    cleanup(paths);
+  });
+
+  it("does not record or optimize a session without the explicit personal boundary", async () => {
+    const paths = temporaryPaths();
+    const originalBin = writeFakeCodex(paths, "#!/bin/sh\nexit 0\n");
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths), false)).toBe(0);
+    expect(fs.existsSync(paths.configFile)).toBe(false);
+    expect(fs.existsSync(paths.databaseFile)).toBe(false);
+    cleanup(paths);
+  });
+
+  it("does not persist arbitrary provider version output", async () => {
+    const paths = temporaryPaths();
+    const originalBin = writeFakeCodex(paths, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'secret-project-path /private/work'; fi\nexit 0\n");
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
+    const database = new TelemetryDatabase(paths);
+    expect(database.getPendingRuns()[0]?.cliVersion).toBeNull();
+    database.close();
+    cleanup(paths);
+  });
+
+  it("uses a minimal trusted PATH for env-based provider interpreters", async () => {
+    const paths = temporaryPaths();
+    const providerBin = path.join(paths.userHome, "provider-bin");
+    const hostileBin = path.join(paths.userHome, "hostile-bin");
+    fs.mkdirSync(providerBin, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(hostileBin, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(providerBin, "codex"), "#!/usr/bin/env sh\nexit 0\n", { mode: 0o700 });
+    fs.writeFileSync(path.join(hostileBin, "sh"), "#!/bin/sh\nexit 88\n", { mode: 0o700 });
+
+    expect(await withProviderPath(`${hostileBin}${path.delimiter}${providerBin}`, () => runProvider("codex", ["run"], paths))).toBe(0);
     cleanup(paths);
   });
 });

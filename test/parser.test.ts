@@ -23,4 +23,9 @@ describe("telemetry parsing", () => {
   it("ignores invalid JSON", () => {
     expect(parseUsageLine("not json")).toBeUndefined();
   });
+
+  it("does not convert arbitrary text into persisted events", () => {
+    expect(parseUsageLine(JSON.stringify({ message: "retry retry retry", detail: "compaction complete" }))).toBeUndefined();
+    expect(parseUsageLine(JSON.stringify({ retry_count: -1, compaction_count: 1.5 }))).toBeUndefined();
+  });
 });

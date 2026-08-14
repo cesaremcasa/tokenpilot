@@ -1,27 +1,54 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { getAdapter } from "./adapters/index.js";
-import { ensureConfig, rememberProviderPath, selectMode } from "./config.js";
+import { ensureConfig, selectMode } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
 import { planForInstalledCli, planFromHelp } from "./optimization.js";
 import type { TokenPilotPaths } from "./paths.js";
 import type { Provider, RunMode } from "./types.js";
 
 const PASSTHROUGH_ARGUMENTS = new Set(["login", "logout", "auth", "--help", "-h", "--version", "-V", "version"]);
+const PROVIDER_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
 export function isPassthrough(args: string[]): boolean {
   return args.length > 0 && PASSTHROUGH_ARGUMENTS.has(args[0]);
 }
 
-function isExecutable(candidate: string): boolean {
+function trustedExecutable(candidate: string): string | undefined {
   try {
-    fs.accessSync(candidate, fs.constants.X_OK);
-    return fs.statSync(candidate).isFile();
+    const resolved = fs.realpathSync(candidate);
+    fs.accessSync(resolved, fs.constants.X_OK);
+    const binary = fs.statSync(resolved);
+    const directory = fs.statSync(path.dirname(resolved));
+    const currentUid = process.getuid?.() ?? os.userInfo().uid;
+    const protectedOwner = binary.uid === currentUid || binary.uid === 0;
+    const protectedDirectory = directory.uid === currentUid || directory.uid === 0;
+    const binaryWritableByOthers = (binary.mode & 0o022) !== 0;
+    const directoryWritableByOthers = (directory.mode & 0o022) !== 0;
+    return binary.isFile() && directory.isDirectory() && protectedOwner && protectedDirectory
+      && !binaryWritableByOthers && !directoryWritableByOthers
+      && !hasMacAcl(resolved) && !hasMacAcl(path.dirname(resolved)) ? resolved : undefined;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+/** macOS ACLs can grant writes even when POSIX mode bits are restrictive. */
+function hasMacAcl(target: string): boolean {
+  if (process.platform !== "darwin") return false;
+  const result = spawnSync("/bin/ls", ["-lde", target], { encoding: "utf8", timeout: 1_000, stdio: ["ignore", "pipe", "ignore"] });
+  if (result.error || result.status !== 0) return true;
+  // `ls -e` prints one extra line for every ACL entry. Refuse all ACLs rather
+  // than attempting to infer whether a named principal can modify the file.
+  return result.stdout.trim().split(/\r?\n/).length > 1;
+}
+
+function providerEnvironment(): NodeJS.ProcessEnv {
+  const { PATH: _path, TOKENPILOT_BYPASS: _bypass, TOKENPILOT_PERSONAL_SESSION: _personalSession, ...environment } = process.env;
+  return { ...environment, PATH: PROVIDER_PATH };
 }
 
 function canonicalDirectory(directory: string): string {
@@ -33,8 +60,7 @@ function canonicalDirectory(directory: string): string {
 }
 
 function shimDirectories(paths: TokenPilotPaths): Set<string> {
-  const directories = [paths.shimDir, process.env.TOKENPILOT_SHIM_DIR].filter((item): item is string => Boolean(item));
-  return new Set(directories.map(canonicalDirectory));
+  return new Set([canonicalDirectory(paths.shimDir)]);
 }
 
 function isShimBinary(candidate: string, directories: Set<string>): boolean {
@@ -42,35 +68,41 @@ function isShimBinary(candidate: string, directories: Set<string>): boolean {
 }
 
 export function findOriginalBinary(provider: Provider, paths: TokenPilotPaths, pathValue = process.env.PATH ?? ""): string | undefined {
-  const config = ensureConfig(paths);
   const excludedDirectories = shimDirectories(paths);
-  const remembered = config.providers[provider]?.originalPath;
-  if (remembered && isExecutable(remembered) && !isShimBinary(remembered, excludedDirectories)) return remembered;
 
   for (const directory of pathValue.split(path.delimiter).filter(Boolean)) {
     const resolvedDir = canonicalDirectory(directory);
     if (excludedDirectories.has(resolvedDir)) continue;
     const candidate = path.join(resolvedDir, provider);
-    if (isExecutable(candidate)) return candidate;
+    const trusted = trustedExecutable(candidate);
+    if (trusted && !isShimBinary(trusted, excludedDirectories)) return trusted;
   }
   return undefined;
 }
 
 function binaryVersion(binary: string): string | undefined {
-  const result = spawnSync(binary, ["--version"], { encoding: "utf8", timeout: 4_000, stdio: ["ignore", "pipe", "ignore"] });
+  const trusted = trustedExecutable(binary);
+  if (!trusted) return undefined;
+  const result = spawnSync(trusted, ["--version"], {
+    encoding: "utf8",
+    timeout: 4_000,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: providerEnvironment()
+  });
   if (result.error || result.status !== 0) return undefined;
-  return result.stdout.trim().split(/\r?\n/)[0]?.slice(0, 200);
+  return result.stdout.match(/\b\d+(?:\.\d+){0,3}(?:[-+][A-Za-z0-9._-]+)?\b/)?.[0];
 }
 
-function launchChild(binary: string, args: string[], paths: TokenPilotPaths): Promise<number | null> {
+function launchChild(binary: string, args: string[]): Promise<number | null> {
   return new Promise((resolve, reject) => {
-    const excludedDirectories = shimDirectories(paths);
-    const childPath = (process.env.PATH ?? "").split(path.delimiter)
-      .filter((directory) => directory && !excludedDirectories.has(canonicalDirectory(directory)))
-      .join(path.delimiter);
-    const child = spawn(binary, args, {
+    const trusted = trustedExecutable(binary);
+    if (!trusted) {
+      reject(new Error("Provider executable no longer meets TokenPilot trust checks"));
+      return;
+    }
+    const child = spawn(trusted, args, {
       stdio: "inherit",
-      env: { ...process.env, PATH: childPath, TOKENPILOT_SHIM_DIR: "" },
+      env: providerEnvironment(),
       cwd: process.cwd()
     });
     let settled = false;
@@ -97,51 +129,72 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   }
 
   const bypass = process.env.TOKENPILOT_BYPASS === "1";
-  const config = ensureConfig(paths);
-  const mode = selectMode(config, bypass);
+  // Provider CLIs do not expose a trustworthy personal-vs-company account
+  // boundary to this wrapper. Recording therefore requires an explicit
+  // personal-session opt-in; every other invocation is transparent.
+  const personalSession = process.env.TOKENPILOT_PERSONAL_SESSION === "1";
   // Authentication and support commands always pass through without a database record.
-  if (mode === "off" || isPassthrough(args)) {
-    const result = await launchChild(binary, args, paths);
+  if (bypass || !personalSession || isPassthrough(args)) {
+    const result = await launchChild(binary, args);
     return result ?? 1;
   }
 
-  const optimization = planForInstalledCli(provider, mode, binary);
-  if (mode === "balanced" && optimization.applied) {
-    process.stderr.write(`TokenPilot: balanced optimization active for ${provider} (${optimization.summary}).\n`);
-  } else if (mode === "balanced") {
-    process.stderr.write(`TokenPilot: ${optimization.unavailableReason}; starting ${provider} without injected settings.\n`);
-  }
-
-  const runId = randomUUID();
-  const database = new TelemetryDatabase(paths);
+  let database: TelemetryDatabase | undefined;
+  let runId: string | undefined;
+  let launchArgs = args;
   try {
-    database.createRun({
-      id: runId,
-      provider,
-      mode,
-      startedAt: new Date().toISOString(),
-      cliVersion: binaryVersion(binary),
-      optimizationApplied: optimization.applied,
-      optimizationProfile: optimization.profile,
-      collectionState: "pending",
-      taskKind: "unknown",
-      outcome: "unknown"
-    });
-    rememberProviderPath(paths, provider, binary);
-  } catch (error) {
-    // Fail open: a telemetry failure must never prevent access to the original CLI.
+    const config = ensureConfig(paths);
+    const mode = selectMode(config, false);
+    if (mode === "off") {
+      // The launch itself happens below, outside the optional telemetry setup.
+      launchArgs = args;
+    } else {
+      const trusted = trustedExecutable(binary);
+      if (!trusted) throw new Error("Provider executable no longer meets TokenPilot trust checks");
+      const optimization = planForInstalledCli(provider, mode, trusted, providerEnvironment(), (candidate) => trustedExecutable(candidate) !== undefined);
+      if (mode === "balanced" && optimization.applied) {
+        process.stderr.write(`TokenPilot: balanced optimization active for ${provider} (${optimization.summary}).\n`);
+      } else if (mode === "balanced") {
+        process.stderr.write(`TokenPilot: ${optimization.unavailableReason}; starting ${provider} without injected settings.\n`);
+      }
+
+      runId = randomUUID();
+      database = new TelemetryDatabase(paths);
+      database.createRun({
+        id: runId,
+        provider,
+        mode,
+        startedAt: new Date().toISOString(),
+        cliVersion: binaryVersion(trusted),
+        optimizationApplied: optimization.applied,
+        optimizationProfile: optimization.profile,
+        collectionState: "pending",
+        taskKind: "unknown",
+        outcome: "unknown"
+      });
+      launchArgs = [...optimization.args, ...args];
+    }
+  } catch {
+    // All optional state, telemetry, and optimization failures fail open.
     process.stderr.write(`TokenPilot: telemetry unavailable; starting ${provider} normally.\n`);
-    database.close();
-    const result = await launchChild(binary, [...optimization.args, ...args], paths);
-    return result ?? 1;
+    database?.close();
+    database = undefined;
+    runId = undefined;
+    launchArgs = args;
   }
 
   try {
-    const code = await launchChild(binary, [...optimization.args, ...args], paths);
-    database.finishRun(runId, code, new Date().toISOString());
+    const code = await launchChild(binary, launchArgs);
+    if (database && runId) {
+      try {
+        database.finishRun(runId, code, new Date().toISOString());
+      } catch {
+        process.stderr.write("TokenPilot: telemetry completion unavailable.\n");
+      }
+    }
     return code ?? 1;
   } finally {
-    database.close();
+    database?.close();
   }
 }
 

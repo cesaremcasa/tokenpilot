@@ -12,7 +12,7 @@ describe("installation and fail-open launcher lookup", () => {
     expect(plan.shims).toHaveLength(4);
     const shim = fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8");
     expect(shim).toContain("__shim codex");
-    expect(shim).toContain("TOKENPILOT_SHIM_DIR");
+    expect(shim).toContain("# tokenpilot-shim");
     uninstall(paths);
     expect(fs.existsSync(path.join(paths.shimDir, "codex"))).toBe(false);
     cleanup(paths);
@@ -47,6 +47,58 @@ describe("installation and fail-open launcher lookup", () => {
     expect(isPassthrough(["login"])).toBe(true);
     expect(isPassthrough(["--version"])).toBe(true);
     expect(isPassthrough([])).toBe(false);
+    cleanup(paths);
+  });
+
+  it("refuses to overwrite a non-TokenPilot shim", () => {
+    const paths = temporaryPaths();
+    fs.mkdirSync(paths.shimDir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(paths.shimDir, "codex"), "#!/bin/sh\necho foreign\n", { mode: 0o700 });
+
+    expect(() => install(paths, { noShellConfig: true, noAgent: true })).toThrow("Refusing to overwrite non-TokenPilot shim");
+    expect(fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8")).toContain("foreign");
+    cleanup(paths);
+  });
+
+  it("refuses to overwrite a LaunchAgent that merely reuses its label", () => {
+    const paths = temporaryPaths();
+    fs.mkdirSync(path.dirname(paths.launchAgentFile), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(paths.launchAgentFile, "<plist><string>com.tokenpilot.agent</string></plist>", { mode: 0o600 });
+
+    expect(() => install(paths, { noShellConfig: true })).toThrow("Refusing to overwrite non-TokenPilot LaunchAgent");
+    cleanup(paths);
+  });
+
+  it("refuses a TokenPilot state path with a symlinked ancestor", () => {
+    const paths = temporaryPaths();
+    const foreign = path.join(paths.userHome, "foreign");
+    fs.mkdirSync(foreign, { mode: 0o700 });
+    fs.symlinkSync(foreign, paths.home);
+
+    expect(() => install(paths, { noShellConfig: true, noAgent: true })).toThrow("Refusing unsafe TokenPilot directory");
+    cleanup(paths);
+  });
+
+  it("rejects original binaries from a world-writable directory", () => {
+    const paths = temporaryPaths();
+    const unsafeBin = path.join(paths.userHome, "unsafe-bin");
+    fs.mkdirSync(unsafeBin, { recursive: true, mode: 0o777 });
+    fs.chmodSync(unsafeBin, 0o777);
+    fs.writeFileSync(path.join(unsafeBin, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+
+    expect(findOriginalBinary("codex", paths, unsafeBin)).toBeUndefined();
+    cleanup(paths);
+  });
+
+  it("rejects a provider executable that is group-writable", () => {
+    const paths = temporaryPaths();
+    const providerBin = path.join(paths.userHome, "provider-bin");
+    fs.mkdirSync(providerBin, { recursive: true, mode: 0o700 });
+    const provider = path.join(providerBin, "codex");
+    fs.writeFileSync(provider, "#!/bin/sh\nexit 0\n", { mode: 0o720 });
+    fs.chmodSync(provider, 0o720);
+
+    expect(findOriginalBinary("codex", paths, providerBin)).toBeUndefined();
     cleanup(paths);
   });
 });

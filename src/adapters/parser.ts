@@ -23,7 +23,7 @@ function recordNumericFields(value: unknown, usage: UsageMetrics, events: Parsed
 
   for (const [rawKey, nested] of Object.entries(value as Record<string, unknown>)) {
     const key = normaliseKey(rawKey);
-    if (typeof nested === "number" && Number.isFinite(nested) && nested >= 0) {
+    if (typeof nested === "number" && Number.isSafeInteger(nested) && nested >= 0 && nested <= 1_000_000_000_000) {
       for (const [metric, aliases] of Object.entries(NUMBER_KEYS) as Array<[keyof UsageMetrics, string[]]>) {
         if (aliases.includes(key)) usage[metric] = nested;
       }
@@ -31,13 +31,7 @@ function recordNumericFields(value: unknown, usage: UsageMetrics, events: Parsed
       if (key === "retry_count") events.push({ type: "retry", count: nested });
     }
 
-    if (typeof nested === "string") {
-      const label = `${key}:${nested}`.toLowerCase();
-      if (label.includes("compaction")) events.push({ type: "compaction", count: 1 });
-      if (label.includes("retry")) events.push({ type: "retry", count: 1 });
-      if (label.includes("model") && label.includes("switch")) events.push({ type: "model_switch", count: 1 });
-      continue;
-    }
+    if (typeof nested === "string") continue;
     recordNumericFields(nested, usage, events, depth + 1);
   }
 }

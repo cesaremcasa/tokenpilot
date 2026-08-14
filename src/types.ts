@@ -6,16 +6,10 @@ export type TaskKind = "feature" | "bugfix" | "research" | "operations" | "other
 export type TaskOutcome = "completed" | "rework" | "abandoned" | "unknown";
 export type CollectionState = "pending" | "collected" | "unavailable";
 
-export interface InstalledProvider {
-  originalPath?: string;
-  lastKnownVersion?: string;
-}
-
 export interface TokenPilotConfig {
   version: 1;
   defaultMode: RunMode;
   balancedSamplingRate: number;
-  providers: Partial<Record<Provider, InstalledProvider>>;
 }
 
 export interface RunRecord {
@@ -70,7 +64,6 @@ export interface ParsedTelemetry {
 export interface ProviderAdapter {
   provider: Provider;
   capabilities: ProviderCapabilities;
-  telemetryRoots(homeDir: string): string[];
   parseTelemetryLine(line: string): ParsedTelemetry | undefined;
 }
 
