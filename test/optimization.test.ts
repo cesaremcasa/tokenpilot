@@ -4,11 +4,10 @@ import { planFromHelp } from "../src/optimization.js";
 describe("version-gated balanced optimization", () => {
   it("applies only the validated Claude controls advertised by the installed CLI", () => {
     const plan = planFromHelp("claude", "balanced", "--exclude-dynamic-system-prompt-sections --effort <level> --tools <tools>");
-    expect(plan).toMatchObject({ applied: true, profile: "claude-balanced-v1" });
+    expect(plan).toMatchObject({ applied: true, profile: "claude-balanced-v2" });
     expect(plan.args).toEqual([
       "--exclude-dynamic-system-prompt-sections",
-      "--effort", "medium",
-      "--tools", "Read,Edit,Glob,Grep,Bash"
+      "--effort", "medium"
     ]);
   });
 

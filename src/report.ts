@@ -110,16 +110,17 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
   for (const session of summaries) {
     if (measurementValue(session) === undefined) continue;
     const basis = session.measurementBasis ?? "token-pressure";
-    const scope = `${session.provider}\u0000${session.taskKind}\u0000${basis}`;
+    const profile = session.comparisonProfile ?? (session.mode === "balanced" ? session.optimizationProfile : undefined);
+    if (!profile) continue;
+    const scope = `${session.provider}\u0000${session.taskKind}\u0000${basis}\u0000${profile}`;
     if (session.mode === "observe") baselines.set(scope, [...(baselines.get(scope) ?? []), session]);
     if (session.mode === "balanced" && session.optimizationApplied && session.optimizationProfile) {
-      const key = `${scope}\u0000${session.optimizationProfile}`;
-      treatments.set(key, [...(treatments.get(key) ?? []), session]);
+      treatments.set(scope, [...(treatments.get(scope) ?? []), session]);
     }
   }
   return [...treatments.entries()].flatMap(([key, treatment]) => {
     const [provider, taskKind, basis, optimizationProfile] = key.split("\u0000") as [TreatmentComparison["provider"], TreatmentComparison["taskKind"], NonNullable<SessionSummary["measurementBasis"]>, string];
-    const baseline = baselines.get(`${provider}\u0000${taskKind}\u0000${basis}`) ?? [];
+    const baseline = baselines.get(key) ?? [];
     if (baseline.length === 0) return [];
     const baselinePressure = baseline.map(measurementValue).filter((value): value is number => value !== undefined);
     const treatmentPressure = treatment.map(measurementValue).filter((value): value is number => value !== undefined);
@@ -180,7 +181,7 @@ export function reportMarkdown(report: Report): string {
     lines.push(`| ${row.provider} | ${row.mode} | ${policy} | ${row.taskKind} | ${integer(row.sessions)} | ${integer(row.completed)} | ${integer(row.rework)} | ${integer(row.abandoned)} | ${integer(row.inputNew)} | ${integer(row.inputCached)} | ${integer(row.cacheCreated)} | ${integer(row.output)} | ${integer(row.reasoning)} | ${integer(row.reportedTotal)} | ${integer(row.retries)} |`);
   }
   if (report.rows.length === 0) lines.push("| — | — | — | — | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |");
-  lines.push("", "## Matched treatment comparison", "", "> `Token pressure` is new input + cache creation + output + reasoning. It excludes cached reads. `Provider-reported total` is the provider's own final session total when no category breakdown is published. Each metric is compared only with the same provider, task type, and metric. A result becomes `ready` after at least five measured baseline and five measured treatment sessions.", "", "| Provider | Task type | Metric | Policy | Status | Baseline / treatment sessions | Baseline median | Treatment median | Change | Baseline / treatment IQR | Baseline / treatment median duration | Completion |", "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
+  lines.push("", "## Matched treatment comparison", "", "> `Token pressure` is new input + cache creation + output + reasoning. It excludes cached reads. `Provider-reported total` is the provider's own final session total when no category breakdown is published. Each metric is compared only with the same provider, task type, metric, and experimental policy version. A result becomes `ready` after at least five measured baseline and five measured treatment sessions.", "", "| Provider | Task type | Metric | Policy | Status | Baseline / treatment sessions | Baseline median | Treatment median | Change | Baseline / treatment IQR | Baseline / treatment median duration | Completion |", "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
   for (const comparison of report.comparisons) {
     lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.metricLabel} | ${comparison.optimizationProfile} | ${comparison.readiness} | ${integer(comparison.baselineSessions)} / ${integer(comparison.treatmentSessions)} | ${integer(comparison.baselineMedianTokenPressure)} | ${integer(comparison.treatmentMedianTokenPressure)} | ${comparison.tokenPressureDeltaPercent.toFixed(1)}% | ${integer(comparison.baselineIqrTokenPressure)} / ${integer(comparison.treatmentIqrTokenPressure)} | ${integer(comparison.baselineMedianDurationSeconds)}s / ${integer(comparison.treatmentMedianDurationSeconds)}s | ${percent(comparison.baselineCompletionRate)} / ${percent(comparison.treatmentCompletionRate)} |`);
   }

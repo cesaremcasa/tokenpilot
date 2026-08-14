@@ -21,6 +21,8 @@ export interface RunRecord {
   cliVersion?: string;
   optimizationApplied?: boolean;
   optimizationProfile?: string;
+  /** The policy profile assigned to this observe/treatment experiment pair. */
+  comparisonProfile?: string;
   collectionState: CollectionState;
   taskKind: TaskKind;
   outcome: TaskOutcome;
@@ -103,6 +105,7 @@ export interface SessionSummary {
   mode: RunMode;
   optimizationApplied: boolean;
   optimizationProfile?: string;
+  comparisonProfile?: string;
   taskKind: TaskKind;
   outcome: TaskOutcome;
   durationSeconds: number;

@@ -38,14 +38,11 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
       args.push("--effort", "medium");
       labels.push("medium reasoning");
     }
-    // The smallest practical core-tool set keeps tool definitions stable and
-    // avoids loading optional tools into every system prompt.
-    if (supports(help, "--tools")) {
-      args.push("--tools", "Read,Edit,Glob,Grep,Bash");
-      labels.push("core tools only");
-    }
+    // Do not override tools. A tool allowlist can change developer capability
+    // and itself changes the system prompt; Claude's native tool selection is
+    // the safer cache-stable default for an invisible launcher.
     return args.length > 0
-      ? { args, applied: true, profile: "claude-balanced-v1", summary: labels.join(", ") }
+      ? { args, applied: true, profile: "claude-balanced-v2", summary: labels.join(", ") }
       : { ...NONE, unavailableReason: "this Claude CLI does not expose the validated balanced flags" };
   }
 

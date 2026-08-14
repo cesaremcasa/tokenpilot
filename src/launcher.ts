@@ -177,8 +177,13 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       const trusted = trustedExecutable(binary);
       if (!trusted) throw new Error("Provider executable no longer meets TokenPilot trust checks");
       database = new TelemetryDatabase(paths);
+      const experiment = config.defaultMode === "balanced"
+        ? planForInstalledCli(provider, "balanced", trusted, providerEnvironment(), (candidate) => trustedExecutable(candidate) !== undefined)
+        : undefined;
       if (mode === "balanced") mode = database.allocateBalancedMode(provider);
-      const optimization = planForInstalledCli(provider, mode, trusted, providerEnvironment(), (candidate) => trustedExecutable(candidate) !== undefined);
+      const optimization = mode === "balanced" && experiment
+        ? experiment
+        : planForInstalledCli(provider, mode, trusted, providerEnvironment(), (candidate) => trustedExecutable(candidate) !== undefined);
       if (mode === "balanced" && optimization.applied) {
         process.stderr.write(`TokenPilot: balanced optimization active for ${provider} (${optimization.summary}).\n`);
       } else if (mode === "balanced") {
@@ -194,6 +199,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
         cliVersion: binaryVersion(trusted),
         optimizationApplied: optimization.applied,
         optimizationProfile: optimization.profile,
+        comparisonProfile: experiment?.profile,
         collectionState: "pending",
         taskKind: "unknown",
         outcome: "unknown"

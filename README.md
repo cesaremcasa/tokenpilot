@@ -19,7 +19,7 @@ Version 0.1 records a content-free session envelope. Its default mode is `observ
 
 | Provider | `balanced` policy | Safety boundary |
 | --- | --- | --- |
-| Claude | Excludes dynamic system-prompt sections, sets medium effort, and keeps the `Read,Edit,Glob,Grep,Bash` core tool set. | Session arguments only; no MCP or provider config is edited. |
+| Claude | Excludes dynamic system-prompt sections and sets medium effort. | Session arguments only; native tools, MCP, and provider config are not edited. |
 | Codex | Sets medium reasoning effort, low verbosity, and automatic compaction at 64k tokens. | Session `--config` overrides only; prompt OTEL export remains disabled. |
 | Grok | Sets medium reasoning effort. | Does not use API-only cache keys. |
 | Kimi | Disables thinking and bounds steps/retries only when the local CLI exposes all three session flags. | Current Kimi 0.29.x is observed unchanged because it does not advertise those flags. |
@@ -138,7 +138,7 @@ The four adapters are all available for observation:
 
 | Provider | Automatic counter import | Current optimisation |
 | --- | --- | --- |
-| Claude | Metrics-only local OTLP receiver, correlated by the wrapper's unique per-run endpoint header | cache-stable prefix, medium effort, core tools |
+| Claude | Metrics-only local OTLP receiver, correlated by the wrapper's unique per-run endpoint header | cache-stable prefix, medium effort |
 | Codex | For `codex exec`, parses only the provider-published final numeric total from that child process | medium effort, low verbosity, 64k compaction |
 | Grok | For explicit `grok --output-format json --single`, parses only its top-level numeric `usage` object | medium effort |
 | Kimi | Not yet enabled: documented run correlation required | version-gated only |
@@ -153,7 +153,7 @@ Claude handles prompt caching itself, and its cache prefix is sensitive to model
 4. A comparison becomes `ready` only after five measured baseline and five measured treatment sessions for the same provider and task type. Until then it is shown as preliminary rather than a savings claim.
 5. Use `TOKENPILOT_BYPASS=1 <provider>` or `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.
 
-There is intentionally no pre-set savings target. The report names the policy actually applied and provides matched within-provider comparisons of median token pressure, variation, duration, and classified completion rate.
+There is intentionally no pre-set savings target. The report names the policy actually applied and provides matched within-provider comparisons of median token pressure, variation, duration, and classified completion rate. When a policy changes, TokenPilot starts a new paired experiment: it never compares that new version against baseline sessions allocated to an earlier policy.
 
 ## Removing TokenPilot
 

@@ -11,6 +11,7 @@ export interface TelemetryDatabaseOptions {
 export class TelemetryDatabase {
   private readonly db: DatabaseSync;
   private readonly hasReportedTotalColumn: boolean;
+  private readonly hasComparisonProfileColumn: boolean;
 
   constructor(paths: TokenPilotPaths, options: TelemetryDatabaseOptions = {}) {
     if (options.readOnly) {
@@ -18,6 +19,7 @@ export class TelemetryDatabase {
       assertSafeStateFile(paths, paths.databaseFile);
       this.db = new DatabaseSync(paths.databaseFile, { readOnly: true });
       this.hasReportedTotalColumn = this.usageColumnExists("reported_total");
+      this.hasComparisonProfileColumn = this.runColumnExists("comparison_profile");
       return;
     }
     ensurePrivateDirectory(paths, paths.dataDir);
@@ -29,6 +31,7 @@ export class TelemetryDatabase {
     this.db.exec("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON;");
     this.migrate();
     this.hasReportedTotalColumn = this.usageColumnExists("reported_total");
+    this.hasComparisonProfileColumn = this.runColumnExists("comparison_profile");
   }
 
   private migrate(): void {
@@ -43,6 +46,7 @@ export class TelemetryDatabase {
         cli_version TEXT,
         optimization_applied INTEGER NOT NULL DEFAULT 0,
         optimization_profile TEXT,
+        comparison_profile TEXT,
         collection_state TEXT NOT NULL,
         task_kind TEXT NOT NULL DEFAULT 'unknown',
         outcome TEXT NOT NULL DEFAULT 'unknown'
@@ -78,6 +82,7 @@ export class TelemetryDatabase {
     `);
     this.ensureRunColumn("optimization_applied", "INTEGER NOT NULL DEFAULT 0");
     this.ensureRunColumn("optimization_profile", "TEXT");
+    this.ensureRunColumn("comparison_profile", "TEXT");
     this.ensureUsageColumn("reported_total", "INTEGER");
   }
 
@@ -90,11 +95,13 @@ export class TelemetryDatabase {
     if (!this.usageColumnExists(name)) this.db.exec(`ALTER TABLE usage_records ADD COLUMN ${name} ${definition}`);
   }
 
-  private ensureRunColumn(name: "optimization_applied" | "optimization_profile", definition: string): void {
+  private runColumnExists(name: string): boolean {
     const columns = this.db.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>;
-    if (!columns.some((column) => column.name === name)) {
-      this.db.exec(`ALTER TABLE runs ADD COLUMN ${name} ${definition}`);
-    }
+    return columns.some((column) => column.name === name);
+  }
+
+  private ensureRunColumn(name: "optimization_applied" | "optimization_profile" | "comparison_profile", definition: string): void {
+    if (!this.runColumnExists(name)) this.db.exec(`ALTER TABLE runs ADD COLUMN ${name} ${definition}`);
   }
 
   /**
@@ -132,11 +139,11 @@ export class TelemetryDatabase {
   createRun(record: RunRecord): void {
     safeRun(record);
     this.db.prepare(`INSERT INTO runs
-      (id, provider, mode, started_at, ended_at, exit_code, cli_version, optimization_applied, optimization_profile, collection_state, task_kind, outcome)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, provider, mode, started_at, ended_at, exit_code, cli_version, optimization_applied, optimization_profile, comparison_profile, collection_state, task_kind, outcome)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(record.id, record.provider, record.mode, record.startedAt, record.endedAt ?? null, record.exitCode ?? null,
         record.cliVersion ?? null, record.optimizationApplied ? 1 : 0, record.optimizationProfile ?? null,
-        record.collectionState, record.taskKind, record.outcome);
+        record.comparisonProfile ?? null, record.collectionState, record.taskKind, record.outcome);
   }
 
   finishRun(id: string, exitCode: number | null, endedAt: string): void {
@@ -171,7 +178,7 @@ export class TelemetryDatabase {
   getPendingRuns(): RunRecord[] {
     return (this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
         exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
-        optimization_profile AS optimizationProfile, collection_state AS collectionState,
+        optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile, collection_state AS collectionState,
         task_kind AS taskKind, outcome FROM runs
         WHERE collection_state = 'pending' AND ended_at IS NOT NULL ORDER BY ended_at ASC`)
       .all() as unknown as Array<RunRecord & { optimizationApplied?: number }>).map((row) => this.normalizeRun(row));
@@ -190,7 +197,7 @@ export class TelemetryDatabase {
   getRun(id: string): RunRecord | undefined {
     const row = this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
       exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
-      optimization_profile AS optimizationProfile, collection_state AS collectionState,
+      optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile, collection_state AS collectionState,
       task_kind AS taskKind, outcome FROM runs WHERE id = ?`).get(id) as RunRecord & { optimizationApplied?: number } | undefined;
     return row ? this.normalizeRun(row) : undefined;
   }
@@ -258,7 +265,7 @@ export class TelemetryDatabase {
         FROM session_events GROUP BY run_id
       )
       SELECT r.id, r.provider, r.mode, r.optimization_applied AS optimizationApplied,
-        r.optimization_profile AS optimizationProfile, r.task_kind AS taskKind, r.outcome,
+        r.optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "r.comparison_profile" : "NULL"} AS comparisonProfile, r.task_kind AS taskKind, r.outcome,
         MAX(0, strftime('%s', r.ended_at) - strftime('%s', r.started_at)) AS durationSeconds,
         u.input_new AS inputNew, u.input_cached AS inputCached, u.cache_created AS cacheCreated,
         u.output AS output, u.reasoning AS reasoning,
