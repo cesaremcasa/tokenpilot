@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+.env
+data/
+*.sqlite
+*.sqlite-*
+*.jsonl
+reports/personal-*.md
