@@ -208,11 +208,11 @@ export function reportMarkdown(report: Report): string {
     lines.push(`| ${row.provider} | ${integer(row.sessions)} | ${integer(row.measuredSessions)} | ${integer(row.unavailableSessions)} |`);
   }
   if (report.coverage.length === 0) lines.push("| — | 0 | 0 | 0 |");
-  lines.push("", "## Reduction and latency summary", "", "> Positive token reduction means fewer tokens. Latency is end-to-end local CLI duration, so it includes provider, network, and tool time; a positive latency change means slower.", "", "| Provider | Task type | Policy | Token result | Token reduction | Estimated tokens avoided | Median latency | Latency change |", "| --- | --- | --- | --- | ---: | ---: | ---: | --- |");
+  lines.push("", "## Reduction and latency summary", "", "> `Baseline expected` is the matched observe median multiplied by the treatment-session count: what those treated sessions would be expected to use without the policy. `Actual tokens used` is what the provider reported for those treatment sessions. `Tokens avoided` is baseline minus actual: a counterfactual estimate, not tokens blocked by the provider. Latency is end-to-end local CLI duration; a positive latency change means slower.", "", "| Provider | Task type | Policy | Result | Baseline expected | Actual tokens used | Tokens avoided | Token reduction | Median latency | Latency change |", "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
   for (const comparison of report.comparisons) {
-    lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.optimizationProfile} | ${comparison.tokenResult} | ${reduction(comparison.tokenReductionPercent)} | ${integer(comparison.estimatedTokensAvoided)} | ${integer(comparison.baselineMedianDurationSeconds)}s → ${integer(comparison.treatmentMedianDurationSeconds)}s | ${latency(comparison)} |`);
+    lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.optimizationProfile} | ${comparison.tokenResult} | ${integer(comparison.baselineExpectedTreatmentTokens)} | ${integer(comparison.treatmentRecordedTokens)} | ${integer(comparison.estimatedTokensAvoided)} | ${reduction(comparison.tokenReductionPercent)} | ${integer(comparison.baselineMedianDurationSeconds)}s → ${integer(comparison.treatmentMedianDurationSeconds)}s | ${latency(comparison)} |`);
   }
-  if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — |");
+  if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — | — | — |");
   lines.push(
     "",
     "## Session metrics",

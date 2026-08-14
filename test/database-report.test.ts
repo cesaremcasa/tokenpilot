@@ -125,6 +125,10 @@ describe("aggregate reporting", () => {
     expect(markdown).toContain("Estimated tokens avoided");
     expect(markdown).toContain("not a provider invoice and not a money calculation");
     expect(markdown).toContain("## Reduction and latency summary");
+    expect(markdown).toContain("Baseline expected");
+    expect(markdown).toContain("Actual tokens used");
+    expect(markdown).toContain("not tokens blocked by the provider");
+    expect(markdown).toContain("| codex | benchmark | codex-balanced-v1 | preliminary | 100 | 80 | 20 | 20.0% reduction");
     expect(markdown).toContain("20.0% reduction");
   });
 
