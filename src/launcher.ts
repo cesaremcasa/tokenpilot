@@ -263,18 +263,21 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           if (!database.hasUsage(runId) && total !== undefined) {
             database.addUsage({ runId, observedAt: new Date().toISOString(), source: "codex-cli-reported-total-v1", reportedTotal: total });
           }
-          // Leave a no-sample run pending for the existing local collector to
-          // mark unavailable. This preserves a single collection lifecycle
-          // across current and older Codex CLI versions.
-          if (database.hasUsage(runId)) database.markCollection(runId, "collected");
+          // No ambient provider log can safely be correlated with this run.
+          // Once Codex has exited and its session-scoped OTLP receiver is
+          // closed, a missing sample is definitively unavailable. Finalizing
+          // here also keeps Linux installations accurate without a macOS
+          // LaunchAgent.
+          database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
         }
         if (provider === "grok") {
           const usage = grokMetrics?.finish();
           if (usage) {
             database.addUsage({ runId, observedAt: new Date().toISOString(), source: "grok-cli-json-usage-v1", ...usage });
-            database.markCollection(runId, "collected");
           }
+          database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
         }
+        if (provider === "kimi") database.markCollection(runId, "unavailable");
       } catch {
         process.stderr.write("TokenPilot: telemetry completion unavailable.\n");
       }

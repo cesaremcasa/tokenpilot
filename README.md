@@ -28,7 +28,7 @@ The wrapper prints a one-line notice when a treatment is active. It never stores
 
 ## Requirements
 
-- macOS and Node.js 22.5 or newer
+- macOS or Linux and Node.js 22.5 or newer
 - At least one provider CLI already installed and working: `claude`, `codex`, `grok`, or `kimi`
 - zsh or bash for automatic integrated-terminal `PATH` setup
 
@@ -41,7 +41,7 @@ node dist/cli.js install
 exec "$SHELL" -l
 ```
 
-The installer creates the `tokenpilot` command and per-provider shims at `~/.tokenpilot/bin`, adds that directory to `~/.zshrc` or `~/.bashrc`, starts a user-only macOS LaunchAgent, and installs the `tokenpilot` report skill automatically. It also copies the compiled runtime into private TokenPilot state, so the installed commands keep working if the cloned checkout is moved, deleted, quarantined, or has restrictive macOS permissions. It never uses `sudo`.
+The installer creates the `tokenpilot` command and per-provider shims at `~/.tokenpilot/bin`, adds that directory to `~/.zshrc` or `~/.bashrc`, and installs the `tokenpilot` report skill automatically. On macOS it also starts a user-only LaunchAgent; on Linux each finished wrapped session finalizes its own collection state, so no system service or root access is required. It also copies the compiled runtime into private TokenPilot state, so the installed commands keep working if the cloned checkout is moved, deleted, quarantined, or has restrictive macOS permissions. It never uses `sudo`.
 
 The same versioned skill is installed per user, not per repository or company account:
 

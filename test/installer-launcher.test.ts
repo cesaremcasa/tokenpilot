@@ -2,11 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { install, launchAgentServiceTarget, uninstall } from "../src/installer.js";
+import { install, launchAgentServiceTarget, shouldInstallLaunchAgent, uninstall } from "../src/installer.js";
 import { findOriginalBinary, isPassthrough } from "../src/launcher.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("installation and fail-open launcher lookup", () => {
+  it("does not create a macOS LaunchAgent in a Linux installation plan", () => {
+    expect(shouldInstallLaunchAgent("linux")).toBe(false);
+    expect(shouldInstallLaunchAgent("darwin")).toBe(true);
+    expect(shouldInstallLaunchAgent("darwin", true)).toBe(false);
+  });
+
   it("uses launchctl's single service-target form when replacing the local agent", () => {
     expect(launchAgentServiceTarget("gui/501")).toBe("gui/501/com.tokenpilot.agent");
   });
