@@ -11,7 +11,7 @@ import { pricingProfile } from "./pricing.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
 import { CodexExecTokenParser, isCodexExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
-import { GrokJsonUsageParser, isGrokJsonSingle } from "./telemetry/grok.js";
+import { GrokJsonUsageParser, isGrokJsonSingle, startGrokMetricsReceiver, supportsGrokExternalOtelVersion, type GrokMetricsReceiver } from "./telemetry/grok.js";
 import type { Provider, RunMode } from "./types.js";
 
 const PASSTHROUGH_ARGUMENTS = new Set([
@@ -139,6 +139,10 @@ function binaryVersion(binary: string): string | undefined {
   return result.stdout.match(/\b\d+(?:\.\d+){0,3}(?:[-+][A-Za-z0-9._-]+)?\b/)?.[0];
 }
 
+export function supportsGrokExternalOtel(binary: string): boolean {
+  return supportsGrokExternalOtelVersion(binaryVersion(binary));
+}
+
 function supportsCodexSessionConfiguration(binary: string): boolean {
   const trusted = trustedExecutable(binary);
   if (!trusted) return false;
@@ -225,6 +229,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   let launchEnvironment = providerEnvironment({}, binary);
   let claudeMetrics: ClaudeMetricsReceiver | undefined;
   let codexOtelMetrics: CodexMetricsReceiver | undefined;
+  let grokOtelMetrics: GrokMetricsReceiver | undefined;
   const codexExecMetrics = provider === "codex" && isCodexExec(args) ? new CodexExecTokenParser() : undefined;
   const grokMetrics = provider === "grok" && isGrokJsonSingle(args) ? new GrokJsonUsageParser() : undefined;
   try {
@@ -279,6 +284,16 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           codexOtelMetrics = undefined;
         }
       }
+      if (provider === "grok" && supportsGrokExternalOtelVersion(binaryVersion(trusted))) {
+        // Grok Build 1.0.3+ documents a content-free External OTEL v1 stream
+        // for normal CLI/TTY sessions. Configure it only for this child.
+        try {
+          grokOtelMetrics = await startGrokMetricsReceiver(database, runId);
+          launchEnvironment = providerEnvironment(grokOtelMetrics.environment, trusted);
+        } catch {
+          grokOtelMetrics = undefined;
+        }
+      }
       launchArgs = [...(codexOtelMetrics?.args ?? []), ...optimization.args, ...args];
     }
   } catch {
@@ -291,6 +306,8 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     claudeMetrics = undefined;
     await codexOtelMetrics?.close().catch(() => undefined);
     codexOtelMetrics = undefined;
+    await grokOtelMetrics?.close().catch(() => undefined);
+    grokOtelMetrics = undefined;
     launchArgs = args;
   }
 
@@ -299,6 +316,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     const code = await launchChild(binary, launchArgs, launchEnvironment, observer ? { consume: (chunk) => observer.accept(chunk) } : undefined);
     await claudeMetrics?.close().catch(() => undefined);
     await codexOtelMetrics?.close().catch(() => undefined);
+    await grokOtelMetrics?.close().catch(() => undefined);
     if (database && runId) {
       try {
         database.finishRun(runId, code, new Date().toISOString());
@@ -324,11 +342,14 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
         }
         if (provider === "grok") {
           const usage = grokMetrics?.finish();
-          if (usage) {
+          // JSON single-turn remains a safe fallback for older CLIs or an
+          // unavailable receiver, but it is never added on top of OTLP.
+          if (!database.hasUsage(runId) && usage) {
             database.addUsage({ runId, observedAt: new Date().toISOString(), source: "grok-cli-json-usage-v1", ...usage });
           }
           const measured = database.hasUsage(runId);
-          database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : grokMetrics ? "no-correlated-counters" : "grok-tty");
+          const reason = grokOtelMetrics ? "otlp-missing" : grokMetrics ? "no-correlated-counters" : "grok-tty";
+          database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : reason);
         }
         if (provider === "kimi") database.markCollection(runId, "unavailable", "kimi-envelope");
       } catch {
@@ -339,6 +360,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   } finally {
     await claudeMetrics?.close().catch(() => undefined);
     await codexOtelMetrics?.close().catch(() => undefined);
+    await grokOtelMetrics?.close().catch(() => undefined);
     database?.close();
   }
 }
