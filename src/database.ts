@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import type { AggregateRow, MeasurementCoverage, PricingProfile, Provider, RunMode, RunRecord, SessionEvent, SessionSummary, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
+import { COLLECTION_UNAVAILABLE_REASONS, type AggregateRow, type AuditableSession, type CollectionUnavailableReason, type MeasurementCoverage, type PricingProfile, type Provider, type RunMode, type RunRecord, type SessionEvent, type SessionSummary, type TaskKind, type TaskOutcome, type UsageRecord } from "./types.js";
 import { safeEvent, safeRun, safeUsage } from "./privacy.js";
 import { assertSafeStateFile, ensurePrivateDirectory, hasSafePrivateDirectory, type TokenPilotPaths } from "./paths.js";
 import { isPricingProfile } from "./pricing.js";
@@ -15,6 +15,7 @@ export class TelemetryDatabase {
   private readonly hasReportedTotalSemanticsColumn: boolean;
   private readonly hasComparisonProfileColumn: boolean;
   private readonly hasPricingProfileColumn: boolean;
+  private readonly hasCollectionReasonColumn: boolean;
 
   constructor(paths: TokenPilotPaths, options: TelemetryDatabaseOptions = {}) {
     if (options.readOnly) {
@@ -25,6 +26,7 @@ export class TelemetryDatabase {
       this.hasReportedTotalSemanticsColumn = this.usageColumnExists("reported_total_includes_cached_input");
       this.hasComparisonProfileColumn = this.runColumnExists("comparison_profile");
       this.hasPricingProfileColumn = this.runColumnExists("pricing_profile");
+      this.hasCollectionReasonColumn = this.runColumnExists("collection_reason");
       return;
     }
     ensurePrivateDirectory(paths, paths.dataDir);
@@ -39,6 +41,7 @@ export class TelemetryDatabase {
     this.hasReportedTotalSemanticsColumn = this.usageColumnExists("reported_total_includes_cached_input");
     this.hasComparisonProfileColumn = this.runColumnExists("comparison_profile");
     this.hasPricingProfileColumn = this.runColumnExists("pricing_profile");
+    this.hasCollectionReasonColumn = this.runColumnExists("collection_reason");
   }
 
   private migrate(): void {
@@ -56,6 +59,7 @@ export class TelemetryDatabase {
         comparison_profile TEXT,
         pricing_profile TEXT,
         collection_state TEXT NOT NULL,
+        collection_reason TEXT,
         task_kind TEXT NOT NULL DEFAULT 'unknown',
         outcome TEXT NOT NULL DEFAULT 'unknown'
       ) STRICT;
@@ -93,6 +97,7 @@ export class TelemetryDatabase {
     this.ensureRunColumn("optimization_profile", "TEXT");
     this.ensureRunColumn("comparison_profile", "TEXT");
     this.ensureRunColumn("pricing_profile", "TEXT");
+    this.ensureRunColumn("collection_reason", "TEXT");
     this.ensureUsageColumn("reported_total", "INTEGER");
     this.ensureUsageColumn("reported_total_includes_cached_input", "INTEGER");
   }
@@ -111,7 +116,7 @@ export class TelemetryDatabase {
     return columns.some((column) => column.name === name);
   }
 
-  private ensureRunColumn(name: "optimization_applied" | "optimization_profile" | "comparison_profile" | "pricing_profile", definition: string): void {
+  private ensureRunColumn(name: "optimization_applied" | "optimization_profile" | "comparison_profile" | "pricing_profile" | "collection_reason", definition: string): void {
     if (!this.runColumnExists(name)) this.db.exec(`ALTER TABLE runs ADD COLUMN ${name} ${definition}`);
   }
 
@@ -150,21 +155,22 @@ export class TelemetryDatabase {
   createRun(record: RunRecord): void {
     safeRun(record);
     this.db.prepare(`INSERT INTO runs
-      (id, provider, mode, started_at, ended_at, exit_code, cli_version, optimization_applied, optimization_profile, comparison_profile, pricing_profile, collection_state, task_kind, outcome)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, provider, mode, started_at, ended_at, exit_code, cli_version, optimization_applied, optimization_profile, comparison_profile, pricing_profile, collection_state, collection_reason, task_kind, outcome)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(record.id, record.provider, record.mode, record.startedAt, record.endedAt ?? null, record.exitCode ?? null,
         record.cliVersion ?? null, record.optimizationApplied ? 1 : 0, record.optimizationProfile ?? null,
         record.comparisonProfile ?? null, record.pricingProfile ? JSON.stringify(record.pricingProfile) : null,
-        record.collectionState, record.taskKind, record.outcome);
+        record.collectionState, record.collectionReason ?? null, record.taskKind, record.outcome);
   }
 
   finishRun(id: string, exitCode: number | null, endedAt: string): void {
-    this.db.prepare("UPDATE runs SET ended_at = ?, exit_code = ?, collection_state = 'pending' WHERE id = ?")
+    this.db.prepare("UPDATE runs SET ended_at = ?, exit_code = ?, collection_state = 'pending', collection_reason = NULL WHERE id = ?")
       .run(endedAt, exitCode, id);
   }
 
-  markCollection(id: string, state: "collected" | "unavailable"): void {
-    this.db.prepare("UPDATE runs SET collection_state = ? WHERE id = ?").run(state, id);
+  markCollection(id: string, state: "collected" | "unavailable", reason?: CollectionUnavailableReason): void {
+    if (state === "collected" && reason) throw new Error("A measured collection cannot have an unavailable reason");
+    this.db.prepare("UPDATE runs SET collection_state = ?, collection_reason = ? WHERE id = ?").run(state, reason ?? null, id);
   }
 
   addUsage(record: UsageRecord): void {
@@ -193,15 +199,17 @@ export class TelemetryDatabase {
     }
   }
 
-  private normalizeRun(row: RunRecord & { optimizationApplied?: boolean | number; pricingProfile?: string | PricingProfile | null }): RunRecord {
+  private normalizeRun(row: RunRecord & { optimizationApplied?: boolean | number; pricingProfile?: string | PricingProfile | null; collectionReason?: string | null }): RunRecord {
     const pricingProfile = typeof row.pricingProfile === "string" ? this.storedPricingProfile(row.pricingProfile) : row.pricingProfile;
-    return { ...row, pricingProfile, optimizationApplied: Boolean(row.optimizationApplied) };
+    const collectionReason = COLLECTION_UNAVAILABLE_REASONS.includes(row.collectionReason as CollectionUnavailableReason) ? row.collectionReason as CollectionUnavailableReason : undefined;
+    return { ...row, pricingProfile, collectionReason, optimizationApplied: Boolean(row.optimizationApplied) };
   }
 
   getPendingRuns(): RunRecord[] {
     return (this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
         exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
         optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile, collection_state AS collectionState,
+        ${this.hasCollectionReasonColumn ? "collection_reason" : "NULL"} AS collectionReason,
         ${this.hasPricingProfileColumn ? "pricing_profile" : "NULL"} AS pricingProfile,
         task_kind AS taskKind, outcome FROM runs
         WHERE collection_state = 'pending' AND ended_at IS NOT NULL ORDER BY ended_at ASC`)
@@ -220,7 +228,7 @@ export class TelemetryDatabase {
         exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
         optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile,
         ${this.hasPricingProfileColumn ? "pricing_profile" : "NULL"} AS pricingProfile,
-        collection_state AS collectionState, task_kind AS taskKind, outcome
+        collection_state AS collectionState, ${this.hasCollectionReasonColumn ? "collection_reason" : "NULL"} AS collectionReason, task_kind AS taskKind, outcome
         FROM runs WHERE started_at >= ? ${filter} ORDER BY started_at DESC LIMIT ?`)
       .all(since, limit) as unknown as Array<RunRecord & { optimizationApplied?: number }>).map((row) => this.normalizeRun(row));
   }
@@ -240,6 +248,7 @@ export class TelemetryDatabase {
       exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
       optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile,
       ${this.hasPricingProfileColumn ? "pricing_profile" : "NULL"} AS pricingProfile, collection_state AS collectionState,
+      ${this.hasCollectionReasonColumn ? "collection_reason" : "NULL"} AS collectionReason,
       task_kind AS taskKind, outcome FROM runs WHERE id = ?`).get(id) as RunRecord & { optimizationApplied?: number } | undefined;
     return row ? this.normalizeRun(row) : undefined;
   }
@@ -283,12 +292,71 @@ export class TelemetryDatabase {
       WITH measured AS (SELECT DISTINCT run_id FROM usage_records)
       SELECT r.provider AS provider, COUNT(*) AS sessions,
         SUM(CASE WHEN m.run_id IS NOT NULL THEN 1 ELSE 0 END) AS measuredSessions,
-        SUM(CASE WHEN r.collection_state = 'unavailable' THEN 1 ELSE 0 END) AS unavailableSessions
+        SUM(CASE WHEN m.run_id IS NULL THEN 1 ELSE 0 END) AS unavailableSessions
       FROM runs r LEFT JOIN measured m ON m.run_id = r.id
       WHERE r.started_at >= ?
       GROUP BY r.provider
       ORDER BY r.provider
     `).all(since) as unknown as MeasurementCoverage[];
+  }
+
+  /** Safe, content-free evidence index. A pending run is explicitly unavailable. */
+  auditableSessionsSince(since: string, unclassified = false, limit = 100): AuditableSession[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Invalid TokenPilot session limit");
+    const filter = unclassified ? "AND r.task_kind = 'unknown'" : "";
+    const reportedSemantics = this.hasReportedTotalSemanticsColumn
+      ? "MAX(CASE WHEN u.reported_total IS NOT NULL AND (u.reported_total_includes_cached_input = 1 OR u.source = 'grok-cli-json-usage-v1') THEN 1 ELSE 0 END)"
+      : "0";
+    const rows = this.db.prepare(`
+      WITH usage AS (
+        SELECT u.run_id, COUNT(*) AS samples,
+          MAX(CASE WHEN u.input_new IS NOT NULL THEN 1 ELSE 0 END) AS has_input_new,
+          MAX(CASE WHEN u.input_cached IS NOT NULL THEN 1 ELSE 0 END) AS has_input_cached,
+          MAX(CASE WHEN u.cache_created IS NOT NULL THEN 1 ELSE 0 END) AS has_cache_created,
+          MAX(CASE WHEN u.output IS NOT NULL THEN 1 ELSE 0 END) AS has_output,
+          ${this.hasReportedTotalColumn ? "MAX(CASE WHEN u.reported_total IS NOT NULL THEN 1 ELSE 0 END)" : "0"} AS has_reported_total,
+          ${reportedSemantics} AS reported_total_includes_cached_input
+        FROM usage_records u GROUP BY u.run_id
+      )
+      SELECT r.id, r.provider, r.started_at AS startedAt, r.mode,
+        COALESCE(r.optimization_profile, ${this.hasComparisonProfileColumn ? "r.comparison_profile" : "NULL"}, 'none') AS policy,
+        r.task_kind AS taskKind, r.outcome, r.collection_state AS collectionState,
+        ${this.hasCollectionReasonColumn ? "r.collection_reason" : "NULL"} AS collectionReason,
+        ${this.hasPricingProfileColumn ? "r.pricing_profile" : "NULL"} AS pricingProfile,
+        COALESCE(u.samples, 0) AS samples, COALESCE(u.has_reported_total, 0) AS hasReportedTotal,
+        COALESCE(u.reported_total_includes_cached_input, 0) AS reportedTotalIncludesCachedInput,
+        COALESCE(u.has_input_new, 0) AS hasInputNew, COALESCE(u.has_input_cached, 0) AS hasInputCached,
+        COALESCE(u.has_cache_created, 0) AS hasCacheCreated, COALESCE(u.has_output, 0) AS hasOutput
+      FROM runs r LEFT JOIN usage u ON u.run_id = r.id
+      WHERE r.started_at >= ? ${filter} ORDER BY r.started_at DESC LIMIT ?
+    `).all(since, limit) as unknown as Array<{
+      id: string; provider: Provider; startedAt: string; mode: RunMode; policy: string; taskKind: TaskKind; outcome: TaskOutcome;
+      collectionState: string; collectionReason?: string | null; pricingProfile?: string | null; samples: number; hasReportedTotal: number;
+      reportedTotalIncludesCachedInput: number; hasInputNew: number; hasInputCached: number; hasCacheCreated: number; hasOutput: number;
+    }>;
+    return rows.map((row) => {
+      const measured = row.samples > 0;
+      const categoryComplete = row.hasInputNew === 1 && row.hasInputCached === 1 && row.hasCacheCreated === 1 && row.hasOutput === 1;
+      const categoryPresent = row.hasInputNew === 1 || row.hasInputCached === 1 || row.hasCacheCreated === 1 || row.hasOutput === 1;
+      const providerTotal = row.hasReportedTotal === 1 && row.reportedTotalIncludesCachedInput === 1;
+      const storedReason = COLLECTION_UNAVAILABLE_REASONS.includes(row.collectionReason as CollectionUnavailableReason) ? row.collectionReason as CollectionUnavailableReason : undefined;
+      const unavailableReason = measured ? undefined : row.collectionState === "pending" ? "collection-pending" : storedReason ?? "no-correlated-counters";
+      const profile = this.storedPricingProfile(row.pricingProfile);
+      return {
+        id: row.id,
+        provider: row.provider,
+        startedAt: row.startedAt,
+        mode: row.mode,
+        policy: row.policy,
+        taskKind: row.taskKind,
+        outcome: row.outcome,
+        measurement: measured ? "measured" : "unavailable",
+        measurementBasis: providerTotal ? "provider-reported" : categoryPresent ? "category-counters" : row.hasReportedTotal === 1 ? "provider-reported" : "none",
+        totalSource: providerTotal ? "provider-reported total" : categoryComplete ? "category total" : "none",
+        pricingSnapshot: profile ? `${profile.id}@${profile.version}` : undefined,
+        unavailableReason
+      };
+    });
   }
 
   sessionSummariesSince(since: string): SessionSummary[] {

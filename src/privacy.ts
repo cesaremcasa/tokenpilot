@@ -1,4 +1,4 @@
-import type { RunRecord, SessionEvent, UsageRecord } from "./types.js";
+import { COLLECTION_UNAVAILABLE_REASONS, type RunRecord, type SessionEvent, type UsageRecord } from "./types.js";
 
 const FORBIDDEN_KEYS = new Set([
   "prompt", "prompts", "response", "responses", "content", "text", "message", "messages",
@@ -16,6 +16,9 @@ export function assertTelemetrySafe(value: unknown): void {
 }
 
 export function safeRun(record: RunRecord): RunRecord {
+  if (record.collectionReason && !COLLECTION_UNAVAILABLE_REASONS.includes(record.collectionReason)) {
+    throw new Error("Refusing unknown collection reason");
+  }
   assertTelemetrySafe(record);
   return record;
 }

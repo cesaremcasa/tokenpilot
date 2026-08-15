@@ -38,9 +38,33 @@ describe("doctor", () => {
       fs.writeFileSync(path.join(originalBin, provider), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     }
     const report = doctor(paths, { platform: "linux", nodeVersion: "22.5.0", pathValue: `${originalBin}${path.delimiter}${paths.shimDir}` });
-    expect(report.checks).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: "Wrappers and PATH", status: "warning", detail: expect.stringContaining("claude, grok") })
+    expect(report.installationReady).toBe(false);
+    expect(report.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: "claude", state: "shadowed" }),
+      expect.objectContaining({ provider: "grok", state: "shadowed" })
     ]));
+    cleanup(paths);
+  });
+
+  it("separates launcher readiness from provider measurement limits", () => {
+    const paths = temporaryPaths();
+    install(paths, { noShellConfig: true, noAgent: true, executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
+    const originalBin = path.join(paths.userHome, "original-bin");
+    fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
+    for (const provider of ["claude", "codex", "grok", "kimi"]) {
+      fs.writeFileSync(path.join(originalBin, provider), "#!/bin/sh\nif [ \"$1\" = \"--help\" ]; then echo '--config'; fi\nexit 0\n", { mode: 0o700 });
+    }
+    const report = doctor(paths, { platform: "linux", nodeVersion: "22.5.0", pathValue: `${paths.shimDir}${path.delimiter}${originalBin}` });
+    expect(report).toMatchObject({ installationReady: true, measurementReady: false });
+    expect(report.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: "claude", state: "active" }),
+      expect.objectContaining({ provider: "codex", state: "active" }),
+      expect.objectContaining({ provider: "grok", state: "limited", detail: expect.stringContaining("does not measure TTY/TUI — no estimate") }),
+      expect.objectContaining({ provider: "kimi", state: "limited", detail: expect.stringContaining("session envelope only") })
+    ]));
+    const markdown = doctorMarkdown(report);
+    expect(markdown).toContain("Installation: ready");
+    expect(markdown).toContain("Measurement: limited");
     cleanup(paths);
   });
 });

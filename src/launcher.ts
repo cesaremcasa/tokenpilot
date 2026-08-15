@@ -299,7 +299,10 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     if (database && runId) {
       try {
         database.finishRun(runId, code, new Date().toISOString());
-        if (provider === "claude") database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
+        if (provider === "claude") {
+          const measured = database.hasUsage(runId);
+          database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : "otlp-missing");
+        }
         if (provider === "codex") {
           // OTLP gives interactive and exec sessions category-level metrics.
           // Preserve the old `exec` total only when the receiver did not
@@ -313,16 +316,18 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           // closed, a missing sample is definitively unavailable. Finalizing
           // here also keeps Linux installations accurate without a macOS
           // LaunchAgent.
-          database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
+          const measured = database.hasUsage(runId);
+          database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : codexOtelMetrics ? "otlp-missing" : "no-correlated-counters");
         }
         if (provider === "grok") {
           const usage = grokMetrics?.finish();
           if (usage) {
             database.addUsage({ runId, observedAt: new Date().toISOString(), source: "grok-cli-json-usage-v1", ...usage });
           }
-          database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
+          const measured = database.hasUsage(runId);
+          database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : grokMetrics ? "no-correlated-counters" : "grok-tty");
         }
-        if (provider === "kimi") database.markCollection(runId, "unavailable");
+        if (provider === "kimi") database.markCollection(runId, "unavailable", "kimi-envelope");
       } catch {
         process.stderr.write("TokenPilot: telemetry completion unavailable.\n");
       }

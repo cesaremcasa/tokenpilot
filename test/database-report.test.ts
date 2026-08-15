@@ -2,8 +2,9 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
-import { buildReport, reportMarkdown, reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
+import { buildReport, reportDiagnosticsMarkdown, reportMarkdown, reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
 import type { PricingProfile, SessionSummary } from "../src/types.js";
+import { renderSessions } from "../src/sessions.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("aggregate reporting", () => {
@@ -90,8 +91,9 @@ describe("aggregate reporting", () => {
       { id: "balanced-1", provider: "codex", mode: "balanced", optimizationApplied: true, optimizationProfile: "codex-balanced-v1", comparisonProfile: "codex-balanced-v1", taskKind: "bugfix", outcome: "completed", durationSeconds: 25, inputNew: 75, inputCached: 450, cacheCreated: 0, output: 15, reasoning: 60, compactions: 0, retries: 0 },
       { id: "other-provider", provider: "claude", mode: "balanced", optimizationApplied: true, optimizationProfile: "claude-balanced-v1", taskKind: "bugfix", outcome: "completed", durationSeconds: 25, inputNew: 1, inputCached: 1, cacheCreated: 0, output: 1, reasoning: 1, compactions: 0, retries: 0 }
     ]);
-    expect(comparisons).toHaveLength(1);
-    expect(comparisons[0]).toMatchObject({
+    expect(comparisons).toHaveLength(2);
+    expect(comparisons.find((comparison) => comparison.provider === "claude")).toMatchObject({ tokenResult: "incomparable", reason: expect.stringContaining("no comparable baseline") });
+    expect(comparisons.find((comparison) => comparison.provider === "codex")).toMatchObject({
       provider: "codex",
       optimizationProfile: "codex-balanced-v1",
       baselineSessions: 2,
@@ -269,7 +271,7 @@ describe("aggregate reporting", () => {
     };
     const baseline = pricedSessions().filter((session) => session.mode === "observe");
     const treatment = pricedSessions("feature", changed).filter((session) => session.mode === "balanced");
-    expect(treatmentComparisons([...baseline, ...treatment])).toEqual([]);
+    expect(treatmentComparisons([...baseline, ...treatment])).toMatchObject([{ tokenResult: "incomparable", reason: expect.stringContaining("price snapshot split") }]);
   });
 
   it("keeps unknown and benchmark work preliminary even after five measured sessions per arm", () => {
@@ -336,7 +338,7 @@ describe("aggregate reporting", () => {
       { id: "old-observe", provider: "claude", mode: "observe", optimizationApplied: false, comparisonProfile: "claude-balanced-v1", taskKind: "feature", outcome: "unknown", durationSeconds: 10, inputNew: 100, inputCached: 0, cacheCreated: 0, output: 10, reasoning: 0, compactions: 0, retries: 0 },
       { id: "new-treatment", provider: "claude", mode: "balanced", optimizationApplied: true, optimizationProfile: "claude-balanced-v2", comparisonProfile: "claude-balanced-v2", taskKind: "feature", outcome: "unknown", durationSeconds: 10, inputNew: 50, inputCached: 0, cacheCreated: 0, output: 10, reasoning: 0, compactions: 0, retries: 0 }
     ]);
-    expect(comparisons).toEqual([]);
+    expect(comparisons).toMatchObject([{ tokenResult: "incomparable", reason: expect.stringContaining("policy split") }]);
   });
 
   it("lists only content-free run metadata for optional classification", () => {
@@ -349,6 +351,66 @@ describe("aggregate reporting", () => {
     expect(database.recentRunsSince(new Date(Date.now() - 60_000).toISOString(), true)).toMatchObject([{ id: "newer", provider: "grok", comparisonProfile: "grok-balanced-v1", taskKind: "unknown" }]);
     database.close();
     cleanup(paths);
+  });
+
+  it("lists auditable measured and unavailable sessions with closed reasons and no provider content", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    const now = new Date().toISOString();
+    database.createRun({ id: "measured-run", provider: "codex", mode: "observe", startedAt: now, endedAt: now, comparisonProfile: "codex-balanced-v1", pricingProfile: pricedCodex, collectionState: "pending", taskKind: "feature", outcome: "completed" });
+    database.addUsage({ runId: "measured-run", observedAt: now, source: "codex-otel-metrics-v1", inputNew: 10, inputCached: 20, cacheCreated: 1, output: 2, reasoning: 0 });
+    database.markCollection("measured-run", "collected");
+    database.createRun({ id: "grok-unavailable", provider: "grok", mode: "balanced", startedAt: now, endedAt: now, optimizationApplied: true, optimizationProfile: "grok-balanced-v1", collectionState: "unavailable", collectionReason: "grok-tty", taskKind: "unknown", outcome: "unknown" });
+    database.createRun({ id: "pending-run", provider: "codex", mode: "observe", startedAt: now, endedAt: now, collectionState: "pending", taskKind: "unknown", outcome: "unknown" });
+
+    const rows = database.auditableSessionsSince(new Date(Date.now() - 60_000).toISOString());
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "measured-run", measurement: "measured", measurementBasis: "category-counters", totalSource: "category total", pricingSnapshot: "codex-local-example@2026-08-14" }),
+      expect.objectContaining({ id: "grok-unavailable", measurement: "unavailable", totalSource: "none", unavailableReason: "grok-tty" }),
+      expect.objectContaining({ id: "pending-run", measurement: "unavailable", unavailableReason: "collection-pending" })
+    ]));
+    expect(JSON.stringify(rows)).not.toMatch(/prompt|response|arguments|path|credential|secret-project/i);
+    const output = renderSessions(rows);
+    expect(output).toContain("measured");
+    expect(output).toContain("unavailable");
+    expect(output).toContain("grok-tty");
+    expect(output).toContain("collection-pending");
+    expect(output).not.toMatch(/prompt|response|arguments|path|credential|secret-project/i);
+    database.close();
+    cleanup(paths);
+  });
+
+  it("emits limited and incomparable as first-class JSON states", () => {
+    const limited = treatmentComparisons([
+      { id: "limited-treatment", provider: "codex", mode: "balanced", optimizationApplied: true, optimizationProfile: "codex-balanced-v1", comparisonProfile: "codex-balanced-v1", taskKind: "feature", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, categoryMetricsComplete: false, compactions: 0, retries: 0 }
+    ]);
+    expect(limited).toMatchObject([{ tokenResult: "limited", totalSource: "none", reason: expect.stringContaining("category total unavailable") }]);
+
+    const mixedBasis = treatmentComparisons([
+      { id: "provider-total-baseline", provider: "codex", mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v1", taskKind: "feature", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, reportedTotal: 100, reportedTotalIncludesCachedInput: true, categoryMetricsComplete: false, compactions: 0, retries: 0 },
+      { id: "category-treatment", provider: "codex", mode: "balanced", optimizationApplied: true, optimizationProfile: "codex-balanced-v1", comparisonProfile: "codex-balanced-v1", taskKind: "feature", outcome: "completed", durationSeconds: 1, inputNew: 40, inputCached: 10, cacheCreated: 0, output: 10, reasoning: 0, categoryMetricsComplete: true, compactions: 0, retries: 0 }
+    ]);
+    expect(mixedBasis).toMatchObject([{ tokenResult: "incomparable", reason: expect.stringContaining("mixed metric bases") }]);
+  });
+
+  it("diagnostics names policy splits, total fallback, and per-session unavailable reasons", () => {
+    const policySplit = treatmentComparisons([
+      { id: "old", provider: "claude", mode: "observe", optimizationApplied: false, comparisonProfile: "claude-balanced-v1", taskKind: "feature", outcome: "completed", durationSeconds: 1, inputNew: 100, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, categoryMetricsComplete: true, compactions: 0, retries: 0 },
+      { id: "new", provider: "claude", mode: "balanced", optimizationApplied: true, optimizationProfile: "claude-balanced-v2", comparisonProfile: "claude-balanced-v2", taskKind: "feature", outcome: "completed", durationSeconds: 1, inputNew: 50, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, categoryMetricsComplete: true, compactions: 0, retries: 0 }
+    ]);
+    const markdown = reportDiagnosticsMarkdown({
+      generatedAt: "now",
+      since: "then",
+      rows: [],
+      coverage: [{ provider: "claude", sessions: 2, measuredSessions: 1, unavailableSessions: 1 }],
+      comparisons: [...policySplit, ...treatmentComparisons([
+        { id: "limited", provider: "codex", mode: "balanced", optimizationApplied: true, optimizationProfile: "codex-balanced-v1", comparisonProfile: "codex-balanced-v1", taskKind: "feature", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, categoryMetricsComplete: false, compactions: 0, retries: 0 }
+      ])],
+      sessions: [{ id: "opaque", provider: "claude", startedAt: "now", mode: "observe", policy: "none", taskKind: "unknown", outcome: "unknown", measurement: "unavailable", measurementBasis: "none", totalSource: "none", unavailableReason: "otlp-missing" }]
+    });
+    expect(markdown).toContain("policy split");
+    expect(markdown).toContain("provider total missing or unverified; category total unavailable");
+    expect(markdown).toContain("opaque (claude): otlp-missing");
   });
 
   it("opens an existing report database without changing its file", () => {

@@ -9,7 +9,8 @@ import type { Provider } from "./types.js";
 import { PROVIDERS } from "./types.js";
 import type { TokenPilotPaths } from "./paths.js";
 
-export type DoctorStatus = "ready" | "warning" | "unavailable";
+export type DoctorStatus = "ready" | "warning" | "active" | "shadowed" | "unavailable" | "limited";
+export type ProviderDoctorState = "active" | "shadowed" | "unavailable" | "limited";
 
 export interface DoctorCheck {
   name: string;
@@ -19,7 +20,11 @@ export interface DoctorCheck {
 }
 
 export interface DoctorReport {
+  /** Backward-compatible alias for installation readiness. */
   ready: boolean;
+  installationReady: boolean;
+  measurementReady: boolean;
+  providers: Array<{ provider: Provider; state: ProviderDoctorState; detail: string; fix?: string }>;
   checks: DoctorCheck[];
 }
 
@@ -64,7 +69,7 @@ function localHelpEnvironment(): NodeJS.ProcessEnv {
   return { HOME: os.userInfo().homedir, PATH: process.env.PATH ?? "", NO_COLOR: "1" };
 }
 
-function providerCapability(provider: Provider, binary: string): DoctorCheck {
+function providerCapability(provider: Provider, binary: string): { provider: Provider; state: ProviderDoctorState; detail: string; fix?: string } {
   const adapter = getAdapter(provider);
   const plan = planForInstalledCli(provider, "balanced", binary, localHelpEnvironment());
   let telemetry: string;
@@ -72,12 +77,13 @@ function providerCapability(provider: Provider, binary: string): DoctorCheck {
   else if (provider === "codex") telemetry = plan.applied
     ? "metrics-only local OTLP for normal and exec sessions when the local CLI accepts session config"
     : "only the published total from codex exec is available on this local CLI";
-  else if (provider === "grok") telemetry = "only one-turn JSON mode is measured; normal TTY sessions are unavailable for token comparison";
+  else if (provider === "grok") telemetry = "only one-turn JSON mode is measured; the adapter does not measure TTY/TUI — no estimate";
   else telemetry = "session envelope only; no token or savings measurement is declared";
   const optimization = plan.applied ? `balanced available (${plan.profile})` : `balanced not injected (${plan.unavailableReason ?? "local help probe did not confirm it"})`;
+  const state: ProviderDoctorState = provider === "grok" || provider === "kimi" || (provider === "codex" && !plan.applied) ? "limited" : "active";
   return {
-    name: `${provider} CLI`,
-    status: plan.applied || provider === "grok" || provider === "kimi" ? "ready" : "warning",
+    provider,
+    state,
     detail: `${telemetry}; ${optimization}. ${adapter.capabilities.notes}`,
     fix: plan.applied ? undefined : "Update the provider CLI, then run tokenpilot doctor again. TokenPilot will fail open until a documented flag is confirmed."
   };
@@ -95,9 +101,11 @@ function skillCheck(skill: SkillPlan): DoctorCheck {
 /** Non-mutating local readiness check; it never opens SQLite or creates config. */
 export function doctor(paths: TokenPilotPaths, options: { platform?: string; nodeVersion?: string; pathValue?: string } = {}): DoctorReport {
   const checks: DoctorCheck[] = [];
-  const support = runtimeSupport(options.platform ?? process.platform, options.nodeVersion ?? process.versions.node);
+  const providers: DoctorReport["providers"] = [];
+  const platform = options.platform ?? process.platform;
+  const support = runtimeSupport(platform, options.nodeVersion ?? process.versions.node);
   checks.push(support.supported
-    ? { name: "Platform and Node", status: "ready", detail: `${process.platform === "darwin" ? "macOS" : process.platform === "linux" ? "Linux" : process.platform} with Node ${options.nodeVersion ?? process.versions.node}` }
+    ? { name: "Platform and Node", status: "ready", detail: `${platform === "darwin" ? "macOS" : platform === "linux" ? "Linux" : platform} with Node ${options.nodeVersion ?? process.versions.node}` }
     : { name: "Platform and Node", status: "unavailable", detail: support.reason ?? "unsupported runtime", fix: "Use macOS or Linux with Node 22.5 or later." });
 
   const shell = path.basename(process.env.SHELL ?? "");
@@ -109,38 +117,52 @@ export function doctor(paths: TokenPilotPaths, options: { platform?: string; nod
   const command = regularFile(path.join(paths.shimDir, "tokenpilot"));
   const pathValue = options.pathValue ?? process.env.PATH ?? "";
   const shimActive = onPath(paths.shimDir, pathValue);
-  const shadowed = PROVIDERS.filter((provider) => {
-    const resolved = resolvedPathCommand(provider, pathValue);
-    const shim = path.join(paths.shimDir, provider);
-    try {
-      return !resolved || fs.realpathSync(shim) !== resolved;
-    } catch {
-      return true;
-    }
-  });
-  checks.push(wrappers.every(Boolean) && command && shimActive && shadowed.length === 0
-    ? { name: "Wrappers and PATH", status: "ready", detail: "tokenpilot and each provider wrapper win PATH resolution" }
-    : { name: "Wrappers and PATH", status: "warning", detail: shadowed.length > 0 ? `${shadowed.join(", ")} ${shadowed.length === 1 ? "is" : "are"} shadowed or not resolvable through TokenPilot` : "one or more wrappers are missing or the shim directory is not active on PATH", fix: "Run tokenpilot install, then start a new terminal or run exec \"$SHELL\" -l." });
+  let commandActive = false;
+  try {
+    commandActive = command && resolvedPathCommand("tokenpilot", pathValue) === fs.realpathSync(path.join(paths.shimDir, "tokenpilot"));
+  } catch {
+    commandActive = false;
+  }
+  checks.push(wrappers.every(Boolean) && commandActive && shimActive
+    ? { name: "Wrappers and PATH", status: "ready", detail: "tokenpilot and provider wrappers are installed and the shim directory is on PATH" }
+    : { name: "Wrappers and PATH", status: "warning", detail: "one or more wrappers are missing or the shim directory is not active on PATH", fix: "Run tokenpilot install, then start a new terminal or run exec \"$SHELL\" -l." });
 
   let providerCount = 0;
   for (const provider of PROVIDERS) {
     const binary = findOriginalBinary(provider, paths, options.pathValue ?? process.env.PATH ?? "");
     if (!binary) {
-      checks.push({ name: `${provider} CLI`, status: "unavailable", detail: "original provider CLI was not found outside TokenPilot wrappers", fix: `Install or expose ${provider} on PATH, then rerun tokenpilot install.` });
+      const result = { provider, state: "unavailable" as const, detail: "original provider CLI was not found outside TokenPilot wrappers", fix: `Install or expose ${provider} on PATH, then rerun tokenpilot install.` };
+      providers.push(result);
+      checks.push({ name: `${provider} CLI`, status: result.state, detail: result.detail, fix: result.fix });
       continue;
     }
     providerCount += 1;
-    checks.push(providerCapability(provider, binary));
+    const resolved = resolvedPathCommand(provider, pathValue);
+    const shim = path.join(paths.shimDir, provider);
+    let shimWins = false;
+    try {
+      shimWins = Boolean(resolved && fs.realpathSync(shim) === resolved);
+    } catch {
+      shimWins = false;
+    }
+    const result = shimWins
+      ? providerCapability(provider, binary)
+      : { provider, state: "shadowed" as const, detail: "an external provider binary wins PATH resolution before the TokenPilot shim", fix: "Put the TokenPilot shim directory first on PATH, then start a new terminal." };
+    providers.push(result);
+    checks.push({ name: `${provider} CLI`, status: result.state, detail: result.detail, fix: result.fix });
   }
 
   const plan = createInstallPlan(paths);
   checks.push(...plan.skills.map(skillCheck));
   const required = checks.filter((check) => ["Platform and Node", "Wrappers and PATH"].includes(check.name));
-  return { ready: support.supported && providerCount > 0 && required.every((check) => check.status === "ready"), checks };
+  const installationReady = support.supported && providerCount > 0 && required.every((check) => check.status === "ready") && !providers.some((provider) => provider.state === "shadowed");
+  const installedProviders = providers.filter((provider) => provider.state !== "unavailable");
+  const measurementReady = installationReady && installedProviders.length > 0 && installedProviders.every((provider) => provider.state === "active");
+  return { ready: installationReady, installationReady, measurementReady, providers, checks };
 }
 
 export function doctorMarkdown(report: DoctorReport): string {
-  const lines = ["# TokenPilot doctor", "", `Overall: ${report.ready ? "ready" : "needs attention"}`, "", "| Check | Status | Detail |", "| --- | --- | --- |"];
+  const lines = ["# TokenPilot doctor", "", `Installation: ${report.installationReady ? "ready" : "needs attention"}`, `Measurement: ${report.measurementReady ? "ready" : "limited"}`, "", "Installation readiness and measurement capability are independent. A working launcher does not make every provider modality measurable.", "", "| Check | Status | Detail |", "| --- | --- | --- |"];
   for (const check of report.checks) lines.push(`| ${check.name} | ${check.status} | ${check.detail} |`);
   const fixes = report.checks.filter((check) => check.fix);
   if (fixes.length > 0) {

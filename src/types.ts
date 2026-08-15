@@ -5,6 +5,17 @@ export type RunMode = "observe" | "balanced" | "deep" | "off";
 export type TaskKind = "feature" | "bugfix" | "research" | "operations" | "benchmark" | "other" | "unknown";
 export type TaskOutcome = "completed" | "rework" | "abandoned" | "unknown";
 export type CollectionState = "pending" | "collected" | "unavailable";
+export const COLLECTION_UNAVAILABLE_REASONS = [
+  "collection-pending",
+  "grok-tty",
+  "kimi-envelope",
+  "otlp-missing",
+  "no-correlated-counters",
+  "collector-unavailable"
+] as const;
+export type CollectionUnavailableReason = (typeof COLLECTION_UNAVAILABLE_REASONS)[number];
+export type MeasurementState = "measured" | "unavailable";
+export type MeasurementTotalSource = "provider-reported total" | "category total" | "none";
 
 /** API-equivalent USD rates, expressed per one million units. */
 export interface PricingRates {
@@ -48,6 +59,8 @@ export interface RunRecord {
   /** Local API-equivalent profile snapshot captured before the provider starts. */
   pricingProfile?: PricingProfile;
   collectionState: CollectionState;
+  /** Closed, content-free vocabulary; never a provider error or output string. */
+  collectionReason?: CollectionUnavailableReason;
   taskKind: TaskKind;
   outcome: TaskOutcome;
 }
@@ -156,49 +169,65 @@ export interface SessionSummary {
   retries: number;
 }
 
+/** Content-free row used by `sessions` and report audit evidence. */
+export interface AuditableSession {
+  id: string;
+  provider: Provider;
+  startedAt: string;
+  mode: RunMode;
+  policy: string;
+  taskKind: TaskKind;
+  outcome: TaskOutcome;
+  measurement: MeasurementState;
+  measurementBasis: "provider-reported" | "category-counters" | "none";
+  totalSource: MeasurementTotalSource;
+  pricingSnapshot?: string;
+  unavailableReason?: CollectionUnavailableReason;
+}
+
 export interface TreatmentComparison {
   provider: Provider;
   taskKind: TaskKind;
   optimizationProfile: string;
   /** The complete, cache-aware counter used for the experimental conclusion. */
-  metricLabel: "category total" | "provider-reported total";
+  metricLabel: MeasurementTotalSource;
   baselineSessions: number;
   treatmentSessions: number;
-  baselineMedianTokenPressure: number;
-  treatmentMedianTokenPressure: number;
-  baselineMedianInputNew: number;
-  treatmentMedianInputNew: number;
-  baselineMedianCachedInput: number;
-  treatmentMedianCachedInput: number;
-  baselineMedianCacheCreated: number;
-  treatmentMedianCacheCreated: number;
-  baselineMedianOutput: number;
-  treatmentMedianOutput: number;
-  baselineMedianReasoning: number;
-  treatmentMedianReasoning: number;
+  baselineMedianTokenPressure?: number;
+  treatmentMedianTokenPressure?: number;
+  baselineMedianInputNew?: number;
+  treatmentMedianInputNew?: number;
+  baselineMedianCachedInput?: number;
+  treatmentMedianCachedInput?: number;
+  baselineMedianCacheCreated?: number;
+  treatmentMedianCacheCreated?: number;
+  baselineMedianOutput?: number;
+  treatmentMedianOutput?: number;
+  baselineMedianReasoning?: number;
+  treatmentMedianReasoning?: number;
   /** Complete, cache-aware total; provider-published when verified, else categories. */
-  baselineMedianComparableTotal: number;
-  treatmentMedianComparableTotal: number;
+  baselineMedianComparableTotal?: number;
+  treatmentMedianComparableTotal?: number;
   /**
    * Counterfactual treatment total using the matched observe median. This is
    * deliberately a within-provider token estimate, never a money estimate.
    */
-  baselineExpectedTreatmentTokens: number;
+  baselineExpectedTreatmentTokens?: number;
   /** Tokens actually reported by the matched treatment sessions. */
-  treatmentRecordedTokens: number;
+  treatmentRecordedTokens?: number;
   /** Matched-baseline estimate minus measured treatment use; may be negative. */
   estimatedTokensAvoided?: number;
   /** Positive means the treatment's median used fewer tokens. */
   tokenReductionPercent?: number;
   tokenPressureDeltaPercent?: number;
-  baselineIqrTokenPressure: number;
-  treatmentIqrTokenPressure: number;
-  baselineMedianDurationSeconds: number;
-  treatmentMedianDurationSeconds: number;
+  baselineIqrTokenPressure?: number;
+  treatmentIqrTokenPressure?: number;
+  baselineMedianDurationSeconds?: number;
+  treatmentMedianDurationSeconds?: number;
   /** Positive means the treatment took longer end-to-end in the local CLI. */
-  latencyDeltaSeconds: number;
-  latencyDeltaPercent: number;
-  latencyResult: "faster" | "slower" | "unchanged";
+  latencyDeltaSeconds?: number;
+  latencyDeltaPercent?: number;
+  latencyResult?: "faster" | "slower" | "unchanged";
   baselineCompletionRate?: number;
   treatmentCompletionRate?: number;
   pricingProfile?: Pick<PricingProfile, "id" | "version" | "label" | "currency">;
@@ -206,14 +235,16 @@ export interface TreatmentComparison {
   treatmentRecordedUsd?: number;
   estimatedUsdAvoided?: number;
   usdReductionPercent?: number;
-  readiness: "ready" | "preliminary";
+  readiness: "ready" | "preliminary" | "unavailable";
   /**
    * A cache shift never becomes a saving. A preliminary signal can expose a
    * directional number, but it is never an economy claim.
    */
-  tokenResult: "limited" | "cache-shift" | "preliminary-signal" | "validated-reduction";
+  tokenResult: "limited" | "incomparable" | "cache-shift" | "preliminary-signal" | "validated-reduction";
+  /** Content-free reason for limited or incomparable evidence. */
+  reason?: string;
   /** Complete source used by the cache-shift guard. */
-  totalSource: "provider-reported total" | "category total";
+  totalSource: MeasurementTotalSource;
   /** Opaque local evidence only; it never contains provider content. */
   baselineSessionIds: string[];
   treatmentSessionIds: string[];

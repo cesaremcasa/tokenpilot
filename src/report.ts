@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { AggregateRow, MeasurementCoverage, SessionSummary, TreatmentComparison } from "./types.js";
+import type { AggregateRow, AuditableSession, MeasurementCoverage, Provider, SessionSummary, TreatmentComparison } from "./types.js";
 import { TelemetryDatabase } from "./database.js";
 import { assertSafeStateFile, hasSafePrivateDirectory, type TokenPilotPaths } from "./paths.js";
 
@@ -11,13 +11,14 @@ export interface Report {
   rows: AggregateRow[];
   coverage: MeasurementCoverage[];
   comparisons: TreatmentComparison[];
+  sessions?: AuditableSession[];
 }
 
 const CACHE_SHIFT_TOTAL_FLAT_PERCENT = 0.02;
 const CACHE_SHIFT_MIN_CACHE_RECOVERY = 0.5;
 
 function emptyReport(since: string): Report {
-  return { generatedAt: new Date().toISOString(), since, rows: [], coverage: [], comparisons: [] };
+  return { generatedAt: new Date().toISOString(), since, rows: [], coverage: [], comparisons: [], sessions: [] };
 }
 
 function usesLegacyWalDatabase(databaseFile: string): boolean {
@@ -43,12 +44,17 @@ export function buildReport(paths: TokenPilotPaths, days: number): Report {
   }
   const database = new TelemetryDatabase(paths, { readOnly: true });
   try {
+    const summaries = database.sessionSummariesSince(since);
+    const sessions = database.auditableSessionsSince(since);
+    const comparisons = treatmentComparisons(summaries);
+    appendCoverageStates(comparisons, sessions);
     return {
       generatedAt: new Date().toISOString(),
       since,
       rows: database.aggregateSince(since),
       coverage: database.measurementCoverageSince(since),
-      comparisons: treatmentComparisons(database.sessionSummariesSince(since))
+      comparisons,
+      sessions
     };
   } finally {
     database.close();
@@ -138,27 +144,49 @@ function cacheShift(baseline: SessionSummary[], treatment: SessionSummary[], bas
  * complete category total is used, which keeps Claude eligible for 5+5.
  */
 export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComparison[] {
-  const baselines = new Map<string, SessionSummary[]>();
   const treatments = new Map<string, SessionSummary[]>();
   for (const session of summaries) {
-    const total = completeTotal(session);
-    if (!total) continue;
     const profile = session.comparisonProfile ?? (session.mode === "balanced" ? session.optimizationProfile : undefined);
     if (!profile) continue;
-    const scope = `${session.provider}\u0000${session.taskKind}\u0000${total.source}\u0000${profile}\u0000${pricingSignature(session)}`;
-    if (session.mode === "observe") baselines.set(scope, [...(baselines.get(scope) ?? []), session]);
     if (session.mode === "balanced" && session.optimizationApplied && session.optimizationProfile) {
+      const scope = `${session.provider}\u0000${session.taskKind}\u0000${profile}\u0000${pricingSignature(session)}`;
       treatments.set(scope, [...(treatments.get(scope) ?? []), session]);
     }
   }
 
   return [...treatments.entries()].flatMap(([key, treatment]) => {
-    const [provider, taskKind, totalSource, optimizationProfile] = key.split("\u0000") as [TreatmentComparison["provider"], TreatmentComparison["taskKind"], TreatmentComparison["totalSource"], string];
-    const baseline = baselines.get(key) ?? [];
-    if (baseline.length === 0) return [];
+    const [provider, taskKind, optimizationProfile, priceSignature] = key.split("\u0000") as [TreatmentComparison["provider"], TreatmentComparison["taskKind"], string, string];
+    const sameProviderTask = summaries.filter((session) => session.mode === "observe" && session.provider === provider && session.taskKind === taskKind);
+    const samePolicy = sameProviderTask.filter((session) => session.comparisonProfile === optimizationProfile);
+    const baseline = samePolicy.filter((session) => pricingSignature(session) === priceSignature);
+    const treatmentTotalsWithSource = treatment.map(completeTotal);
+    if (treatmentTotalsWithSource.some((total) => total === undefined)) {
+      return [stateComparison(provider, taskKind, optimizationProfile, "limited", "provider total missing or unverified; category total unavailable", baseline, treatment)];
+    }
+    if (baseline.length === 0) {
+      const treatmentSources = new Set(treatmentTotalsWithSource.map((total) => total!.source));
+      const treatmentSource = treatmentSources.size === 1 ? [...treatmentSources][0] : "none";
+      const reason = samePolicy.length > 0
+        ? "price snapshot split: no baseline has the treatment price snapshot"
+        : sameProviderTask.length > 0
+          ? "policy split: no baseline has the treatment policy"
+          : "no comparable baseline for provider and task type";
+      return [stateComparison(provider, taskKind, optimizationProfile, "incomparable", reason, [], treatment, treatmentSource)];
+    }
+    const baselineTotalsWithSource = baseline.map(completeTotal);
+    if (baselineTotalsWithSource.some((total) => total === undefined)) {
+      return [stateComparison(provider, taskKind, optimizationProfile, "limited", "provider total missing or unverified; category total unavailable", baseline, treatment)];
+    }
+    const sources = new Set([...baselineTotalsWithSource, ...treatmentTotalsWithSource].map((total) => total!.source));
+    if (sources.size !== 1) {
+      return [stateComparison(provider, taskKind, optimizationProfile, "incomparable", "mixed metric bases: provider-reported total and category total cannot be compared", baseline, treatment)];
+    }
+    const totalSource = [...sources][0];
     const baselineTotals = baseline.map((session) => completeTotal(session)?.value).filter((value): value is number => value !== undefined);
     const treatmentTotals = treatment.map((session) => completeTotal(session)?.value).filter((value): value is number => value !== undefined);
-    if (baselineTotals.length !== baseline.length || treatmentTotals.length !== treatment.length) return [];
+    if (baselineTotals.length !== baseline.length || treatmentTotals.length !== treatment.length) {
+      return [stateComparison(provider, taskKind, optimizationProfile, "limited", "complete comparable total unavailable", baseline, treatment)];
+    }
     const baselineMedianTotal = median(baselineTotals);
     const treatmentMedianTotal = median(treatmentTotals);
     const baselineExpectedTreatmentTokens = baselineMedianTotal * treatment.length;
@@ -232,10 +260,59 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       usdReductionPercent: isCacheShift ? undefined : usdReductionPercent,
       readiness,
       tokenResult,
+      reason: isCacheShift ? "new input moved into cache reads while the complete total stayed flat" : readiness === "ready" && estimatedTokensAvoided > 0 ? undefined : "sample is directional and does not satisfy validated-reduction criteria",
       baselineSessionIds: baseline.map((session) => session.id),
       treatmentSessionIds: treatment.map((session) => session.id)
     }];
   }).sort((a, b) => a.provider.localeCompare(b.provider) || a.taskKind.localeCompare(b.taskKind));
+}
+
+function stateComparison(
+  provider: Provider,
+  taskKind: TreatmentComparison["taskKind"],
+  optimizationProfile: string,
+  tokenResult: Extract<TreatmentComparison["tokenResult"], "limited" | "incomparable">,
+  reason: string,
+  baseline: SessionSummary[] = [],
+  treatment: SessionSummary[] = [],
+  totalSource: TreatmentComparison["totalSource"] = "none"
+): TreatmentComparison {
+  return {
+    provider,
+    taskKind,
+    optimizationProfile,
+    metricLabel: totalSource,
+    totalSource,
+    baselineSessions: baseline.length,
+    treatmentSessions: treatment.length,
+    readiness: "unavailable",
+    tokenResult,
+    reason,
+    baselineSessionIds: baseline.map((session) => session.id),
+    treatmentSessionIds: treatment.map((session) => session.id)
+  };
+}
+
+function appendCoverageStates(comparisons: TreatmentComparison[], sessions: AuditableSession[]): void {
+  for (const provider of [...new Set(sessions.map((session) => session.provider))]) {
+    if (comparisons.some((comparison) => comparison.provider === provider)) continue;
+    const providerSessions = sessions.filter((session) => session.provider === provider);
+    const measured = providerSessions.filter((session) => session.measurement === "measured");
+    const unavailable = providerSessions.filter((session) => session.measurement === "unavailable");
+    if (measured.length === 0) {
+      const reasons = [...new Set(unavailable.map((session) => session.unavailableReason ?? "no-correlated-counters"))].join(", ");
+      comparisons.push({
+        ...stateComparison(provider, "unknown", "none", "limited", `no measured session; ${reasons}`),
+        treatmentSessionIds: unavailable.map((session) => session.id)
+      });
+    } else {
+      comparisons.push({
+        ...stateComparison(provider, "unknown", "none", "incomparable", "measured sessions exist, but no matched baseline and treatment cohort exists"),
+        baselineSessionIds: measured.map((session) => session.id)
+      });
+    }
+  }
+  comparisons.sort((a, b) => a.provider.localeCompare(b.provider) || a.taskKind.localeCompare(b.taskKind));
 }
 
 function usd(value: number | undefined): string {
@@ -243,19 +320,22 @@ function usd(value: number | undefined): string {
 }
 
 function latency(comparison: TreatmentComparison): string {
+  if (comparison.latencyDeltaSeconds === undefined || comparison.latencyDeltaPercent === undefined || comparison.latencyResult === undefined) return "—";
   const seconds = comparison.latencyDeltaSeconds > 0 ? `+${integer(comparison.latencyDeltaSeconds)}s` : `${integer(comparison.latencyDeltaSeconds)}s`;
   return `${seconds} (${comparison.latencyDeltaPercent > 0 ? "+" : ""}${comparison.latencyDeltaPercent.toFixed(1)}%; ${comparison.latencyResult})`;
 }
 
 function comparisonResult(comparison: TreatmentComparison): string {
+  if (comparison.tokenResult === "limited") return `limited measurement — ${comparison.reason ?? "numeric total unavailable"}`;
+  if (comparison.tokenResult === "incomparable") return `no comparable base — ${comparison.reason ?? "cohorts do not match"}`;
   if (comparison.tokenResult === "cache-shift") return "cache-shift — no reduction emitted";
   if (comparison.tokenResult === "validated-reduction") return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated reduction`;
-  if ((comparison.estimatedTokensAvoided ?? 0) <= 0) return "preliminary signal — no validated reduction";
   return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% preliminary signal — not an economy`;
 }
 
 function categoryLine(comparison: TreatmentComparison): string {
-  return `new ${integer(comparison.baselineMedianInputNew)}→${integer(comparison.treatmentMedianInputNew)}; cached ${integer(comparison.baselineMedianCachedInput)}→${integer(comparison.treatmentMedianCachedInput)}; created ${integer(comparison.baselineMedianCacheCreated)}→${integer(comparison.treatmentMedianCacheCreated)}; pressure ${integer(comparison.baselineMedianTokenPressure)}→${integer(comparison.treatmentMedianTokenPressure)}; total ${integer(comparison.baselineMedianComparableTotal)}→${integer(comparison.treatmentMedianComparableTotal)}`;
+  if (comparison.baselineMedianInputNew === undefined || comparison.treatmentMedianInputNew === undefined || comparison.baselineMedianComparableTotal === undefined || comparison.treatmentMedianComparableTotal === undefined) return "—";
+  return `new ${integer(comparison.baselineMedianInputNew)}→${integer(comparison.treatmentMedianInputNew)}; cached ${integer(comparison.baselineMedianCachedInput!)}→${integer(comparison.treatmentMedianCachedInput!)}; created ${integer(comparison.baselineMedianCacheCreated!)}→${integer(comparison.treatmentMedianCacheCreated!)}; pressure ${integer(comparison.baselineMedianTokenPressure!)}→${integer(comparison.treatmentMedianTokenPressure!)}; total ${integer(comparison.baselineMedianComparableTotal)}→${integer(comparison.treatmentMedianComparableTotal)}`;
 }
 
 /** Short skill-facing view: coverage first, and no provider totals are combined. */
@@ -294,6 +374,11 @@ export function reportMarkdown(report: Report): string {
     lines.push(`| ${comparison.provider} | ${comparison.taskKind} / ${comparison.optimizationProfile} | ${comparison.totalSource} | ${comparisonResult(comparison)} | ${categoryLine(comparison)} | ${evidence} | ${latency(comparison)} |`);
   }
   if (report.comparisons.length === 0) lines.push("| — | — | — | no comparable measured pair | — | — | — |");
+  lines.push("", "## Auditable sessions", "", "Only opaque IDs and classified metadata are present. Provider content, arguments, paths, and credentials are never included.", "", "| Run ID | Provider | Started | Mode / policy | Task / outcome | Measurement | Basis / total | Price snapshot | Reason |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+  for (const session of report.sessions ?? []) {
+    lines.push(`| ${session.id} | ${session.provider} | ${session.startedAt} | ${session.mode} / ${session.policy} | ${session.taskKind} / ${session.outcome} | ${session.measurement} | ${session.measurementBasis} / ${session.totalSource} | ${session.pricingSnapshot ?? "none"} | ${session.unavailableReason ?? "—"} |`);
+  }
+  if ((report.sessions ?? []).length === 0) lines.push("| — | — | — | — | — | — | — | — | — |");
   lines.push("", "## API-equivalent USD", "", "API-equivalent USD is local modelling from the stored price snapshot, not a provider bill. Cache reads use the cached-input rate. Cache-shifts never publish avoided USD.", "", "| Provider | Task | Price profile | Expected / used / avoided | State |", "| --- | --- | --- | --- | --- |");
   for (const comparison of report.comparisons) {
     const profile = comparison.pricingProfile ? `${comparison.pricingProfile.label} (${comparison.pricingProfile.id}@${comparison.pricingProfile.version})` : "not configured / incompatible categories";
@@ -320,9 +405,28 @@ export function reportDiagnosticsMarkdown(report: Report): string {
     lines.push(`| ${row.provider} | ${row.measuredSessions} / ${row.unavailableSessions} | ${limitation} |`);
   }
   if (report.coverage.length === 0) lines.push("| — | 0 / 0 | no sessions in this window |");
-  for (const comparison of report.comparisons.filter((comparison) => comparison.tokenResult === "cache-shift")) {
-    lines.push("", `- ${comparison.provider}/${comparison.taskKind}/${comparison.optimizationProfile}: cache-shift detected from ${comparison.totalSource}; no reduction is emitted.`);
+  lines.push("", "## Cohort and metric diagnostics", "");
+  for (const comparison of report.comparisons) {
+    const metric = comparison.totalSource === "category total"
+      ? comparison.tokenResult === "incomparable"
+        ? "provider total missing or unverified; category total available, but cohort matching failed"
+        : "provider total missing or unverified; category total used"
+      : comparison.totalSource === "provider-reported total"
+        ? comparison.tokenResult === "incomparable"
+          ? "verified cache-inclusive provider total available, but cohort matching failed"
+          : "verified cache-inclusive provider total used"
+        : comparison.reason?.includes("mixed metric bases")
+          ? "provider-reported and category totals are both available but cannot be mixed"
+          : "provider total missing or unverified; category total unavailable";
+    lines.push(`- ${comparison.provider}/${comparison.taskKind}/${comparison.optimizationProfile}: ${comparison.tokenResult}; ${comparison.reason ?? "matched cohorts"}; ${metric}.`);
   }
+  if (report.comparisons.length === 0) lines.push("- No treatment cohort is available.");
+  lines.push("", "## Per-session unavailable reasons", "");
+  const unavailable = (report.sessions ?? []).filter((session) => session.measurement === "unavailable");
+  for (const session of unavailable) {
+    lines.push(`- ${session.id} (${session.provider}): ${session.unavailableReason ?? "no-correlated-counters"}.`);
+  }
+  if (unavailable.length === 0) lines.push("- None.");
   lines.push("");
   return lines.join("\n");
 }

@@ -75,7 +75,7 @@ Normal use is unchanged:
 codex
 ```
 
-The normal provider command is automatically measured after installation. `login`, `logout`, help, and version commands remain transparent and never create a session record.
+The normal provider command automatically creates a content-free session envelope after installation. It is marked `measured` only when that provider modality publishes correlated numeric counters; otherwise it is `unavailable` with a closed diagnostic reason. `login`, `logout`, help, and version commands remain transparent and never create a session record.
 
 The original CLI continues to own authentication. Commands such as `codex login`, `claude auth`, `grok --help`, and `kimi --version` pass through without telemetry.
 
@@ -89,16 +89,18 @@ tokenpilot mode balanced
 tokenpilot mode deep
 tokenpilot mode off
 
-# Check the local platform, Node, wrappers, original CLIs, provider limits,
-# and optional skill destinations. This never creates telemetry or config.
+# Check installation separately from measurement capability. Each provider is
+# active, shadowed, unavailable, or limited. This creates no telemetry/config.
 tokenpilot doctor
 
-# Inspect the local state or mark completed sessions unavailable until a
-# provider-specific correlated telemetry adapter is installed.
+# Inspect local state or finalize an older pending envelope as unavailable.
 tokenpilot status
 tokenpilot collect
 
-# Optional, content-free session classification for the experiment.
+# Audit and optionally classify content-free sessions. The list includes an
+# opaque ID, provider/time/mode/policy/task/outcome, measured or unavailable,
+# metric basis/total source, price snapshot ID, and a closed reason.
+tokenpilot sessions
 tokenpilot sessions --unclassified
 tokenpilot classify <run-id> --kind bugfix --outcome completed
 # Use benchmark only for controlled checks, never for ordinary work.
@@ -184,7 +186,9 @@ Claude handles prompt caching itself, and its cache prefix is sensitive to model
 4. A reduction is validated only after five measured baseline and five measured treatment sessions for the same provider, known non-benchmark task type, complete cache-aware total basis, policy version, and price-profile snapshot. `unknown` and benchmark work can only be a preliminary signal and never a savings claim.
 5. Use `TOKENPILOT_BYPASS=1 <provider>` or `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.
 
-There is intentionally no pre-set savings target. Coverage comes first. Each provider then shows new input, cache reads, cache creation, token pressure, a complete cache-aware total, latency, and opaque local evidence IDs. A complete total is the verified provider total when it includes cache reads; otherwise it is `new + cached + cache creation + output + reasoning`. If new input moves into cache reads while that total changes by less than 2%, TokenPilot emits `cache-shift`, never a percentage, tokens avoided, or USD avoided. `cache-shift`, limited measurement, and missing comparable baselines have no savings number. A preliminary signal is directional only; **validated reduction** is the sole reduction claim. A changed policy or price snapshot starts a new paired experiment; TokenPilot never compares it against an earlier baseline.
+There is intentionally no pre-set savings target. Coverage comes first. Each provider then shows new input, cache reads, cache creation, token pressure, a complete cache-aware total, latency, and opaque local evidence IDs. A complete total is the verified provider total when it includes cache reads; otherwise it is `new + cached + cache creation + output + reasoning`. If new input moves into cache reads while that total changes by less than 2%, TokenPilot emits `cache-shift`, never a percentage, tokens avoided, or USD avoided.
+
+The JSON and Markdown reports use the same five states: `limited`, `incomparable`, `cache-shift`, `preliminary-signal`, and `validated-reduction`. The first three never show a percentage, avoided tokens, or avoided USD. A preliminary signal may show a directional number but is never called an economy. **Validated reduction** is the sole reduction claim. A changed policy, metric basis, or price snapshot produces an explicit incomparable state instead of silently dropping the cohort.
 
 ## Removing TokenPilot
 

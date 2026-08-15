@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertTelemetrySafe } from "../src/privacy.js";
+import { assertTelemetrySafe, safeRun } from "../src/privacy.js";
 
 describe("privacy guard", () => {
   it("allows the numeric-only data contract", () => {
@@ -13,5 +13,18 @@ describe("privacy guard", () => {
     expect(() => assertTelemetrySafe({ command: "private command" })).toThrow(/command/i);
     expect(() => assertTelemetrySafe({ args: ["private argument"] })).toThrow(/args/i);
     expect(() => assertTelemetrySafe({ nested: { credential: "secret" } })).toThrow(/credential/i);
+  });
+
+  it("rejects free-form collection reasons", () => {
+    expect(() => safeRun({
+      id: "opaque",
+      provider: "grok",
+      mode: "observe",
+      startedAt: "2026-08-15T00:00:00.000Z",
+      collectionState: "unavailable",
+      collectionReason: "provider-output" as never,
+      taskKind: "unknown",
+      outcome: "unknown"
+    })).toThrow("unknown collection reason");
   });
 });

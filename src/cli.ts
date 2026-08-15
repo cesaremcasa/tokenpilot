@@ -10,6 +10,7 @@ import { runProvider } from "./launcher.js";
 import { addPricing, disablePricing, ensureConfig, listPricing, setMode, setPricing } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
 import { doctor, doctorMarkdown } from "./doctor.js";
+import { renderSessions } from "./sessions.js";
 import { PROVIDERS, type PricingProfile, type Provider, type TaskKind, type TaskOutcome } from "./types.js";
 
 const HELP = `TokenPilot — local-first CLI telemetry
@@ -173,16 +174,12 @@ function sessions(args: string[]): void {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1_000).toISOString();
   const database = new TelemetryDatabase(paths, { readOnly: true });
   try {
-    const rows = database.recentRunsSince(since, has(args, "--unclassified"));
+    const rows = database.auditableSessionsSince(since, has(args, "--unclassified"));
     if (rows.length === 0) {
       process.stdout.write("No matching TokenPilot sessions.\n");
       return;
     }
-    process.stdout.write("Run ID                              Provider  Started                   Mode      Policy                 Task        Outcome     Measurement\n");
-    for (const row of rows) {
-      const policy = row.optimizationProfile ?? row.comparisonProfile ?? "none";
-      process.stdout.write(`${row.id}  ${row.provider.padEnd(8)}  ${row.startedAt.slice(0, 19)}  ${row.mode.padEnd(8)}  ${policy.padEnd(21)}  ${row.taskKind.padEnd(10)}  ${row.outcome.padEnd(10)}  ${row.collectionState}\n`);
-    }
+    process.stdout.write(renderSessions(rows));
   } finally {
     database.close();
   }
