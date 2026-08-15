@@ -84,6 +84,27 @@ describe("installation and fail-open launcher lookup", () => {
     cleanup(paths);
   });
 
+  it("keeps Bash login shells behind their final profile PATH assignment", () => {
+    const paths = temporaryPaths();
+    const profile = path.join(paths.userHome, ".profile");
+    fs.writeFileSync(profile, [
+      'if [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi',
+      `export PATH='${path.join(paths.userHome, ".local", "bin")}':"$PATH"`,
+      ""
+    ].join("\n"), { mode: 0o600 });
+
+    const plan = install(paths, { noAgent: true, shell: "/bin/bash", executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
+    const bashrc = path.join(paths.userHome, ".bashrc");
+    const profileContents = fs.readFileSync(profile, "utf8");
+    expect(plan.shellFiles).toEqual([bashrc, profile]);
+    expect(fs.readFileSync(bashrc, "utf8")).toContain(paths.shimDir);
+    expect(profileContents.lastIndexOf("# >>> tokenpilot >>>")).toBeGreaterThan(profileContents.lastIndexOf(".local/bin"));
+
+    uninstall(paths);
+    expect(fs.readFileSync(profile, "utf8")).not.toContain("# >>> tokenpilot >>>");
+    cleanup(paths);
+  });
+
   it("installs a working tokenpilot command for the report skill", () => {
     const paths = temporaryPaths();
     const fakeCli = path.join(paths.userHome, "fake-cli.sh");

@@ -33,6 +33,9 @@ export interface InstallPlan {
   shims: string[];
   command: string;
   skills: SkillPlan[];
+  /** All startup files that receive the exact managed PATH block. */
+  shellFiles?: string[];
+  /** Backwards-compatible primary interactive startup file. */
   shellFile?: string;
   launchAgent?: string;
 }
@@ -77,11 +80,22 @@ export function shouldInstallLaunchAgent(platform = process.platform, noAgent = 
   return platform === "darwin" && !noAgent;
 }
 
-function shellStartupFile(shell: string | undefined, home = os.homedir()): string | undefined {
+function shellStartupFiles(shell: string | undefined, home = os.homedir()): string[] {
   const name = path.basename(shell ?? "");
-  if (name === "zsh") return path.join(home, ".zshrc");
-  if (name === "bash") return path.join(home, ".bashrc");
-  return undefined;
+  if (name === "zsh") return [path.join(home, ".zshrc")];
+  if (name !== "bash") return [];
+
+  // Bash uses .bashrc for interactive non-login shells, while a login shell
+  // reads the first existing file among .bash_profile, .bash_login, and
+  // .profile. Install in .bashrc plus every existing login candidate so a
+  // later PATH assignment in an explicitly sourced profile cannot shadow a
+  // shim. Do not create a higher-precedence login file: doing so would alter
+  // Bash's normal startup-file selection.
+  const files = [path.join(home, ".bashrc")];
+  const loginCandidates = [".bash_profile", ".bash_login", ".profile"]
+    .map((file) => path.join(home, file))
+    .filter((file) => fs.existsSync(file));
+  return [...files, ...(loginCandidates.length > 0 ? loginCandidates : [path.join(home, ".profile")])];
 }
 
 function shellBlock(shimDir: string): string {
@@ -291,7 +305,7 @@ function stageRuntimeBundle(paths: TokenPilotPaths, executable: string): string 
 }
 
 export function createInstallPlan(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
-  const shellFile = options.noShellConfig ? undefined : shellStartupFile(options.shell ?? process.env.SHELL, paths.userHome);
+  const shellFiles = options.noShellConfig ? [] : shellStartupFiles(options.shell ?? process.env.SHELL, paths.userHome);
   const skillTargets = options.noSkills ? [] : [
     path.join(paths.userHome, ".agents", "skills", SKILL_RELATIVE_PATH),
     path.join(paths.userHome, ".claude", "skills", SKILL_RELATIVE_PATH),
@@ -301,7 +315,8 @@ export function createInstallPlan(paths: TokenPilotPaths, options: InstallOption
     shims: PROVIDERS.map((provider) => path.join(paths.shimDir, provider)),
     command: path.join(paths.shimDir, "tokenpilot"),
     skills: skillTargets.map((target) => assessSkillTarget(paths, target)),
-    shellFile,
+    shellFiles: shellFiles.length > 0 ? shellFiles : undefined,
+    shellFile: shellFiles[0],
     launchAgent: shouldInstallLaunchAgent(process.platform, options.noAgent === true) ? paths.launchAgentFile : undefined
   };
 }
@@ -401,7 +416,7 @@ export function install(paths: TokenPilotPaths, options: InstallOptions = {}): I
   // Optional skills are assessed independently and can be safely skipped.
   for (const provider of PROVIDERS) assertShimTarget(path.join(paths.shimDir, provider), provider);
   assertCommandTarget(plan.command);
-  if (plan.shellFile) assertShellStartupFile(plan.shellFile);
+  for (const shellFile of plan.shellFiles ?? []) assertShellStartupFile(shellFile);
   if (plan.launchAgent) assertLaunchAgentTarget(plan.launchAgent);
 
   ensurePrivateDirectory(paths, paths.shimDir);
@@ -411,7 +426,7 @@ export function install(paths: TokenPilotPaths, options: InstallOptions = {}): I
   for (const provider of PROVIDERS) writeShim(path.join(paths.shimDir, provider), provider, nodeExecutable, installedExecutable);
   writeCommandShim(plan.command, nodeExecutable, installedExecutable);
   writeSkills(paths, plan.skills, plan.command);
-  if (plan.shellFile) replaceShellBlock(plan.shellFile, shellBlock(paths.shimDir));
+  for (const shellFile of plan.shellFiles ?? []) replaceShellBlock(shellFile, shellBlock(paths.shimDir));
   if (plan.launchAgent) {
     ensurePrivateDirectory(paths, path.dirname(plan.launchAgent));
     assertLaunchAgentTarget(plan.launchAgent);
@@ -455,10 +470,11 @@ export function uninstall(paths: TokenPilotPaths, dryRun = false): InstallPlan {
     }
   }
   if (plan.launchAgent && ownsLaunchAgent) fs.rmSync(plan.launchAgent);
-  for (const shellFile of [path.join(paths.userHome, ".zshrc"), path.join(paths.userHome, ".bashrc")]) {
+  const block = shellBlock(paths.shimDir);
+  const expression = new RegExp(`${escapeRegExp(SHELL_MARKER_START)}\n${escapeRegExp(block.split("\n")[1])}\n${escapeRegExp(SHELL_MARKER_END)}\n?`, "g");
+  for (const shellFile of [".zshrc", ".bashrc", ".bash_profile", ".bash_login", ".profile"].map((file) => path.join(paths.userHome, file))) {
     if (!fs.existsSync(shellFile) || !existingRegularFile(shellFile)) continue;
     const source = fs.readFileSync(shellFile, "utf8");
-    const expression = new RegExp(`\\n?${escapeRegExp(SHELL_MARKER_START)}\\n[\\s\\S]*?${escapeRegExp(SHELL_MARKER_END)}\\n?`, "g");
     fs.writeFileSync(shellFile, source.replace(expression, ""), { mode: 0o600 });
   }
   return plan;

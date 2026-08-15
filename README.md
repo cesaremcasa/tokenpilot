@@ -44,7 +44,7 @@ exec "$SHELL" -l
 tokenpilot doctor
 ```
 
-The installer creates the `tokenpilot` command and per-provider shims at `~/.tokenpilot/bin`, then places its exact managed PATH block at the end of `~/.zshrc` or `~/.bashrc`. This gives shims precedence over a later `~/.local/bin`; a modified managed block is never overwritten. On macOS it also starts a user-only LaunchAgent; on Linux each finished wrapped session finalizes its own collection state, so no system service or root access is required. It copies the compiled runtime into private TokenPilot state, so installed commands keep working if the cloned checkout is moved or deleted.
+The installer creates the `tokenpilot` command and per-provider shims at `~/.tokenpilot/bin`, then places its exact managed PATH block at the end of `~/.zshrc` or, for Bash, both `~/.bashrc` and the existing login startup file (`.bash_profile`, `.bash_login`, or `.profile`). This gives shims precedence even when a login profile appends `~/.local/bin` after sourcing `.bashrc`; a modified managed block is never overwritten. On macOS it also starts a user-only LaunchAgent; on Linux each finished wrapped session finalizes its own collection state, so no system service or root access is required. It copies the compiled runtime into private TokenPilot state, so installed commands keep working if the cloned checkout is moved or deleted.
 
 The report skills are optional integrations. Each destination is inspected independently: an unsafe directory, symlink, or third-party skill is ignored without blocking provider wrappers. `install` prints the resulting state and `tokenpilot doctor` explains the correction. The same versioned skill is installed per user, not per repository or company account:
 
