@@ -280,6 +280,8 @@ describe("aggregate reporting", () => {
     expect(summary).toContain("codex-balanced-v2");
     expect(summary).not.toContain("codex-balanced-v1");
     expect(summary.match(/^- codex:/gm)).toHaveLength(1);
+    expect(summary).toContain("cohort expected 120, used 100, avoided 20 (16.7% aggregate across 1 treatment session)");
+    expect(summary).not.toContain("per comparable session");
   });
 
   it("shows Grok TTY coverage as limited rather than estimating zero", () => {
@@ -320,6 +322,42 @@ describe("aggregate reporting", () => {
       readiness: "ready",
       tokenResult: "preliminary-signal"
     });
+  });
+
+  it("does not validate when aggregate use falls but the treatment median rises", () => {
+    const baseline: SessionSummary[] = Array.from({ length: 5 }, (_, index) => ({
+      id: `baseline-${index}`,
+      provider: "codex",
+      mode: "observe",
+      optimizationApplied: false,
+      comparisonProfile: "codex-balanced-v2",
+      taskKind: "research",
+      outcome: "completed",
+      durationSeconds: 1,
+      inputNew: 100,
+      inputCached: 0,
+      cacheCreated: 0,
+      output: 0,
+      reasoning: 0,
+      categoryMetricsComplete: true,
+      compactions: 0,
+      retries: 0
+    }));
+    const totals = [0, 0, 101, 101, 101];
+    const treatment: SessionSummary[] = totals.map((inputNew, index) => ({
+      ...baseline[index],
+      id: `treatment-${index}`,
+      mode: "balanced",
+      optimizationApplied: true,
+      optimizationProfile: "codex-balanced-v2",
+      inputNew
+    }));
+    expect(treatmentComparisons([...baseline, ...treatment])).toMatchObject([{
+      readiness: "ready",
+      estimatedTokensAvoided: 197,
+      tokenReductionPercent: -1,
+      tokenResult: "preliminary-signal"
+    }]);
   });
 
   it("calculates reproducible API-equivalent USD only from compatible categories", () => {
