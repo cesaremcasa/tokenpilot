@@ -21,9 +21,9 @@ Claude and current Codex CLIs can publish local, authenticated metrics through a
 
 | Provider | `balanced` policy | Safety boundary |
 | --- | --- | --- |
-| Claude | Excludes dynamic system-prompt sections and sets medium effort. | Session arguments only; native tools, MCP, and provider config are not edited. |
-| Codex | Sets medium reasoning effort, low verbosity, and automatic compaction at 64k tokens. | Session `--config` overrides only; prompt OTEL export remains disabled. |
-| Grok | Sets medium reasoning effort. | Does not use API-only cache keys. |
+| Claude | Observe-only in v0.3.1: paired v2-v5 experiments moved tokens between new/cache categories without reducing the complete total. | Native tools, MCP, system prompt, and provider config are not edited. |
+| Codex | Uses low reasoning, no reasoning summary, low verbosity, one fixed concise-execution instruction, and body compaction at 32k tokens. | Session `--config` overrides only; prompt OTEL export remains disabled. |
+| Grok | Uses low reasoning effort and one short fixed `--rules` instruction against redundant reads/output. | Does not override the system prompt or use API-only cache keys. |
 | Kimi | Disables thinking and bounds steps/retries only when the local CLI exposes all three session flags. | Current Kimi 0.29.x is observed unchanged because it does not advertise those flags. |
 
 The wrapper prints a one-line notice when a treatment is active. It never stores the injected arguments; reports retain only the TokenPilot policy name.
@@ -171,9 +171,9 @@ The four adapters are all available for observation:
 
 | Provider | Automatic counter import | Current optimisation |
 | --- | --- | --- |
-| Claude | Metrics-only local OTLP receiver, correlated by the wrapper's unique per-run endpoint header | cache-stable prefix, medium effort |
-| Codex | Current CLIs: metrics-only local OTLP for interactive and `exec`; older CLIs: only the published `exec` total | medium effort, low verbosity, 64k compaction when `--config` is advertised |
-| Grok | For explicit `grok --output-format json --single`, parses only its top-level numeric `usage` object | medium effort |
+| Claude | Metrics-only local OTLP receiver, correlated by the wrapper's unique per-run endpoint header | observe-only until a treatment demonstrates total-token reduction |
+| Codex | Current CLIs: metrics-only local OTLP for interactive and `exec`; older CLIs: only the published `exec` total | low effort/verbosity, no reasoning summary, concise execution, 32k body compaction when the full policy probe passes |
+| Grok | For explicit `grok --output-format json --single`, parses only its top-level numeric `usage` object | low effort, concise verified execution |
 | Kimi | Not yet enabled: documented run correlation required | version-gated only |
 
 Claude handles prompt caching itself, and its cache prefix is sensitive to model, tools, MCP connections, and context changes. [Claude Code documentation](https://code.claude.com/docs/en/prompt-caching) explains these limits. Codex exposes user-level profiles, reasoning effort, automatic compaction, and telemetry configuration; its official configuration reference is the source of truth for any later adapter experiment. [OpenAI Docs](https://learn.chatgpt.com/docs/config-file/config-reference)

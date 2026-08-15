@@ -132,10 +132,12 @@ function completionRate(sessions: SessionSummary[]): number | undefined {
 
 function cacheShift(baseline: SessionSummary[], treatment: SessionSummary[], baselineTotal: number, treatmentTotal: number): boolean {
   if (baselineTotal <= 0) return false;
-  const newDrop = median(baseline.map((session) => session.inputNew)) - median(treatment.map((session) => session.inputNew));
-  const cacheIncrease = median(treatment.map((session) => session.inputCached)) - median(baseline.map((session) => session.inputCached));
+  const newChange = median(treatment.map((session) => session.inputNew)) - median(baseline.map((session) => session.inputNew));
+  const cacheChange = median(treatment.map((session) => session.inputCached)) - median(baseline.map((session) => session.inputCached));
   const totalChange = Math.abs(treatmentTotal - baselineTotal) / baselineTotal;
-  return newDrop > 0 && cacheIncrease >= newDrop * CACHE_SHIFT_MIN_CACHE_RECOVERY && totalChange < CACHE_SHIFT_TOTAL_FLAT_PERCENT;
+  const categoriesMovedInOppositeDirections = newChange * cacheChange < 0;
+  const cacheMovementExplainsNewMovement = Math.abs(cacheChange) >= Math.abs(newChange) * CACHE_SHIFT_MIN_CACHE_RECOVERY;
+  return categoriesMovedInOppositeDirections && cacheMovementExplainsNewMovement && totalChange < CACHE_SHIFT_TOTAL_FLAT_PERCENT;
 }
 
 /**

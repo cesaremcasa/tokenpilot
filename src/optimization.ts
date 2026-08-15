@@ -2,10 +2,14 @@ import { spawnSync } from "node:child_process";
 import type { Provider, RunMode } from "./types.js";
 
 /**
- * A plan contains only TokenPilot-owned policy names and provider CLI flags.
- * It deliberately never contains prompt text, a working directory, credentials,
- * or user-supplied command arguments.
+ * This fixed instruction is TokenPilot product code, not user or provider
+ * content. Keeping it short and byte-stable makes its own cache cost bounded
+ * while targeting repeated reads, verbose intermediate output, and unnecessary
+ * tool turns. It is never stored in telemetry.
  */
+export const TOKEN_EFFICIENCY_INSTRUCTION = "Minimize token use without reducing correctness. Inspect narrowly, batch independent reads, avoid rereading unchanged data or repeating context, keep intermediate explanations concise, and stop after the requested result is verified. Do not skip necessary validation or change requested scope.";
+
+/** A plan never contains credentials or user-supplied command arguments. */
 export interface OptimizationPlan {
   args: string[];
   applied: boolean;
@@ -28,22 +32,11 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
   if (mode !== "balanced") return NONE;
 
   if (provider === "claude") {
-    const args: string[] = [];
-    const labels: string[] = [];
-    if (supports(help, "--exclude-dynamic-system-prompt-sections")) {
-      args.push("--exclude-dynamic-system-prompt-sections");
-      labels.push("stable cache prefix");
-    }
-    if (supports(help, "--effort")) {
-      args.push("--effort", "medium");
-      labels.push("medium reasoning");
-    }
-    // Do not override tools. A tool allowlist can change developer capability
-    // and itself changes the system prompt; Claude's native tool selection is
-    // the safer cache-stable default for an invisible launcher.
-    return args.length > 0
-      ? { args, applied: true, profile: "claude-balanced-v2", summary: labels.join(", ") }
-      : { ...NONE, unavailableReason: "this Claude CLI does not expose the validated balanced flags" };
+    // Local paired measurements of v2-v5 kept Claude's complete total flat
+    // while moving tokens between new and cached input; v5 also increased
+    // latency. Keep authenticated measurement active, but do not inject a
+    // treatment until a versioned policy demonstrates a real total reduction.
+    return { ...NONE, unavailableReason: "Claude optimization is observe-only: tested policies produced cache-shift, not total-token reduction" };
   }
 
   if (provider === "codex") {
@@ -52,21 +45,24 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
     }
     return {
       args: [
-        "--config", "model_reasoning_effort=\"medium\"",
+        "--config", "model_reasoning_effort=\"low\"",
+        "--config", "model_reasoning_summary=\"none\"",
         "--config", "model_verbosity=\"low\"",
-        "--config", "model_auto_compact_token_limit=64000"
+        "--config", "model_auto_compact_token_limit=32000",
+        "--config", "model_auto_compact_token_limit_scope=\"body_after_prefix\"",
+        "--config", `developer_instructions=${JSON.stringify(TOKEN_EFFICIENCY_INSTRUCTION)}`
       ],
       applied: true,
-      profile: "codex-balanced-v1",
-      summary: "medium reasoning, low verbosity, compact at 64k tokens"
+      profile: "codex-balanced-v2",
+      summary: "low reasoning, no reasoning summary, low verbosity, compact body at 32k tokens"
     };
   }
 
   if (provider === "grok") {
     const effortOption = supports(help, "--reasoning-effort") ? "--reasoning-effort" : supports(help, "--effort") ? "--effort" : undefined;
-    return effortOption
-      ? { args: [effortOption, "medium"], applied: true, profile: "grok-balanced-v1", summary: "medium reasoning" }
-      : { ...NONE, unavailableReason: "this Grok CLI does not expose a reasoning-effort flag" };
+    return effortOption && supports(help, "--rules")
+      ? { args: [effortOption, "low", "--rules", TOKEN_EFFICIENCY_INSTRUCTION], applied: true, profile: "grok-balanced-v2", summary: "low reasoning, concise verified execution" }
+      : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete token-reduction policy" };
   }
 
   // Kimi 0.29.x does not advertise these session-scoped controls. Do not edit
@@ -105,7 +101,21 @@ export function planForInstalledCli(
     if (result.error || result.status !== 0) {
       return { ...NONE, unavailableReason: "could not verify this CLI version before applying a policy" };
     }
-    return planFromHelp(provider, mode, result.stdout);
+    const plan = planFromHelp(provider, mode, result.stdout);
+    if (!plan.applied) return plan;
+    // Help advertises top-level flags, but Codex configuration keys and some
+    // provider option combinations can still be rejected by the exact local
+    // version. Probe the complete fixed plan without starting an AI session.
+    const validation = spawnSync(binary, [...plan.args, "--help"], {
+      encoding: "utf8",
+      timeout: 4_000,
+      stdio: ["ignore", "ignore", "ignore"],
+      env: environment
+    });
+    if (validation.error || validation.status !== 0) {
+      return { ...NONE, unavailableReason: "this CLI rejected the complete token-reduction policy" };
+    }
+    return plan;
   } catch {
     return { ...NONE, unavailableReason: "could not verify this CLI version before applying a policy" };
   }

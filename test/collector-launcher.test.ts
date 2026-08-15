@@ -5,6 +5,7 @@ import { collectPendingRuns } from "../src/collector.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
+import { TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 import { buildReport, reportMarkdown } from "../src/report.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
@@ -86,10 +87,16 @@ describe("local launcher and collector", () => {
       provider: "codex",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v1",
+      optimizationProfile: "codex-balanced-v2",
       collectionState: "unavailable"
     });
     database.close();
+    const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
+    const markdown = reportMarkdown(buildReport(paths, 7));
+    for (const forbidden of ["super-secret-command-argument", TOKEN_EFFICIENCY_INSTRUCTION]) {
+      expect(rawDatabase).not.toContain(forbidden);
+      expect(markdown).not.toContain(forbidden);
+    }
     cleanup(paths);
   });
 
