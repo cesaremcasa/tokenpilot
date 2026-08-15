@@ -340,28 +340,58 @@ function categoryLine(comparison: TreatmentComparison): string {
   return `new ${integer(comparison.baselineMedianInputNew)}→${integer(comparison.treatmentMedianInputNew)}; cached ${integer(comparison.baselineMedianCachedInput!)}→${integer(comparison.treatmentMedianCachedInput!)}; created ${integer(comparison.baselineMedianCacheCreated!)}→${integer(comparison.treatmentMedianCacheCreated!)}; pressure ${integer(comparison.baselineMedianTokenPressure!)}→${integer(comparison.treatmentMedianTokenPressure!)}; total ${integer(comparison.baselineMedianComparableTotal)}→${integer(comparison.treatmentMedianComparableTotal)}`;
 }
 
+function summaryComparison(comparisons: TreatmentComparison[]): TreatmentComparison | undefined {
+  const versioned = comparisons.filter((comparison) => comparison.optimizationProfile !== "none");
+  if (versioned.length === 0) return comparisons[0];
+  const latestProfile = versioned
+    .map((comparison) => comparison.optimizationProfile)
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
+    .at(-1)!;
+  const current = versioned.filter((comparison) => comparison.optimizationProfile === latestProfile);
+  const taskRank = (comparison: TreatmentComparison) => comparison.taskKind === "unknown" ? 0 : comparison.taskKind === "benchmark" ? 1 : 2;
+  const conservativeRank = (comparison: TreatmentComparison) => ({
+    "validated-reduction": 0,
+    "preliminary-signal": 1,
+    incomparable: 2,
+    limited: 3,
+    "cache-shift": 4
+  })[comparison.tokenResult];
+  return [...current].sort((left, right) => taskRank(left) - taskRank(right) || conservativeRank(left) - conservativeRank(right)).at(-1);
+}
+
+function conciseResult(comparison: TreatmentComparison): string {
+  const group = `${comparison.taskKind}, ${comparison.optimizationProfile}, ${comparison.totalSource}`;
+  if (comparison.tokenResult === "validated-reduction") {
+    return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated reduction; ${integer(comparison.estimatedTokensAvoided ?? 0)} fewer tokens per comparable session (${group})`;
+  }
+  if (comparison.tokenResult === "preliminary-signal") {
+    return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% preliminary signal; ${integer(comparison.estimatedTokensAvoided ?? 0)} fewer tokens per comparable session — not an economy (${group})`;
+  }
+  return `${comparisonResult(comparison)} (${group})`;
+}
+
 /** Short skill-facing view: coverage first, and no provider totals are combined. */
 export function reportSummaryMarkdown(report: Report): string {
-  const lines = ["# TokenPilot — summary", "", `Generated: ${report.generatedAt}`, `Window: starts ${report.since}`, "", "## Coverage and audit state", "", "| Provider | Coverage | State and audit group | New / cached / created / pressure / total | Latency | API-equivalent USD |", "| --- | --- | --- | --- | --- | --- |"];
+  const lines = ["# TokenPilot — last seven days", "", `Generated: ${report.generatedAt}`, `Window starts: ${report.since}`, "", "Coverage and result:", ""];
   for (const coverage of report.coverage) {
     const comparisons = report.comparisons.filter((comparison) => comparison.provider === coverage.provider);
-    if (comparisons.length === 0) {
+    const comparison = summaryComparison(comparisons);
+    const coverageText = `${coverage.measuredSessions}/${coverage.sessions} measured; ${coverage.unavailableSessions} unavailable`;
+    if (!comparison) {
       const state = coverage.measuredSessions === 0 ? "limited measurement — no comparable numeric session" : "no comparable baseline — no percentage or avoided tokens";
-      lines.push(`| ${coverage.provider} | ${coverage.measuredSessions}/${coverage.sessions} measured; ${coverage.unavailableSessions} unavailable | ${state} | — | — | — |`);
+      lines.push(`- ${coverage.provider}: ${coverageText}. ${state}.`);
       continue;
     }
-    const state = comparisons.map((comparison) => `${comparison.taskKind}/${comparison.optimizationProfile}: ${comparisonResult(comparison)}`).join("<br>");
-    const metrics = comparisons.map(categoryLine).join("<br>");
-    const latencies = comparisons.map((comparison) => latency(comparison)).join("<br>");
-    const prices = comparisons.map((comparison) => {
-      if (comparison.tokenResult === "cache-shift") return "— cache-shift";
-      if (comparison.estimatedUsdAvoided === undefined) return "— profile or categories unavailable";
-      return `${usd(comparison.estimatedUsdAvoided)} ${comparison.tokenResult === "validated-reduction" ? "validated" : "preliminary, not a bill"}`;
-    }).join("<br>");
-    lines.push(`| ${coverage.provider} | ${coverage.measuredSessions}/${coverage.sessions} measured; ${coverage.unavailableSessions} unavailable | ${state} | ${metrics} | ${latencies} | ${prices} |`);
+    const metrics = categoryLine(comparison);
+    const timing = latency(comparison);
+    const price = comparison.estimatedUsdAvoided === undefined
+      ? "USD equivalent unavailable"
+      : `${usd(comparison.estimatedUsdAvoided)} API-equivalent ${comparison.tokenResult === "validated-reduction" ? "validated" : "preliminary, not a bill"}`;
+    lines.push(`- ${coverage.provider}: ${coverageText}. ${conciseResult(comparison)}. ${metrics}. Latency ${timing}. ${price}.`);
   }
-  if (report.coverage.length === 0) lines.push("| — | 0/0 measured | limited measurement — no sessions | — | — | — |");
-  lines.push("", "A cache-shift, limited measurement, or missing comparable base never emits a percentage, avoided tokens, or avoided USD. A preliminary signal is directional only; only a validated reduction is a reduction claim. Grok TTY/TUI remains unavailable for token comparison and receives no estimate.", "");
+  if (report.coverage.length === 0) lines.push("- No sessions: 0/0 measured; limited measurement.");
+  const validated = report.comparisons.filter((comparison) => comparison.tokenResult === "validated-reduction");
+  lines.push("", `Validated reduction: ${validated.length === 0 ? "none in this window" : validated.map((comparison) => `${comparison.provider} ${comparison.tokenReductionPercent?.toFixed(1)}%`).join(", ")}.`, "Cache-shift, limited measurement, and missing comparable bases never emit savings. Preliminary signals are not economies. Grok TTY/TUI remains unavailable and receives no estimate.", "");
   return lines.join("\n");
 }
 

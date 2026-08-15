@@ -250,6 +250,38 @@ describe("aggregate reporting", () => {
     expect(comparison).toMatchObject({ totalSource: "category total", tokenResult: "validated-reduction", tokenReductionPercent: 100 / 120 * 50 });
   });
 
+  it("keeps the skill summary to the latest policy and one line per provider", () => {
+    const sessions: SessionSummary[] = ["v1", "v2"].flatMap((version) => (["observe", "balanced"] as const).map((mode) => ({
+      id: `${version}-${mode}`,
+      provider: "codex",
+      mode,
+      optimizationApplied: mode === "balanced",
+      optimizationProfile: mode === "balanced" ? `codex-balanced-${version}` : undefined,
+      comparisonProfile: `codex-balanced-${version}`,
+      taskKind: "benchmark",
+      outcome: "completed",
+      durationSeconds: mode === "observe" ? 10 : 9,
+      inputNew: mode === "observe" ? 100 : version === "v1" ? 90 : 80,
+      inputCached: 10,
+      cacheCreated: 0,
+      output: 10,
+      reasoning: 0,
+      categoryMetricsComplete: true,
+      compactions: 0,
+      retries: 0
+    })));
+    const summary = reportSummaryMarkdown({
+      generatedAt: "now",
+      since: "then",
+      rows: [],
+      coverage: [{ provider: "codex", sessions: 4, measuredSessions: 4, unavailableSessions: 0 }],
+      comparisons: treatmentComparisons(sessions)
+    });
+    expect(summary).toContain("codex-balanced-v2");
+    expect(summary).not.toContain("codex-balanced-v1");
+    expect(summary.match(/^- codex:/gm)).toHaveLength(1);
+  });
+
   it("shows Grok TTY coverage as limited rather than estimating zero", () => {
     const summary = reportSummaryMarkdown({
       generatedAt: "now",

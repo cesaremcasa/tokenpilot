@@ -57,7 +57,7 @@ describe("doctor", () => {
     const report = doctor(paths, { platform: "linux", nodeVersion: "22.5.0", pathValue: `${paths.shimDir}${path.delimiter}${originalBin}` });
     expect(report).toMatchObject({ installationReady: true, measurementReady: false });
     expect(report.providers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ provider: "claude", state: "active" }),
+      expect.objectContaining({ provider: "claude", state: "active", fix: undefined }),
       expect.objectContaining({ provider: "codex", state: "active" }),
       expect.objectContaining({ provider: "grok", state: "limited", detail: expect.stringContaining("does not measure TTY/TUI — no estimate") }),
       expect.objectContaining({ provider: "kimi", state: "limited", detail: expect.stringContaining("session envelope only") })
@@ -65,6 +65,7 @@ describe("doctor", () => {
     const markdown = doctorMarkdown(report);
     expect(markdown).toContain("Installation: ready");
     expect(markdown).toContain("Measurement: limited");
+    expect(markdown).not.toContain("claude CLI: Update the provider CLI");
     cleanup(paths);
   });
 });
