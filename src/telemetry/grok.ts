@@ -4,7 +4,7 @@ const MAX_INCOMPLETE_LINE = 256;
 const USAGE_START = /^"usage"\s*:\s*\{$/;
 const USAGE_VALUE = /^"(input_tokens|cache_read_input_tokens|cache_creation_input_tokens|output_tokens|reasoning_tokens|total_tokens)"\s*:\s*(\d+),?$/;
 
-const METRIC_KEYS: Record<string, keyof UsageMetrics> = {
+const METRIC_KEYS: Record<string, Exclude<keyof UsageMetrics, "reportedTotalIncludesCachedInput">> = {
   input_tokens: "inputNew",
   cache_read_input_tokens: "inputCached",
   cache_creation_input_tokens: "cacheCreated",
@@ -33,7 +33,13 @@ export class GrokJsonUsageParser {
   finish(): UsageMetrics | undefined {
     if (this.pending) this.acceptLine(this.pending);
     this.pending = "";
-    return Object.keys(this.usage).length > 0 ? { ...this.usage } : undefined;
+    if (Object.keys(this.usage).length === 0) return undefined;
+    // Grok's JSON `total_tokens` is emitted alongside the input/cache/output
+    // categories. The adapter records that it includes cached input only for
+    // this documented envelope, never by assuming an API cache-key contract.
+    return this.usage.reportedTotal === undefined
+      ? { ...this.usage }
+      : { ...this.usage, reportedTotalIncludesCachedInput: true };
   }
 
   private acceptLine(line: string): void {

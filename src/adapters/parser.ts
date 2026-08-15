@@ -1,6 +1,8 @@
 import type { ParsedTelemetry, UsageMetrics } from "../types.js";
 
-const NUMBER_KEYS: Record<keyof UsageMetrics, string[]> = {
+type NumericUsageKey = Exclude<keyof UsageMetrics, "reportedTotalIncludesCachedInput">;
+
+const NUMBER_KEYS: Record<NumericUsageKey, string[]> = {
   inputNew: ["input_tokens", "input_other", "inputother", "inputnew", "input_tokens_excluding_cache"],
   inputCached: ["cache_read_input_tokens", "cached_input_tokens", "input_cache_read", "inputcacheread", "cached_tokens"],
   cacheCreated: ["cache_creation_input_tokens", "input_cache_creation", "inputcachecreation", "cache_write_input_tokens"],
@@ -25,7 +27,7 @@ function recordNumericFields(value: unknown, usage: UsageMetrics, events: Parsed
   for (const [rawKey, nested] of Object.entries(value as Record<string, unknown>)) {
     const key = normaliseKey(rawKey);
     if (typeof nested === "number" && Number.isSafeInteger(nested) && nested >= 0 && nested <= 1_000_000_000_000) {
-      for (const [metric, aliases] of Object.entries(NUMBER_KEYS) as Array<[keyof UsageMetrics, string[]]>) {
+      for (const [metric, aliases] of Object.entries(NUMBER_KEYS) as Array<[NumericUsageKey, string[]]>) {
         if (aliases.includes(key)) usage[metric] = nested;
       }
       if (key === "compaction_count") events.push({ type: "compaction", count: nested });

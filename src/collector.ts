@@ -14,7 +14,7 @@ export function collectRun(_paths: TokenPilotPaths, database: TelemetryDatabase,
     database.markCollection(run.id, "collected");
     return true;
   }
-  database.markCollection(run.id, "unavailable");
+  database.markCollection(run.id, "unavailable", "collector-unavailable");
   return false;
 }
 

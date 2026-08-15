@@ -1,12 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { RunMode, TokenPilotConfig } from "./types.js";
+import type { PricingProfile, RunMode, TokenPilotConfig } from "./types.js";
+import { isPricingProfile, pricingProfile, upsertPricingProfile } from "./pricing.js";
 import { assertSafeStateFile, ensurePrivateDirectory, type TokenPilotPaths } from "./paths.js";
 
 export const DEFAULT_CONFIG: TokenPilotConfig = {
-  version: 1,
-  defaultMode: "observe"
+  version: 2,
+  defaultMode: "balanced",
+  pricingProfiles: [],
+  activePricing: {}
 };
 
 export function ensureConfig(paths: TokenPilotPaths): TokenPilotConfig {
@@ -17,16 +20,19 @@ export function ensureConfig(paths: TokenPilotPaths): TokenPilotConfig {
     return structuredClone(DEFAULT_CONFIG);
   }
 
-  const parsed = JSON.parse(fs.readFileSync(paths.configFile, "utf8")) as TokenPilotConfig;
-  if (parsed.version !== 1
-    || !["observe", "balanced", "deep", "off"].includes(parsed.defaultMode)) {
+  const parsed = JSON.parse(fs.readFileSync(paths.configFile, "utf8")) as Partial<TokenPilotConfig> & { version?: number };
+  if (![1, 2].includes(parsed.version ?? 0)
+    || !["observe", "balanced", "deep", "off"].includes(parsed.defaultMode ?? "")) {
     throw new Error(`Unsupported TokenPilot configuration: ${paths.configFile}`);
   }
   // Older local configs may contain provider paths. Never use or preserve
   // them: a mutable config must not become executable authority.
   return {
-    version: 1,
-    defaultMode: parsed.defaultMode
+    version: 2,
+    defaultMode: parsed.defaultMode as RunMode,
+    pricingProfiles: Array.isArray(parsed.pricingProfiles) ? parsed.pricingProfiles.filter(isPricingProfile) : [],
+    activePricing: Object.fromEntries(Object.entries(parsed.activePricing ?? {})
+      .filter(([provider, id]) => ["claude", "codex", "grok", "kimi"].includes(provider) && typeof id === "string"))
   };
 }
 
@@ -43,4 +49,35 @@ export function setMode(paths: TokenPilotPaths, mode: RunMode): TokenPilotConfig
   config.defaultMode = mode;
   writeConfig(paths, config);
   return config;
+}
+
+export function listPricing(paths: TokenPilotPaths): PricingProfile[] {
+  return ensureConfig(paths).pricingProfiles;
+}
+
+export function addPricing(paths: TokenPilotPaths, profile: PricingProfile): TokenPilotConfig {
+  const config = upsertPricingProfile(ensureConfig(paths), profile);
+  writeConfig(paths, config);
+  return config;
+}
+
+export function setPricing(paths: TokenPilotPaths, provider: PricingProfile["provider"], id: string): TokenPilotConfig {
+  const config = ensureConfig(paths);
+  if (!config.pricingProfiles.some((profile) => profile.provider === provider && profile.id === id)) {
+    throw new Error(`Pricing profile not found for ${provider}: ${id}`);
+  }
+  config.activePricing[provider] = id;
+  writeConfig(paths, config);
+  return config;
+}
+
+export function disablePricing(paths: TokenPilotPaths, provider: PricingProfile["provider"]): TokenPilotConfig {
+  const config = ensureConfig(paths);
+  delete config.activePricing[provider];
+  writeConfig(paths, config);
+  return config;
+}
+
+export function activePricing(paths: TokenPilotPaths, provider: PricingProfile["provider"]): PricingProfile | undefined {
+  return pricingProfile(ensureConfig(paths), provider);
 }

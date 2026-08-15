@@ -5,23 +5,30 @@ import { fileURLToPath } from "node:url";
 import { getPaths } from "./paths.js";
 import { install, uninstall } from "./installer.js";
 import { collectPendingRuns } from "./collector.js";
-import { buildReport, reportMarkdown } from "./report.js";
+import { buildReport, renderReportMarkdown, type ReportView } from "./report.js";
 import { runProvider } from "./launcher.js";
-import { setMode } from "./config.js";
+import { addPricing, disablePricing, ensureConfig, listPricing, setMode, setPricing } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
-import { PROVIDERS, type Provider, type TaskKind, type TaskOutcome } from "./types.js";
+import { doctor, doctorMarkdown } from "./doctor.js";
+import { renderSessions } from "./sessions.js";
+import { PROVIDERS, type PricingProfile, type Provider, type TaskKind, type TaskOutcome } from "./types.js";
 
 const HELP = `TokenPilot — local-first CLI telemetry
 
 Usage:
   tokenpilot install [--dry-run] [--no-shell-config] [--no-agent] [--no-skills]
   tokenpilot uninstall [--dry-run]
+  tokenpilot doctor [--format <md|json>]
   tokenpilot mode <observe|balanced|deep|off>
+  tokenpilot pricing list
+  tokenpilot pricing add <provider> <profile> --label <label> --version <version> --input-usd-per-million <rate> --cached-input-usd-per-million <rate> --cache-creation-usd-per-million <rate> --output-usd-per-million <rate> [--reasoning-usd-per-million <rate>]
+  tokenpilot pricing set <provider> <profile>
+  tokenpilot pricing off <provider>
   tokenpilot agent [--once] [--interval <seconds>]
   tokenpilot collect
   tokenpilot sessions [--days <1-365>] [--unclassified]
   tokenpilot classify <run-id> --kind <feature|bugfix|research|operations|benchmark|other> --outcome <completed|rework|abandoned>
-  tokenpilot report [--days <1-365>] [--format <md|json>]
+  tokenpilot report [--days <1-365>] [--view <summary|detail|diagnostics>] [--format <md|json>]
   tokenpilot status
 
 Daily usage after install is unchanged: claude, codex, grok, or kimi.
@@ -88,6 +95,75 @@ function daysArgument(args: string[]): number {
   return days;
 }
 
+function requiredFlag(args: string[], name: string): string {
+  const value = flag(args, name);
+  if (!value) throw new Error(`Missing ${name}`);
+  return value;
+}
+
+function numericFlag(args: string[], name: string, optional = false): number | undefined {
+  const raw = flag(args, name);
+  if (raw === undefined && optional) return undefined;
+  if (raw === undefined) throw new Error(`Missing ${name}`);
+  const value = Number(raw);
+  if (!Number.isFinite(value)) throw new Error(`Invalid ${name}`);
+  return value;
+}
+
+function pricing(args: string[], paths: ReturnType<typeof getPaths>): void {
+  const operation = args[0];
+  if (operation === "list") {
+    const profiles = listPricing(paths);
+    const selected = ensureConfig(paths).activePricing;
+    if (profiles.length === 0) {
+      process.stdout.write("No local API-equivalent price profiles are configured. Add one manually; TokenPilot never fetches prices or captures a model automatically.\n");
+      return;
+    }
+    process.stdout.write("Provider  Active  Profile                         Version                         Label\n");
+    for (const profile of profiles) {
+      const active = selected[profile.provider] === profile.id ? "yes" : "no";
+      process.stdout.write(`${profile.provider.padEnd(8)}  ${active.padEnd(6)}  ${profile.id.padEnd(30)}  ${profile.version.padEnd(30)}  ${profile.label}\n`);
+    }
+    return;
+  }
+  const provider = args[1];
+  if (!isProvider(provider)) throw new Error("Pricing provider must be claude, codex, grok, or kimi");
+  if (operation === "set") {
+    const id = args[2];
+    if (!id) throw new Error("Use tokenpilot pricing set <provider> <profile>");
+    setPricing(paths, provider, id);
+    process.stdout.write(`TokenPilot API-equivalent price profile for ${provider}: ${id}\n`);
+    return;
+  }
+  if (operation === "off") {
+    disablePricing(paths, provider);
+    process.stdout.write(`TokenPilot API-equivalent price conversion disabled for ${provider}.\n`);
+    return;
+  }
+  if (operation === "add") {
+    const id = args[2];
+    if (!id) throw new Error("Use tokenpilot pricing add <provider> <profile> with the required rate flags");
+    const profile: PricingProfile = {
+      id,
+      provider,
+      label: requiredFlag(args, "--label"),
+      version: requiredFlag(args, "--version"),
+      currency: "USD",
+      rates: {
+        inputUsdPerMillion: numericFlag(args, "--input-usd-per-million")!,
+        cachedInputUsdPerMillion: numericFlag(args, "--cached-input-usd-per-million")!,
+        cacheCreationUsdPerMillion: numericFlag(args, "--cache-creation-usd-per-million")!,
+        outputUsdPerMillion: numericFlag(args, "--output-usd-per-million")!,
+        reasoningUsdPerMillion: numericFlag(args, "--reasoning-usd-per-million", true)
+      }
+    };
+    addPricing(paths, profile);
+    process.stdout.write(`Saved local API-equivalent price profile ${id} for ${provider}. Select it with tokenpilot pricing set ${provider} ${id}.\n`);
+    return;
+  }
+  throw new Error("Use tokenpilot pricing list, add, set, or off");
+}
+
 function sessions(args: string[]): void {
   const paths = getPaths();
   const days = daysArgument(args);
@@ -98,16 +174,12 @@ function sessions(args: string[]): void {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1_000).toISOString();
   const database = new TelemetryDatabase(paths, { readOnly: true });
   try {
-    const rows = database.recentRunsSince(since, has(args, "--unclassified"));
+    const rows = database.auditableSessionsSince(since, has(args, "--unclassified"));
     if (rows.length === 0) {
       process.stdout.write("No matching TokenPilot sessions.\n");
       return;
     }
-    process.stdout.write("Run ID                              Provider  Started                   Mode      Policy                 Task        Outcome\n");
-    for (const row of rows) {
-      const policy = row.optimizationProfile ?? row.comparisonProfile ?? "none";
-      process.stdout.write(`${row.id}  ${row.provider.padEnd(8)}  ${row.startedAt.slice(0, 19)}  ${row.mode.padEnd(8)}  ${policy.padEnd(21)}  ${row.taskKind.padEnd(10)}  ${row.outcome}\n`);
-    }
+    process.stdout.write(renderSessions(rows));
   } finally {
     database.close();
   }
@@ -140,11 +212,23 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     printPlan(uninstall(paths, has(args, "--dry-run")));
     return 0;
   }
+  if (command === "doctor") {
+    const format = flag(args, "--format") ?? "md";
+    const result = doctor(paths);
+    if (format === "json") process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else if (format === "md") process.stdout.write(doctorMarkdown(result));
+    else throw new Error("--format must be md or json");
+    return result.ready ? 0 : 1;
+  }
   if (command === "mode") {
     const mode = args[1];
     if (!["observe", "balanced", "deep", "off"].includes(mode ?? "")) throw new Error("Mode must be observe, balanced, deep, or off");
     setMode(paths, mode as "observe" | "balanced" | "deep" | "off");
     process.stdout.write(`TokenPilot mode: ${mode}\n`);
+    return 0;
+  }
+  if (command === "pricing") {
+    pricing(args.slice(1), paths);
     return 0;
   }
   if (command === "agent") return runAgent(args.slice(1));
@@ -173,8 +257,12 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const days = daysArgument(args);
     const report = buildReport(paths, days);
     const format = flag(args, "--format") ?? "md";
+    const view = flag(args, "--view") ?? "summary";
+    if (!(["summary", "detail", "diagnostics"] as const).includes(view as ReportView)) {
+      throw new Error("--view must be summary, detail, or diagnostics");
+    }
     if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    else if (format === "md") process.stdout.write(reportMarkdown(report));
+    else if (format === "md") process.stdout.write(renderReportMarkdown(report, view as ReportView));
     else throw new Error("--format must be md or json");
     return 0;
   }

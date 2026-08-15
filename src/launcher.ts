@@ -7,6 +7,7 @@ import { getAdapter } from "./adapters/index.js";
 import { ensureConfig } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
 import { planForInstalledCli, planFromHelp } from "./optimization.js";
+import { pricingProfile } from "./pricing.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
 import { CodexExecTokenParser, isCodexExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
@@ -54,10 +55,33 @@ function hasMacAcl(target: string): boolean {
   return result.stdout.trim().split(/\r?\n/).length > 1;
 }
 
-function providerEnvironment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+/**
+ * Builds the intentionally narrow PATH used by a provider process.
+ *
+ * A CLI installed with `npm --global` commonly lives next to the Node runtime
+ * that is executing TokenPilot.  That directory is not necessarily part of a
+ * login shell's PATH (for example, a per-user Node 22 installation on Linux).
+ * Keep it when it passes the same ownership and permission checks as every
+ * provider executable; otherwise a `#!/usr/bin/env node` provider shim would
+ * fail even after TokenPilot had safely found the real CLI.
+ */
+export function providerEnvironment(
+  overrides: NodeJS.ProcessEnv = {},
+  originalBinary?: string,
+  nodeExecutable = process.execPath
+): NodeJS.ProcessEnv {
   const environment = Object.fromEntries(Object.entries(process.env)
     .filter(([name]) => name !== "PATH" && name !== "NODE_NO_WARNINGS" && !name.startsWith("TOKENPILOT_")));
-  return { ...environment, ...overrides, PATH: PROVIDER_PATH };
+  const directories: string[] = [];
+  for (const executable of [originalBinary, nodeExecutable]) {
+    if (!executable || !trustedExecutable(executable)) continue;
+    const directory = canonicalDirectory(path.dirname(executable));
+    if (!directories.includes(directory)) directories.push(directory);
+  }
+  for (const directory of PROVIDER_PATH.split(":")) {
+    if (!directories.includes(directory)) directories.push(directory);
+  }
+  return { ...environment, ...overrides, PATH: directories.join(":") };
 }
 
 function canonicalDirectory(directory: string): string {
@@ -76,10 +100,20 @@ function isShimBinary(candidate: string, directories: Set<string>): boolean {
   return directories.has(canonicalDirectory(path.dirname(candidate)));
 }
 
-export function findOriginalBinary(provider: Provider, paths: TokenPilotPaths, pathValue = process.env.PATH ?? ""): string | undefined {
+export function findOriginalBinary(
+  provider: Provider,
+  paths: TokenPilotPaths,
+  pathValue = process.env.PATH ?? "",
+  nodeExecutable = process.execPath
+): string | undefined {
   const excludedDirectories = shimDirectories(paths);
+  const directories = pathValue.split(path.delimiter).filter(Boolean);
+  // `npm --global` installs provider entrypoints next to its Node executable.
+  // This fallback does not trust arbitrary state: the Node executable and the
+  // candidate provider binary must each pass the ownership and mode checks.
+  if (trustedExecutable(nodeExecutable)) directories.push(path.dirname(nodeExecutable));
 
-  for (const directory of pathValue.split(path.delimiter).filter(Boolean)) {
+  for (const directory of directories) {
     const resolvedDir = canonicalDirectory(directory);
     if (excludedDirectories.has(resolvedDir)) continue;
     const candidate = path.join(resolvedDir, provider);
@@ -96,7 +130,7 @@ function binaryVersion(binary: string): string | undefined {
     encoding: "utf8",
     timeout: 4_000,
     stdio: ["ignore", "pipe", "ignore"],
-    env: providerEnvironment()
+    env: providerEnvironment({}, trusted)
   });
   if (result.error || result.status !== 0) return undefined;
   return result.stdout.match(/\b\d+(?:\.\d+){0,3}(?:[-+][A-Za-z0-9._-]+)?\b/)?.[0];
@@ -109,7 +143,7 @@ function supportsCodexSessionConfiguration(binary: string): boolean {
     encoding: "utf8",
     timeout: 4_000,
     stdio: ["ignore", "pipe", "ignore"],
-    env: providerEnvironment()
+    env: providerEnvironment({}, trusted)
   });
   return !result.error && result.status === 0 && result.stdout.includes("--config");
 }
@@ -118,7 +152,7 @@ interface ChildObservation {
   consume(chunk: Buffer): void;
 }
 
-function launchChild(binary: string, args: string[], environment = providerEnvironment(), observation?: ChildObservation): Promise<number | null> {
+function launchChild(binary: string, args: string[], environment?: NodeJS.ProcessEnv, observation?: ChildObservation): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const trusted = trustedExecutable(binary);
     if (!trusted) {
@@ -129,7 +163,7 @@ function launchChild(binary: string, args: string[], environment = providerEnvir
       // Codex `exec` is non-interactive; normal provider sessions retain their
       // inherited TTY streams exactly as before.
       stdio: observation ? ["inherit", "pipe", "pipe"] : "inherit",
-      env: environment,
+      env: environment ?? providerEnvironment({}, trusted),
       cwd: process.cwd()
     });
     let settled = false;
@@ -185,7 +219,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   let database: TelemetryDatabase | undefined;
   let runId: string | undefined;
   let launchArgs = args;
-  let launchEnvironment = providerEnvironment();
+  let launchEnvironment = providerEnvironment({}, binary);
   let claudeMetrics: ClaudeMetricsReceiver | undefined;
   let codexOtelMetrics: CodexMetricsReceiver | undefined;
   const codexExecMetrics = provider === "codex" && isCodexExec(args) ? new CodexExecTokenParser() : undefined;
@@ -201,12 +235,12 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       if (!trusted) throw new Error("Provider executable no longer meets TokenPilot trust checks");
       database = new TelemetryDatabase(paths);
       const experiment = config.defaultMode === "balanced"
-        ? planForInstalledCli(provider, "balanced", trusted, providerEnvironment(), (candidate) => trustedExecutable(candidate) !== undefined)
+        ? planForInstalledCli(provider, "balanced", trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined)
         : undefined;
       if (mode === "balanced") mode = database.allocateBalancedMode(provider);
       const optimization = mode === "balanced" && experiment
         ? experiment
-        : planForInstalledCli(provider, mode, trusted, providerEnvironment(), (candidate) => trustedExecutable(candidate) !== undefined);
+        : planForInstalledCli(provider, mode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined);
       if (mode === "balanced" && optimization.applied) {
         process.stderr.write(`TokenPilot: balanced optimization active for ${provider} (${optimization.summary}).\n`);
       } else if (mode === "balanced") {
@@ -223,13 +257,14 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
         optimizationApplied: optimization.applied,
         optimizationProfile: optimization.profile,
         comparisonProfile: experiment?.profile,
+        pricingProfile: pricingProfile(config, provider),
         collectionState: "pending",
         taskKind: "unknown",
         outcome: "unknown"
       });
       if (provider === "claude") {
         claudeMetrics = await startClaudeMetricsReceiver(database, runId);
-        launchEnvironment = providerEnvironment(claudeMetrics.environment);
+        launchEnvironment = providerEnvironment(claudeMetrics.environment, trusted);
       }
       if (provider === "codex" && supportsCodexSessionConfiguration(trusted)) {
         // Codex's documented OTLP configuration is per invocation. If a
@@ -264,7 +299,10 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     if (database && runId) {
       try {
         database.finishRun(runId, code, new Date().toISOString());
-        if (provider === "claude") database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
+        if (provider === "claude") {
+          const measured = database.hasUsage(runId);
+          database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : "otlp-missing");
+        }
         if (provider === "codex") {
           // OTLP gives interactive and exec sessions category-level metrics.
           // Preserve the old `exec` total only when the receiver did not
@@ -278,16 +316,18 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           // closed, a missing sample is definitively unavailable. Finalizing
           // here also keeps Linux installations accurate without a macOS
           // LaunchAgent.
-          database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
+          const measured = database.hasUsage(runId);
+          database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : codexOtelMetrics ? "otlp-missing" : "no-correlated-counters");
         }
         if (provider === "grok") {
           const usage = grokMetrics?.finish();
           if (usage) {
             database.addUsage({ runId, observedAt: new Date().toISOString(), source: "grok-cli-json-usage-v1", ...usage });
           }
-          database.markCollection(runId, database.hasUsage(runId) ? "collected" : "unavailable");
+          const measured = database.hasUsage(runId);
+          database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : grokMetrics ? "no-correlated-counters" : "grok-tty");
         }
-        if (provider === "kimi") database.markCollection(runId, "unavailable");
+        if (provider === "kimi") database.markCollection(runId, "unavailable", "kimi-envelope");
       } catch {
         process.stderr.write("TokenPilot: telemetry completion unavailable.\n");
       }

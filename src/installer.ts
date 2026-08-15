@@ -32,9 +32,43 @@ export interface InstallOptions {
 export interface InstallPlan {
   shims: string[];
   command: string;
-  skills: string[];
+  skills: SkillPlan[];
+  /** All startup files that receive the exact managed PATH block. */
+  shellFiles?: string[];
+  /** Backwards-compatible primary interactive startup file. */
   shellFile?: string;
   launchAgent?: string;
+}
+
+export interface SkillPlan {
+  target: string;
+  /** `skipped` is safe and does not prevent the core launcher install. */
+  state: "install" | "update" | "installed" | "skipped";
+  reason?: string;
+}
+
+export interface RuntimeSupport {
+  supported: boolean;
+  reason?: string;
+}
+
+/** Pure preflight used by install and doctor; it never writes local state. */
+export function runtimeSupport(platform: string = process.platform, nodeVersion = process.versions.node): RuntimeSupport {
+  if (platform !== "darwin" && platform !== "linux") {
+    return { supported: false, reason: `Unsupported platform: ${platform}. TokenPilot supports macOS and Linux only.` };
+  }
+  const match = /^(\d+)\.(\d+)/.exec(nodeVersion);
+  const major = match ? Number(match[1]) : 0;
+  const minor = match ? Number(match[2]) : 0;
+  if (major < 22 || (major === 22 && minor < 5)) {
+    return { supported: false, reason: `Node ${nodeVersion} is unsupported. Install Node 22.5 or later and run tokenpilot install again.` };
+  }
+  return { supported: true };
+}
+
+export function assertRuntimeSupported(platform: string = process.platform, nodeVersion = process.versions.node): void {
+  const support = runtimeSupport(platform, nodeVersion);
+  if (!support.supported) throw new Error(support.reason);
 }
 
 /**
@@ -46,11 +80,22 @@ export function shouldInstallLaunchAgent(platform = process.platform, noAgent = 
   return platform === "darwin" && !noAgent;
 }
 
-function shellStartupFile(shell: string | undefined, home = os.homedir()): string | undefined {
+function shellStartupFiles(shell: string | undefined, home = os.homedir()): string[] {
   const name = path.basename(shell ?? "");
-  if (name === "zsh") return path.join(home, ".zshrc");
-  if (name === "bash") return path.join(home, ".bashrc");
-  return undefined;
+  if (name === "zsh") return [path.join(home, ".zshrc")];
+  if (name !== "bash") return [];
+
+  // Bash uses .bashrc for interactive non-login shells, while a login shell
+  // reads the first existing file among .bash_profile, .bash_login, and
+  // .profile. Install in .bashrc plus every existing login candidate so a
+  // later PATH assignment in an explicitly sourced profile cannot shadow a
+  // shim. Do not create a higher-precedence login file: doing so would alter
+  // Bash's normal startup-file selection.
+  const files = [path.join(home, ".bashrc")];
+  const loginCandidates = [".bash_profile", ".bash_login", ".profile"]
+    .map((file) => path.join(home, file))
+    .filter((file) => fs.existsSync(file));
+  return [...files, ...(loginCandidates.length > 0 ? loginCandidates : [path.join(home, ".profile")])];
 }
 
 function shellBlock(shimDir: string): string {
@@ -129,24 +174,69 @@ function sourceSkillFile(): string {
   return source;
 }
 
-function assertSkillTarget(paths: TokenPilotPaths, target: string): void {
+/**
+ * Skills are optional integrations. A bad or third-party skill target is a
+ * local warning, never a reason to withhold the core provider wrappers.
+ */
+export function assessSkillTarget(paths: TokenPilotPaths, target: string): SkillPlan {
   const directory = path.dirname(target);
-  if (fs.existsSync(directory)) {
-    if (!hasSafePrivateDirectory(paths, directory)) throw new Error(`Refusing unsafe TokenPilot skill directory: ${directory}`);
-    if (!fs.existsSync(target)) throw new Error(`Refusing to add a TokenPilot skill to an existing foreign directory: ${directory}`);
+  try {
+    // This also validates every existing ancestor while permitting a missing
+    // final TokenPilot-owned directory to be created with 0700 permissions.
+    hasSafePrivateDirectory(paths, directory);
+  } catch {
+    return { target, state: "skipped", reason: "skill directory is unsafe or symlinked" };
   }
-  if (fs.existsSync(target) && (!existingRegularFile(target) || !hasOwnedSkill(fs.readFileSync(target, "utf8")))) {
-    throw new Error(`Refusing to overwrite non-TokenPilot skill: ${target}`);
+  try {
+    if (!fs.existsSync(target)) return { target, state: "install" };
+    if (!existingRegularFile(target)) return { target, state: "skipped", reason: "skill target is not a private regular file" };
+    if (!hasOwnedSkill(fs.readFileSync(target, "utf8"))) {
+      return { target, state: "skipped", reason: "a third-party skill already owns this target" };
+    }
+    return { target, state: "update" };
+  } catch {
+    return { target, state: "skipped", reason: "skill target could not be safely inspected" };
   }
 }
 
-function writeSkills(paths: TokenPilotPaths, targets: string[], command: string): void {
-  if (targets.length === 0) return;
+function skipSkills(skills: SkillPlan[], reason: string): void {
+  for (const skill of skills) {
+    if (skill.state !== "skipped") {
+      skill.state = "skipped";
+      skill.reason = reason;
+    }
+  }
+}
+
+function writeSkills(paths: TokenPilotPaths, skills: SkillPlan[], command: string): void {
+  const candidates = skills.filter((skill) => skill.state === "install" || skill.state === "update");
+  if (candidates.length === 0) return;
   assertSafeText(command, "skill command path");
-  const contents = fs.readFileSync(sourceSkillFile(), "utf8").replaceAll(SKILL_COMMAND_PLACEHOLDER, quoteShell(command));
-  for (const target of targets) {
-    ensurePrivateDirectory(paths, path.dirname(target));
-    fs.writeFileSync(target, contents, { mode: 0o600 });
+  let contents: string;
+  try {
+    contents = fs.readFileSync(sourceSkillFile(), "utf8").replaceAll(SKILL_COMMAND_PLACEHOLDER, quoteShell(command));
+  } catch {
+    skipSkills(candidates, "packaged TokenPilot skill is unavailable");
+    return;
+  }
+  for (const skill of candidates) {
+    try {
+      // Reassess immediately before writing so a concurrent replacement can
+      // only disable this optional integration, never redirect the write.
+      const latest = assessSkillTarget(paths, skill.target);
+      if (latest.state === "skipped") {
+        skill.state = "skipped";
+        skill.reason = latest.reason;
+        continue;
+      }
+      ensurePrivateDirectory(paths, path.dirname(skill.target));
+      fs.writeFileSync(skill.target, contents, { mode: 0o600 });
+      skill.state = "installed";
+      delete skill.reason;
+    } catch {
+      skill.state = "skipped";
+      skill.reason = "skill write was refused by local safety checks";
+    }
   }
 }
 
@@ -215,16 +305,18 @@ function stageRuntimeBundle(paths: TokenPilotPaths, executable: string): string 
 }
 
 export function createInstallPlan(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
-  const shellFile = options.noShellConfig ? undefined : shellStartupFile(options.shell ?? process.env.SHELL, paths.userHome);
+  const shellFiles = options.noShellConfig ? [] : shellStartupFiles(options.shell ?? process.env.SHELL, paths.userHome);
+  const skillTargets = options.noSkills ? [] : [
+    path.join(paths.userHome, ".agents", "skills", SKILL_RELATIVE_PATH),
+    path.join(paths.userHome, ".claude", "skills", SKILL_RELATIVE_PATH),
+    path.join(paths.userHome, ".kimi", "skills", SKILL_RELATIVE_PATH)
+  ];
   return {
     shims: PROVIDERS.map((provider) => path.join(paths.shimDir, provider)),
     command: path.join(paths.shimDir, "tokenpilot"),
-    skills: options.noSkills ? [] : [
-      path.join(paths.userHome, ".agents", "skills", SKILL_RELATIVE_PATH),
-      path.join(paths.userHome, ".claude", "skills", SKILL_RELATIVE_PATH),
-      path.join(paths.userHome, ".kimi", "skills", SKILL_RELATIVE_PATH)
-    ],
-    shellFile,
+    skills: skillTargets.map((target) => assessSkillTarget(paths, target)),
+    shellFiles: shellFiles.length > 0 ? shellFiles : undefined,
+    shellFile: shellFiles[0],
     launchAgent: shouldInstallLaunchAgent(process.platform, options.noAgent === true) ? paths.launchAgentFile : undefined
   };
 }
@@ -241,12 +333,30 @@ function writeCommandShim(target: string, nodeExecutable: string, executable: st
   fs.writeFileSync(target, contents, { mode: 0o700 });
 }
 
-function appendShellBlock(file: string, block: string): void {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * The managed block must be last: user startup files often append an npm or
+ * ~/.local/bin PATH later. Only an exact block owned by this version may be
+ * moved. Modified markers are treated as user content and never overwritten.
+ */
+function replaceShellBlock(file: string, block: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   if (existingRegularFile(file) === false && fs.existsSync(file)) throw new Error(`Refusing non-regular shell startup file: ${file}`);
   const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-  if (existing.includes(SHELL_MARKER_START)) return;
-  fs.appendFileSync(file, `${existing.endsWith("\n") || existing.length === 0 ? "" : "\n"}${block}`, { mode: 0o600 });
+  const exact = new RegExp(`${escapeRegExp(SHELL_MARKER_START)}\n${escapeRegExp(block.split("\n")[1])}\n${escapeRegExp(SHELL_MARKER_END)}\n?`, "g");
+  const ownedBlocks = existing.match(exact) ?? [];
+  if (existing.includes(SHELL_MARKER_START) || existing.includes(SHELL_MARKER_END)) {
+    const markerPairs = (existing.match(new RegExp(escapeRegExp(SHELL_MARKER_START), "g")) ?? []).length
+      + (existing.match(new RegExp(escapeRegExp(SHELL_MARKER_END), "g")) ?? []).length;
+    if (markerPairs !== ownedBlocks.length * 2) {
+      throw new Error("Refusing to modify a changed TokenPilot shell PATH block");
+    }
+  }
+  const withoutOwnedBlock = existing.replace(exact, "").replace(/\n+$/, "");
+  fs.writeFileSync(file, `${withoutOwnedBlock}${withoutOwnedBlock.length > 0 ? "\n" : ""}${block}`, { mode: 0o600 });
 }
 
 function launchAgentPlist(nodeExecutable: string, executable: string): string {
@@ -295,19 +405,18 @@ function bootstrapAgent(plist: string): void {
 }
 
 export function install(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
+  assertRuntimeSupported();
   const plan = createInstallPlan(paths, options);
   if (options.dryRun) return plan;
 
   const executable = options.executable ?? fileURLToPath(import.meta.url).replace(/installer\.js$/, "cli.js");
   const nodeExecutable = options.nodeExecutable ?? process.execPath;
 
-  // Validate all user-owned targets before creating any TokenPilot state,
-  // shim, or shell configuration. A foreign target leaves no partial install.
-  sourceSkillFile();
-  for (const target of plan.skills) assertSkillTarget(paths, target);
+  // Validate all required user-owned targets before creating TokenPilot state.
+  // Optional skills are assessed independently and can be safely skipped.
   for (const provider of PROVIDERS) assertShimTarget(path.join(paths.shimDir, provider), provider);
   assertCommandTarget(plan.command);
-  if (plan.shellFile) assertShellStartupFile(plan.shellFile);
+  for (const shellFile of plan.shellFiles ?? []) assertShellStartupFile(shellFile);
   if (plan.launchAgent) assertLaunchAgentTarget(plan.launchAgent);
 
   ensurePrivateDirectory(paths, paths.shimDir);
@@ -317,7 +426,7 @@ export function install(paths: TokenPilotPaths, options: InstallOptions = {}): I
   for (const provider of PROVIDERS) writeShim(path.join(paths.shimDir, provider), provider, nodeExecutable, installedExecutable);
   writeCommandShim(plan.command, nodeExecutable, installedExecutable);
   writeSkills(paths, plan.skills, plan.command);
-  if (plan.shellFile) appendShellBlock(plan.shellFile, shellBlock(paths.shimDir));
+  for (const shellFile of plan.shellFiles ?? []) replaceShellBlock(shellFile, shellBlock(paths.shimDir));
   if (plan.launchAgent) {
     ensurePrivateDirectory(paths, path.dirname(plan.launchAgent));
     assertLaunchAgentTarget(plan.launchAgent);
@@ -346,21 +455,26 @@ export function uninstall(paths: TokenPilotPaths, dryRun = false): InstallPlan {
     if (existingRegularFile(plan.command) && hasOwnedCommand(fs.readFileSync(plan.command, "utf8"))) fs.rmSync(plan.command);
   }
   for (const skill of plan.skills) {
-    const skillDirectory = path.dirname(skill);
-    if (!hasSafePrivateDirectory(paths, skillDirectory) || !existingRegularFile(skill)) continue;
-    if (!hasOwnedSkill(fs.readFileSync(skill, "utf8"))) continue;
-    fs.rmSync(skill);
+    const skillDirectory = path.dirname(skill.target);
     try {
-      fs.rmdirSync(skillDirectory);
+      if (!hasSafePrivateDirectory(paths, skillDirectory) || !existingRegularFile(skill.target)) continue;
+      if (!hasOwnedSkill(fs.readFileSync(skill.target, "utf8"))) continue;
+      fs.rmSync(skill.target);
+      try {
+        fs.rmdirSync(skillDirectory);
+      } catch {
+        // Keep a directory containing user-owned supporting files.
+      }
     } catch {
-      // Keep a directory containing user-owned supporting files.
+      // Optional unsafe integrations are never modified during uninstall.
     }
   }
   if (plan.launchAgent && ownsLaunchAgent) fs.rmSync(plan.launchAgent);
-  for (const shellFile of [path.join(paths.userHome, ".zshrc"), path.join(paths.userHome, ".bashrc")]) {
+  const block = shellBlock(paths.shimDir);
+  const expression = new RegExp(`${escapeRegExp(SHELL_MARKER_START)}\n${escapeRegExp(block.split("\n")[1])}\n${escapeRegExp(SHELL_MARKER_END)}\n?`, "g");
+  for (const shellFile of [".zshrc", ".bashrc", ".bash_profile", ".bash_login", ".profile"].map((file) => path.join(paths.userHome, file))) {
     if (!fs.existsSync(shellFile) || !existingRegularFile(shellFile)) continue;
     const source = fs.readFileSync(shellFile, "utf8");
-    const expression = new RegExp(`\\n?${SHELL_MARKER_START.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\n[\\s\\S]*?${SHELL_MARKER_END.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\n?`, "g");
     fs.writeFileSync(shellFile, source.replace(expression, ""), { mode: 0o600 });
   }
   return plan;

@@ -4,7 +4,7 @@
 
 TokenPilot is a local, provider-neutral measurement layer for developer AI CLIs. A developer still opens the VS Code terminal and types `claude`, `codex`, `grok`, or `kimi`. Authentication remains entirely with that provider; TokenPilot adds no login and never reads credentials.
 
-The tool records a content-free session envelope locally and can report it by provider, task class, and experimental mode. It does not proxy requests or create a provider-independent cache. Provider caches remain server-side. Numeric provider usage is not imported until a provider-specific, documented session correlation passes privacy review.
+The tool records a content-free session envelope locally and can report it by provider, task class, and experimental mode. It does not proxy requests or create a provider-independent cache. Provider caches remain server-side. Current Claude and Codex CLIs can publish metrics to a short-lived, authenticated local receiver; older Codex falls back only to its published `exec` total, Grok only measures explicit one-turn JSON output, and Kimi is envelope-only. No provider folder is scanned and unavailable data is not estimated.
 
 ## Why start personally
 
@@ -15,22 +15,24 @@ No company prompt, code, account identifier, credential, raw session log, or usa
 ## Developer experience
 
 - Same terminal, provider command, authentication, and UI.
-- `observe` is the default and makes no provider setting changes. The personal installation records a content-free local envelope automatically for each wrapped terminal session; `TOKENPILOT_BYPASS=1` and `mode off` are immediate opt-outs.
-- `balanced` is a version-gated personal treatment: it applies only documented CLI controls for cache stability, reasoning, verbosity, tool breadth, and compaction. It never writes a provider config file or changes authentication.
+- `balanced` is the installation default and alternates persistently with `observe` per provider, creating a matched baseline while exercising a version-gated treatment. `observe`, `deep`, `off`, and `TOKENPILOT_BYPASS=1` are immediate controls.
+- The treatment applies only documented CLI controls for cache stability, reasoning, verbosity, tool breadth, and compaction. It never writes a provider config file or changes authentication.
 - `TOKENPILOT_BYPASS=1 <provider>` bypasses the layer immediately.
 - If telemetry fails, the original CLI opens normally.
 - A developer may classify a finished task as completed, rework, or abandoned without entering task content.
 
 ## Evidence required before a savings claim
 
-Once a provider-specific correlation is validated, the personal experiment may report, per provider and task type:
+Where a provider-specific correlation is available, the personal experiment may report, per provider and task type:
 
 - input/cache/output/reasoning counters;
 - duration, retries, and compactions;
 - completed, rework, and abandoned task signals; and
 - observed differences between `observe` and the named provider-specific treatment, including whether a policy was actually applied.
 
-Until then, results are limited to launcher behavior, selected policy, duration, exit status, and optional task outcome; they cannot support a token-savings claim. There is no pre-declared savings percentage. Any later decision is based on measured results and quality signals, not a token-reduction promise.
+The report separates measured coverage from unavailable sessions before displaying any directional result. It keeps new input, cache reads, cache creation, token pressure, and complete cache-aware totals separate. If new input moves into cache reads while the complete total stays within 2%, the result is `cache-shift`, never a saving. Its five explicit audit states are limited measurement, incomparable cohorts, cache shift, preliminary signal, and validated reduction; only the last is a reduction claim. A result is validated only for classified non-benchmark work with at least five measured baseline and five measured treatment sessions in the same provider, task type, complete-total basis, policy version, and price-profile snapshot. `unknown` and benchmark rows remain preliminary signals, not savings. There is no pre-declared savings percentage.
+
+An optional local price profile can model **API-equivalent USD** from category-level counters. The profile is manually selected, snapshotted at session start, never fetched from the network, and clearly labeled “API equivalent, not real billing.” Personal subscriptions are never represented as money actually saved.
 
 ## Proposed company pilot
 

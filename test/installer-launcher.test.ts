@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { install, launchAgentServiceTarget, shouldInstallLaunchAgent, uninstall } from "../src/installer.js";
-import { findOriginalBinary, isPassthrough } from "../src/launcher.js";
+import { assertRuntimeSupported, install, launchAgentServiceTarget, runtimeSupport, shouldInstallLaunchAgent, uninstall } from "../src/installer.js";
+import { findOriginalBinary, isPassthrough, providerEnvironment } from "../src/launcher.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("installation and fail-open launcher lookup", () => {
@@ -17,17 +17,26 @@ describe("installation and fail-open launcher lookup", () => {
     expect(launchAgentServiceTarget("gui/501")).toBe("gui/501/com.tokenpilot.agent");
   });
 
+  it("supports only macOS/Linux with Node 22.5 or newer before any install write", () => {
+    expect(runtimeSupport("darwin", "22.5.0").supported).toBe(true);
+    expect(runtimeSupport("linux", "23.0.0").supported).toBe(true);
+    expect(runtimeSupport("win32", "23.0.0")).toMatchObject({ supported: false, reason: expect.stringContaining("macOS and Linux") });
+    expect(runtimeSupport("linux", "22.4.9")).toMatchObject({ supported: false, reason: expect.stringContaining("22.5") });
+    expect(() => assertRuntimeSupported("linux", "22.4.9")).toThrow("Node 22.4.9 is unsupported");
+  });
+
   it("creates removable per-provider shims without changing the shell when requested", () => {
     const paths = temporaryPaths();
     const plan = install(paths, { noShellConfig: true, noAgent: true, executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
     expect(plan.shims).toHaveLength(4);
     expect(plan.command).toBe(path.join(paths.shimDir, "tokenpilot"));
     expect(plan.skills).toHaveLength(3);
-    expect(fs.readFileSync(plan.skills[0], "utf8")).toContain("tokenpilot-managed-skill");
-    expect(fs.readFileSync(plan.skills[1], "utf8")).toContain("tokenpilot-managed-skill");
-    expect(fs.readFileSync(plan.skills[2], "utf8")).toContain("tokenpilot-managed-skill");
-    expect(fs.readFileSync(plan.skills[0], "utf8")).toContain(`'${plan.command}' report --format md`);
-    expect(fs.readFileSync(plan.skills[0], "utf8")).not.toContain("{{TOKENPILOT_COMMAND}}");
+    expect(fs.readFileSync(plan.skills[0].target, "utf8")).toContain("tokenpilot-managed-skill");
+    expect(fs.readFileSync(plan.skills[1].target, "utf8")).toContain("tokenpilot-managed-skill");
+    expect(fs.readFileSync(plan.skills[2].target, "utf8")).toContain("tokenpilot-managed-skill");
+    expect(fs.readFileSync(plan.skills[0].target, "utf8")).toContain(`'${plan.command}' report --view summary --format md`);
+    expect(fs.readFileSync(plan.skills[0].target, "utf8")).not.toContain("{{TOKENPILOT_COMMAND}}");
+    expect(plan.skills.map((skill) => skill.state)).toEqual(["installed", "installed", "installed"]);
     const shim = fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8");
     expect(shim).toContain("__shim codex");
     expect(shim).toContain("# tokenpilot-shim");
@@ -39,9 +48,9 @@ describe("installation and fail-open launcher lookup", () => {
     uninstall(paths);
     expect(fs.existsSync(path.join(paths.shimDir, "codex"))).toBe(false);
     expect(fs.existsSync(plan.command)).toBe(false);
-    expect(fs.existsSync(plan.skills[0])).toBe(false);
-    expect(fs.existsSync(plan.skills[1])).toBe(false);
-    expect(fs.existsSync(plan.skills[2])).toBe(false);
+    expect(fs.existsSync(plan.skills[0].target)).toBe(false);
+    expect(fs.existsSync(plan.skills[1].target)).toBe(false);
+    expect(fs.existsSync(plan.skills[2].target)).toBe(false);
     cleanup(paths);
   });
 
@@ -58,6 +67,41 @@ describe("installation and fail-open launcher lookup", () => {
     expect(fs.readFileSync(shellFile, "utf8")).toContain(paths.shimDir);
     uninstall(paths);
     expect(fs.readFileSync(shellFile, "utf8")).not.toContain("tokenpilot");
+    cleanup(paths);
+  });
+
+  it("moves its exact PATH block to the end on reinstall so later local bins cannot shadow shims", () => {
+    const paths = temporaryPaths();
+    const shellFile = path.join(paths.userHome, ".zshrc");
+    fs.writeFileSync(shellFile, `export PATH='${path.join(paths.userHome, ".local", "bin")}:$PATH\n`, { mode: 0o600 });
+    install(paths, { noAgent: true, shell: "/bin/zsh", executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
+    // Simulate a package manager appending its own bin path after the first install.
+    fs.appendFileSync(shellFile, `export PATH='${path.join(paths.userHome, ".local", "bin")}:$PATH\n`, { mode: 0o600 });
+    install(paths, { noAgent: true, shell: "/bin/zsh", executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
+    const contents = fs.readFileSync(shellFile, "utf8");
+    expect((contents.match(/# >>> tokenpilot >>>/g) ?? [])).toHaveLength(1);
+    expect(contents.lastIndexOf("# >>> tokenpilot >>>")).toBeGreaterThan(contents.lastIndexOf(".local/bin"));
+    cleanup(paths);
+  });
+
+  it("keeps Bash login shells behind their final profile PATH assignment", () => {
+    const paths = temporaryPaths();
+    const profile = path.join(paths.userHome, ".profile");
+    fs.writeFileSync(profile, [
+      'if [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi',
+      `export PATH='${path.join(paths.userHome, ".local", "bin")}':"$PATH"`,
+      ""
+    ].join("\n"), { mode: 0o600 });
+
+    const plan = install(paths, { noAgent: true, shell: "/bin/bash", executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
+    const bashrc = path.join(paths.userHome, ".bashrc");
+    const profileContents = fs.readFileSync(profile, "utf8");
+    expect(plan.shellFiles).toEqual([bashrc, profile]);
+    expect(fs.readFileSync(bashrc, "utf8")).toContain(paths.shimDir);
+    expect(profileContents.lastIndexOf("# >>> tokenpilot >>>")).toBeGreaterThan(profileContents.lastIndexOf(".local/bin"));
+
+    uninstall(paths);
+    expect(fs.readFileSync(profile, "utf8")).not.toContain("# >>> tokenpilot >>>");
     cleanup(paths);
   });
 
@@ -110,7 +154,7 @@ describe("installation and fail-open launcher lookup", () => {
   it("skips its own shim directory when locating the original provider binary", () => {
     const paths = temporaryPaths();
     const originalBin = path.join(paths.userHome, "original-bin");
-    fs.mkdirSync(originalBin, { recursive: true });
+    fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
     const original = path.join(originalBin, "codex");
     fs.writeFileSync(original, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     fs.mkdirSync(paths.shimDir, { recursive: true });
@@ -122,6 +166,22 @@ describe("installation and fail-open launcher lookup", () => {
     expect(isPassthrough(["update"])).toBe(true);
     expect(isPassthrough(["mcp"])).toBe(true);
     expect(isPassthrough([])).toBe(false);
+    cleanup(paths);
+  });
+
+  it("finds an npm-installed provider beside TokenPilot's trusted Node runtime", () => {
+    const paths = temporaryPaths();
+    const runtimeBin = path.join(paths.userHome, "node-runtime", "bin");
+    const runtimeNode = path.join(runtimeBin, "node");
+    const provider = path.join(runtimeBin, "claude");
+    fs.mkdirSync(runtimeBin, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(runtimeNode, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    fs.writeFileSync(provider, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    fs.mkdirSync(paths.shimDir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(paths.shimDir, "claude"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+
+    expect(fs.realpathSync(findOriginalBinary("claude", paths, paths.shimDir, runtimeNode)!)).toBe(fs.realpathSync(provider));
+    expect(providerEnvironment({}, provider, runtimeNode).PATH?.split(path.delimiter)).toContain(fs.realpathSync(runtimeBin));
     cleanup(paths);
   });
 
@@ -147,18 +207,40 @@ describe("installation and fail-open launcher lookup", () => {
     cleanup(paths);
   });
 
-  it("refuses to overwrite a non-TokenPilot personal skill", () => {
+  it("keeps wrappers working and skips a non-TokenPilot personal skill", () => {
     const paths = temporaryPaths();
     const skill = path.join(paths.userHome, ".agents", "skills", "tokenpilot", "SKILL.md");
     fs.mkdirSync(path.dirname(skill), { recursive: true, mode: 0o700 });
     fs.writeFileSync(skill, "---\nname: tokenpilot\n---\nforeign\n", { mode: 0o600 });
 
-    expect(() => install(paths, { noShellConfig: true, noAgent: true })).toThrow("Refusing to overwrite non-TokenPilot skill");
+    const plan = install(paths, { noShellConfig: true, noAgent: true });
     expect(fs.readFileSync(skill, "utf8")).toContain("foreign");
+    expect(plan.skills.find((candidate) => candidate.target === skill)).toMatchObject({ state: "skipped", reason: "a third-party skill already owns this target" });
+    expect(fs.existsSync(path.join(paths.shimDir, "codex"))).toBe(true);
+    cleanup(paths);
+  });
+
+  it("keeps wrappers working when an optional skill directory is unsafe or symlinked", () => {
+    const paths = temporaryPaths();
+    const unsafe = path.join(paths.userHome, ".agents");
+    fs.mkdirSync(unsafe, { mode: 0o777 });
+    fs.chmodSync(unsafe, 0o777);
+    const privateTarget = path.join(paths.userHome, "private-claude");
+    fs.mkdirSync(privateTarget, { mode: 0o700 });
+    fs.symlinkSync(privateTarget, path.join(paths.userHome, ".claude"));
+
+    const plan = install(paths, { noShellConfig: true, noAgent: true });
+    expect(plan.skills.find((skill) => skill.target.includes(`${path.sep}.agents${path.sep}`))).toMatchObject({ state: "skipped" });
+    expect(plan.skills.find((skill) => skill.target.includes(`${path.sep}.claude${path.sep}`))).toMatchObject({ state: "skipped" });
+    expect(fs.existsSync(path.join(paths.shimDir, "claude"))).toBe(true);
+    expect(fs.existsSync(plan.command)).toBe(true);
+    expect(fs.existsSync(path.join(privateTarget, "skills", "tokenpilot", "SKILL.md"))).toBe(false);
+    uninstall(paths);
     cleanup(paths);
   });
 
   it("refuses to overwrite a LaunchAgent that merely reuses its label", () => {
+    if (process.platform !== "darwin") return;
     const paths = temporaryPaths();
     fs.mkdirSync(path.dirname(paths.launchAgentFile), { recursive: true, mode: 0o700 });
     fs.writeFileSync(paths.launchAgentFile, "<plist><string>com.tokenpilot.agent</string></plist>", { mode: 0o600 });
