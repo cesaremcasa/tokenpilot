@@ -1,6 +1,6 @@
 {
   "name": "tokenpilot",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Private, local-first telemetry for Claude, Codex, Grok, and Kimi CLIs.",
   "private": true,
   "type": "module",

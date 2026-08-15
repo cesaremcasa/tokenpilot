@@ -24,8 +24,8 @@ describe("version-gated balanced optimization", () => {
 
   it("uses only documented Grok CLI controls rather than API cache headers", () => {
     expect(planFromHelp("grok", "balanced", "--reasoning-effort <effort> --rules <rules> --verbatim")).toMatchObject({
-      profile: "grok-balanced-v3",
-      args: ["--reasoning-effort", "minimal", "--verbatim", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION]
+      profile: "grok-balanced-v4",
+      args: ["--reasoning-effort", "low", "--verbatim", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION]
     });
   });
 

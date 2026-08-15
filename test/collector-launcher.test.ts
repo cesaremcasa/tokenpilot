@@ -100,7 +100,7 @@ describe("local launcher and collector", () => {
     cleanup(paths);
   });
 
-  it("injects the complete Grok v3 policy without retaining its fixed rule", async () => {
+  it("injects the complete Grok v4 policy without retaining its fixed rule", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-arguments");
     const originalBin = writeFakeGrok(paths, `#!/bin/sh
@@ -120,7 +120,7 @@ exit 0
 
     expect(await withProviderPath(originalBin, () => runProvider("grok", ["--single", "private-task"], paths))).toBe(0);
     const argumentsText = fs.readFileSync(observedArguments, "utf8");
-    expect(argumentsText).toContain("minimal");
+    expect(argumentsText).toContain("low");
     expect(argumentsText).toContain("--verbatim");
     expect(argumentsText).toContain(GROK_TOKEN_EFFICIENCY_INSTRUCTION);
 
@@ -129,7 +129,7 @@ exit 0
       provider: "grok",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "grok-balanced-v3"
+      optimizationProfile: "grok-balanced-v4"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
