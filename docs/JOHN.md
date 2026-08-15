@@ -16,7 +16,7 @@ No company prompt, code, account identifier, credential, raw session log, or usa
 
 - Same terminal, provider command, authentication, and UI.
 - `balanced` is the installation default and alternates persistently with `observe` per provider, creating a matched baseline while exercising a version-gated treatment. `observe`, `deep`, `off`, and `TOKENPILOT_BYPASS=1` are immediate controls.
-- The treatment applies only documented CLI controls for cache stability, reasoning, verbosity, tool breadth, and compaction. It never writes a provider config file or changes authentication.
+- The treatment applies only documented, session-scoped CLI controls for reasoning, verbosity, tool breadth, and compaction. It never writes a provider config file or changes authentication. Claude's balanced treatment deliberately exposes only its core repository tools; `deep`, `off`, or the process bypass is required for web, MCP, agent, notebook, or other excluded Claude tools.
 - `TOKENPILOT_BYPASS=1 <provider>` bypasses the layer immediately.
 - If telemetry fails, the original CLI opens normally.
 - A developer may classify a finished task as completed, rework, or abandoned without entering task content.

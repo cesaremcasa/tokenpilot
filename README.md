@@ -13,7 +13,7 @@ It does **not** create a shared cache, proxy model traffic, receive provider cre
 
 ## Current scope: personal measurement and reduction
 
-Version 0.3 is a local macOS/Linux tool. A new install defaults to `balanced`: it persistently alternates provider-local `observe` and `balanced` assignments, starting randomly, so there is still a matched baseline. `deep`, `off`, `observe`, and `TOKENPILOT_BYPASS=1` are immediate controls. The wrapper changes a provider session only after that exact installed CLI advertises the required documented flag; any failed probe starts the original CLI unchanged. Windows native support remains unavailable until its separate clean-machine acceptance suite is complete.
+Version 0.4.4 is a local macOS/Linux tool. A new install defaults to `balanced`: it persistently alternates provider-local `observe` and `balanced` assignments, starting randomly, so there is still a matched baseline. `deep`, `off`, `observe`, and `TOKENPILOT_BYPASS=1` are immediate controls. The wrapper changes a provider session only after that exact installed CLI advertises the required documented flag; any failed probe starts the original CLI unchanged. Windows native support remains unavailable until its separate clean-machine acceptance suite is complete.
 
 Claude, current Codex CLIs, and Grok Build 1.0.3+ can publish local, authenticated metrics through a per-run receiver. Older Codex CLIs fall back only to their published `exec` total; older Grok versions fall back only to explicit one-turn JSON usage. Kimi remains a session envelope: it does not claim token measurement or savings until documented correlation exists. TokenPilot never scans ambient provider folders, transcripts, or logs.
 
@@ -21,7 +21,7 @@ Claude, current Codex CLIs, and Grok Build 1.0.3+ can publish local, authenticat
 
 | Provider | `balanced` policy | Safety boundary |
 | --- | --- | --- |
-| Claude | Observe-only in v0.3.1: paired v2-v5 experiments moved tokens between new/cache categories without reducing the complete total. | Native tools, MCP, system prompt, and provider config are not edited. |
+| Claude | Uses low effort, one fixed concise-execution instruction, and the core coding tools `Bash`, `Edit`, `Read`, `Write`, `Grep`, and `Glob`. | Session flags only; `deep`, `off`, or `TOKENPILOT_BYPASS=1` restores Claude's full native tool catalog immediately. Tasks requiring web, MCP, agents, notebooks, or another excluded tool must use one of those controls. |
 | Codex | Uses low reasoning, no reasoning summary, low verbosity, one fixed concise-execution instruction, and body compaction at 32k tokens. | Session `--config` overrides only; prompt OTEL export remains disabled. |
 | Grok | Uses low reasoning, verbatim user prompts, and one fixed `--rules` instruction against irrelevant skills, broad reads, rereads, and tool narration. | Does not override the system prompt, restrict tools, or use API-only cache keys. |
 | Kimi | Disables thinking and bounds steps/retries only when the local CLI exposes all three session flags. | Current Kimi 0.29.x is observed unchanged because it does not advertise those flags. |
@@ -175,7 +175,7 @@ The four adapters are all available for observation:
 
 | Provider | Automatic counter import | Current optimisation |
 | --- | --- | --- |
-| Claude | Metrics-only local OTLP receiver, correlated by the wrapper's unique per-run endpoint header | observe-only until a treatment demonstrates total-token reduction |
+| Claude | Metrics-only local OTLP receiver, correlated by the wrapper's unique per-run endpoint header | low effort, concise execution, and a core coding-tool catalog when the complete v6 policy probe passes |
 | Codex | Current CLIs: metrics-only local OTLP for interactive and `exec`; older CLIs: only the published `exec` total | low effort/verbosity, no reasoning summary, concise execution, 32k body compaction when the full policy probe passes |
 | Grok | Build 1.0.3+: metrics-only local External OTEL for TTY/TUI and headless; older versions: explicit JSON single-turn fallback | low effort, verbatim prompt, targeted context and no tool narration when the full v4 policy probe passes |
 | Kimi | Not yet enabled: documented run correlation required | version-gated only |

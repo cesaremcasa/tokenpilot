@@ -5,7 +5,7 @@ import { collectPendingRuns } from "../src/collector.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
-import { GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 import { buildReport, reportMarkdown } from "../src/report.js";
 import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
@@ -135,6 +135,47 @@ exit 0
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
     const markdown = reportMarkdown(buildReport(paths, 7));
     for (const forbidden of ["private-task", GROK_TOKEN_EFFICIENCY_INSTRUCTION]) {
+      expect(rawDatabase).not.toContain(forbidden);
+      expect(markdown).not.toContain(forbidden);
+    }
+    cleanup(paths);
+  });
+
+  it("injects the complete Claude v6 policy without retaining its fixed instruction", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "claude-arguments");
+    const originalBin = writeFakeClaude(paths, `#!/bin/sh
+case " $* " in
+  *" --version "*) echo 'claude 2.1.233'; exit 0 ;;
+  *" --help "*) echo '--effort <level> --tools <tools> --append-system-prompt <prompt>'; exit 0 ;;
+esac
+printf '%s\n' "$@" > '${observedArguments}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "balanced";
+    writeConfig(paths, config);
+    const allocator = new TelemetryDatabase(paths);
+    expect(allocator.allocateBalancedMode("claude", () => 0.9)).toBe("observe");
+    allocator.close();
+
+    expect(await withProviderPath(originalBin, () => runProvider("claude", ["-p", "private-task"], paths))).toBe(0);
+    const argumentsText = fs.readFileSync(observedArguments, "utf8");
+    expect(argumentsText).toContain("low");
+    expect(argumentsText).toContain(CLAUDE_CORE_TOOLS);
+    expect(argumentsText).toContain(TOKEN_EFFICIENCY_INSTRUCTION);
+
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
+      provider: "claude",
+      mode: "balanced",
+      optimizationApplied: true,
+      optimizationProfile: "claude-balanced-v6"
+    });
+    database.close();
+    const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
+    const markdown = reportMarkdown(buildReport(paths, 7));
+    for (const forbidden of ["private-task", TOKEN_EFFICIENCY_INSTRUCTION]) {
       expect(rawDatabase).not.toContain(forbidden);
       expect(markdown).not.toContain(forbidden);
     }
