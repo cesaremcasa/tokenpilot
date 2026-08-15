@@ -18,7 +18,7 @@ const SKILL_RELATIVE_PATH = path.join("tokenpilot", "SKILL.md");
 const SKILL_COMMAND_PLACEHOLDER = "{{TOKENPILOT_COMMAND}}";
 const COMMAND_MARKER = "# tokenpilot-command-shim";
 const RUNTIME_RELEASES_DIRECTORY = "releases";
-const SKILL_HOST_DIRECTORY: Record<Provider, string> = {
+const SKILL_TARGET_DIRECTORY: Record<Provider, string> = {
   claude: ".claude",
   codex: ".agents",
   grok: ".grok",
@@ -171,7 +171,7 @@ function hasOwnedSkill(contents: string): boolean {
 }
 
 function sourceSkillFile(provider: Provider): string {
-  const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", SKILL_HOST_DIRECTORY[provider], "skills", SKILL_RELATIVE_PATH);
+  const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "integrations", provider, SKILL_RELATIVE_PATH);
   if (!existingRegularFile(source)) {
     throw new Error("TokenPilot skill source is missing or invalid");
   }
@@ -247,7 +247,7 @@ function runtimeBundleSource(executable: string): string | undefined {
   const dist = path.dirname(normalized);
   const root = path.dirname(dist);
   if (path.basename(dist) !== "dist" || path.basename(normalized) !== "cli.js") return undefined;
-  const skill = path.join(root, ".agents", "skills", SKILL_RELATIVE_PATH);
+  const skill = path.join(root, "integrations", "codex", SKILL_RELATIVE_PATH);
   try {
     if (!existingRegularFile(normalized) || !existingRegularFile(skill)) return undefined;
     return root;
@@ -287,10 +287,7 @@ function stageRuntimeBundle(paths: TokenPilotPaths, executable: string): string 
   try {
     fs.mkdirSync(release, { mode: 0o700 });
     copyPrivateTree(path.join(source, "dist"), path.join(release, "dist"));
-    for (const directory of new Set(Object.values(SKILL_HOST_DIRECTORY))) {
-      const skillSource = path.join(source, directory);
-      if (fs.existsSync(skillSource)) copyPrivateTree(skillSource, path.join(release, directory));
-    }
+    copyPrivateTree(path.join(source, "integrations"), path.join(release, "integrations"));
     const stagedCli = path.join(release, "dist", "cli.js");
     if (!existingRegularFile(stagedCli)) throw new Error("TokenPilot runtime bundle is incomplete");
     return stagedCli;
@@ -306,7 +303,7 @@ export function createInstallPlan(paths: TokenPilotPaths, options: InstallOption
   const shellFiles = options.noShellConfig ? [] : shellStartupFiles(options.shell ?? process.env.SHELL, paths.userHome);
   const skillTargets = options.noSkills ? [] : SKILL_HOSTS.map((provider) => ({
     provider,
-    target: path.join(paths.userHome, SKILL_HOST_DIRECTORY[provider], "skills", SKILL_RELATIVE_PATH)
+    target: path.join(paths.userHome, SKILL_TARGET_DIRECTORY[provider], "skills", SKILL_RELATIVE_PATH)
   }));
   return {
     shims: PROVIDERS.map((provider) => path.join(paths.shimDir, provider)),

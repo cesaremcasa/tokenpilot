@@ -13,7 +13,7 @@ Run exactly this read-only command:
 {{TOKENPILOT_COMMAND}} report --provider claude --view summary --format md
 ```
 
-Present its result without inspecting the SQLite database, provider logs, prompts, transcripts, project files, account details, or environment variables.
+Return the command's Markdown verbatim. Do not add another heading, table, summary, calculation, or interpretation. Do not inspect the SQLite database, provider logs, prompts, transcripts, project files, account details, or environment variables.
 
 ## Reporting rules
 
