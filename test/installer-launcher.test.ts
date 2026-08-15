@@ -127,7 +127,7 @@ describe("installation and fail-open launcher lookup", () => {
     const paths = temporaryPaths();
     const source = path.join(paths.userHome, "checkout");
     const sourceCli = path.join(source, "dist", "cli.js");
-    const sourceSkill = path.join(source, ".agents", "skills", "tokenpilot", "SKILL.md");
+    const sourceSkill = path.join(source, "integrations", "codex", "tokenpilot", "SKILL.md");
     fs.mkdirSync(path.dirname(sourceCli), { recursive: true, mode: 0o700 });
     fs.mkdirSync(path.dirname(sourceSkill), { recursive: true, mode: 0o700 });
     fs.writeFileSync(sourceCli, "process.stdout.write(`runtime ${process.argv.slice(2).join(' ')}`);\n", { mode: 0o600 });
