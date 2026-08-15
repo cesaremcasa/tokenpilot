@@ -81,11 +81,12 @@ function providerCapability(provider: Provider, binary: string): { provider: Pro
   else telemetry = "session envelope only; no token or savings measurement is declared";
   const optimization = plan.applied ? `balanced available (${plan.profile})` : `balanced not injected (${plan.unavailableReason ?? "local help probe did not confirm it"})`;
   const state: ProviderDoctorState = provider === "grok" || provider === "kimi" || (provider === "codex" && !plan.applied) ? "limited" : "active";
+  const intentionallyObserveOnly = provider === "claude" && plan.unavailableReason?.includes("observe-only");
   return {
     provider,
     state,
     detail: `${telemetry}; ${optimization}. ${adapter.capabilities.notes}`,
-    fix: plan.applied ? undefined : "Update the provider CLI, then run tokenpilot doctor again. TokenPilot will fail open until a documented flag is confirmed."
+    fix: plan.applied || intentionallyObserveOnly ? undefined : "Update the provider CLI, then run tokenpilot doctor again. TokenPilot will fail open until a documented flag is confirmed."
   };
 }
 
