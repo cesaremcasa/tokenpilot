@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { assertRuntimeSupported, install, launchAgentServiceTarget, runtimeSupport, shouldInstallLaunchAgent, uninstall } from "../src/installer.js";
-import { findOriginalBinary, isPassthrough } from "../src/launcher.js";
+import { findOriginalBinary, isPassthrough, providerEnvironment } from "../src/launcher.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("installation and fail-open launcher lookup", () => {
@@ -131,6 +131,22 @@ describe("installation and fail-open launcher lookup", () => {
     expect(isPassthrough(["update"])).toBe(true);
     expect(isPassthrough(["mcp"])).toBe(true);
     expect(isPassthrough([])).toBe(false);
+    cleanup(paths);
+  });
+
+  it("finds an npm-installed provider beside TokenPilot's trusted Node runtime", () => {
+    const paths = temporaryPaths();
+    const runtimeBin = path.join(paths.userHome, "node-runtime", "bin");
+    const runtimeNode = path.join(runtimeBin, "node");
+    const provider = path.join(runtimeBin, "claude");
+    fs.mkdirSync(runtimeBin, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(runtimeNode, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    fs.writeFileSync(provider, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    fs.mkdirSync(paths.shimDir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(paths.shimDir, "claude"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+
+    expect(fs.realpathSync(findOriginalBinary("claude", paths, paths.shimDir, runtimeNode)!)).toBe(fs.realpathSync(provider));
+    expect(providerEnvironment({}, provider, runtimeNode).PATH?.split(path.delimiter)).toContain(fs.realpathSync(runtimeBin));
     cleanup(paths);
   });
 
