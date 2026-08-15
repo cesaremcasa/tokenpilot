@@ -12,10 +12,12 @@ import { TelemetryDatabase } from "./database.js";
 import { doctor, doctorMarkdown } from "./doctor.js";
 import { renderSessions } from "./sessions.js";
 import { PROVIDERS, type PricingProfile, type Provider, type TaskKind, type TaskOutcome } from "./types.js";
+import { isVersionCommand, TOKENPILOT_VERSION } from "./version.js";
 
 const HELP = `TokenPilot — local-first CLI telemetry
 
 Usage:
+  tokenpilot --version
   tokenpilot install [--dry-run] [--no-shell-config] [--no-agent] [--no-skills]
   tokenpilot uninstall [--dry-run]
   tokenpilot doctor [--format <md|json>]
@@ -190,6 +192,10 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   const paths = getPaths();
   if (!command || command === "help" || command === "--help" || command === "-h") {
     process.stdout.write(HELP);
+    return 0;
+  }
+  if (isVersionCommand(command)) {
+    process.stdout.write(`tokenpilot ${TOKENPILOT_VERSION}\n`);
     return 0;
   }
   if (command === "__shim") {
