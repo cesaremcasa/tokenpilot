@@ -5,7 +5,7 @@ import { collectPendingRuns } from "../src/collector.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
-import { TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 import { buildReport, reportMarkdown } from "../src/report.js";
 import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
@@ -94,6 +94,47 @@ describe("local launcher and collector", () => {
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
     const markdown = reportMarkdown(buildReport(paths, 7));
     for (const forbidden of ["super-secret-command-argument", TOKEN_EFFICIENCY_INSTRUCTION]) {
+      expect(rawDatabase).not.toContain(forbidden);
+      expect(markdown).not.toContain(forbidden);
+    }
+    cleanup(paths);
+  });
+
+  it("injects the complete Grok v3 policy without retaining its fixed rule", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "grok-arguments");
+    const originalBin = writeFakeGrok(paths, `#!/bin/sh
+case " $* " in
+  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --rules <rules> --verbatim'; exit 0 ;;
+esac
+printf '%s\n' "$@" > '${observedArguments}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "balanced";
+    writeConfig(paths, config);
+    const allocator = new TelemetryDatabase(paths);
+    expect(allocator.allocateBalancedMode("grok", () => 0.9)).toBe("observe");
+    allocator.close();
+
+    expect(await withProviderPath(originalBin, () => runProvider("grok", ["--single", "private-task"], paths))).toBe(0);
+    const argumentsText = fs.readFileSync(observedArguments, "utf8");
+    expect(argumentsText).toContain("minimal");
+    expect(argumentsText).toContain("--verbatim");
+    expect(argumentsText).toContain(GROK_TOKEN_EFFICIENCY_INSTRUCTION);
+
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
+      provider: "grok",
+      mode: "balanced",
+      optimizationApplied: true,
+      optimizationProfile: "grok-balanced-v3"
+    });
+    database.close();
+    const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
+    const markdown = reportMarkdown(buildReport(paths, 7));
+    for (const forbidden of ["private-task", GROK_TOKEN_EFFICIENCY_INSTRUCTION]) {
       expect(rawDatabase).not.toContain(forbidden);
       expect(markdown).not.toContain(forbidden);
     }

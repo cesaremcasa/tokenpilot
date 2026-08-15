@@ -9,6 +9,14 @@ import type { Provider, RunMode } from "./types.js";
  */
 export const TOKEN_EFFICIENCY_INSTRUCTION = "Minimize token use without reducing correctness. Inspect narrowly, batch independent reads, avoid rereading unchanged data or repeating context, keep intermediate explanations concise, and stop after the requested result is verified. Do not skip necessary validation or change requested scope.";
 
+/**
+ * Grok v2 still spent context loading unrelated skills, narrating tool use, and
+ * reading broader source/test surfaces than the requested answer required.
+ * This provider-specific rule is fixed and content-free. It preserves tools,
+ * the native system prompt, safety checks, and the user's requested scope.
+ */
+export const GROK_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve correctness while minimizing total context. Ignore skills unless the request directly invokes them. Search before reading; inspect only relevant ranges, batch related reads, never reread unchanged data, and avoid tests, docs, or live state unless needed. Do not narrate tool use or repeat context. Stop after the requested result is verified; never skip necessary validation or change scope.";
+
 /** A plan never contains credentials or user-supplied command arguments. */
 export interface OptimizationPlan {
   args: string[];
@@ -60,8 +68,8 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
 
   if (provider === "grok") {
     const effortOption = supports(help, "--reasoning-effort") ? "--reasoning-effort" : supports(help, "--effort") ? "--effort" : undefined;
-    return effortOption && supports(help, "--rules")
-      ? { args: [effortOption, "low", "--rules", TOKEN_EFFICIENCY_INSTRUCTION], applied: true, profile: "grok-balanced-v2", summary: "low reasoning, concise verified execution" }
+    return effortOption && supports(help, "--rules") && supports(help, "--verbatim")
+      ? { args: [effortOption, "minimal", "--verbatim", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION], applied: true, profile: "grok-balanced-v3", summary: "minimal reasoning, verbatim prompt, targeted context without tool narration" }
       : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete token-reduction policy" };
   }
 

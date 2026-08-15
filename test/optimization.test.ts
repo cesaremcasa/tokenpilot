@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { GROK_TOKEN_EFFICIENCY_INSTRUCTION, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
   it("keeps Claude observe-only after tested controls produced cache-shift", () => {
@@ -22,8 +22,19 @@ describe("version-gated balanced optimization", () => {
     expect(plan.args.join(" ")).not.toContain("otel.log_user_prompt");
   });
 
-  it("uses the documented Grok CLI effort flag rather than API cache headers", () => {
-    expect(planFromHelp("grok", "balanced", "--reasoning-effort <effort> --rules <rules>")).toMatchObject({ profile: "grok-balanced-v2", args: ["--reasoning-effort", "low", "--rules", TOKEN_EFFICIENCY_INSTRUCTION] });
+  it("uses only documented Grok CLI controls rather than API cache headers", () => {
+    expect(planFromHelp("grok", "balanced", "--reasoning-effort <effort> --rules <rules> --verbatim")).toMatchObject({
+      profile: "grok-balanced-v3",
+      args: ["--reasoning-effort", "minimal", "--verbatim", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION]
+    });
+  });
+
+  it("leaves Grok unchanged when verbatim prompting is unavailable", () => {
+    expect(planFromHelp("grok", "balanced", "--reasoning-effort <effort> --rules <rules>")).toMatchObject({
+      applied: false,
+      args: [],
+      unavailableReason: expect.stringContaining("complete token-reduction policy")
+    });
   });
 
   it("leaves an older Kimi CLI untouched instead of guessing unsupported flags", () => {
