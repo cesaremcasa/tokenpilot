@@ -2,12 +2,36 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
-import { buildReport, reportDiagnosticsMarkdown, reportMarkdown, reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
+import { buildReport, filterReportByProvider, reportDiagnosticsMarkdown, reportMarkdown, reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
 import type { PricingProfile, SessionSummary } from "../src/types.js";
 import { renderSessions } from "../src/sessions.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("aggregate reporting", () => {
+  it("limits every report view to one provider and keeps an explicit empty state", () => {
+    const complete = {
+      generatedAt: "now",
+      since: "then",
+      rows: [
+        { provider: "codex" as const, mode: "observe" as const, optimizationApplied: false, taskKind: "unknown" as const, sessions: 1, completed: 0, rework: 0, abandoned: 0, durationSeconds: 1, inputNew: 1, inputCached: 0, cacheCreated: 0, output: 1, reasoning: 0, modelCalls: 1, reportedTotal: 2, compactions: 0, retries: 0 },
+        { provider: "claude" as const, mode: "observe" as const, optimizationApplied: false, taskKind: "unknown" as const, sessions: 1, completed: 0, rework: 0, abandoned: 0, durationSeconds: 1, inputNew: 1, inputCached: 0, cacheCreated: 0, output: 1, reasoning: 0, modelCalls: 1, reportedTotal: 2, compactions: 0, retries: 0 }
+      ],
+      coverage: [
+        { provider: "codex" as const, sessions: 1, measuredSessions: 1, unavailableSessions: 0 },
+        { provider: "claude" as const, sessions: 1, measuredSessions: 1, unavailableSessions: 0 }
+      ],
+      comparisons: [],
+      sessions: []
+    };
+    const codex = filterReportByProvider(complete, "codex");
+    expect(codex.rows.map((row) => row.provider)).toEqual(["codex"]);
+    expect(codex.coverage.map((row) => row.provider)).toEqual(["codex"]);
+    expect(reportSummaryMarkdown(codex)).not.toContain("claude:");
+
+    const grok = filterReportByProvider(complete, "grok");
+    expect(grok.coverage).toEqual([{ provider: "grok", sessions: 0, measuredSessions: 0, unavailableSessions: 0 }]);
+    expect(reportSummaryMarkdown(grok)).toContain("No sessions in this seven-day window; no comparison yet");
+  });
   const pricedCodex: PricingProfile = {
     id: "codex-local-example",
     provider: "codex",
@@ -250,7 +274,7 @@ describe("aggregate reporting", () => {
     expect(comparison).toMatchObject({ totalSource: "category total", tokenResult: "validated-reduction", tokenReductionPercent: 100 / 120 * 50 });
   });
 
-  it("keeps the skill summary to the latest policy and one line per provider", () => {
+  it("keeps the provider skill summary to the latest policy and one concise block", () => {
     const sessions: SessionSummary[] = ["v1", "v2"].flatMap((version) => (["observe", "balanced"] as const).map((mode) => ({
       id: `${version}-${mode}`,
       provider: "codex",
@@ -279,8 +303,8 @@ describe("aggregate reporting", () => {
     });
     expect(summary).toContain("codex-balanced-v2");
     expect(summary).not.toContain("codex-balanced-v1");
-    expect(summary.match(/^- codex:/gm)).toHaveLength(1);
-    expect(summary).toContain("cohort expected 120, used 100, avoided 20 (16.7% aggregate across 1 treatment session)");
+    expect(summary).toContain("# TokenPilot — Codex — last seven days");
+    expect(summary).toContain("Cohort tokens: expected 120; used 100; avoided 20 (16.7% across 1 treatment session)");
     expect(summary).not.toContain("per comparable session");
   });
 
@@ -292,7 +316,7 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "grok", sessions: 3, measuredSessions: 0, unavailableSessions: 3 }],
       comparisons: []
     });
-    expect(summary).toContain("limited measurement");
+    expect(summary).toContain("Limited measurement");
     expect(summary).toContain("no comparable numeric session");
     expect(summary).not.toContain("0.0% reduction");
   });

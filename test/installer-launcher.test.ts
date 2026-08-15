@@ -30,13 +30,15 @@ describe("installation and fail-open launcher lookup", () => {
     const plan = install(paths, { noShellConfig: true, noAgent: true, executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
     expect(plan.shims).toHaveLength(4);
     expect(plan.command).toBe(path.join(paths.shimDir, "tokenpilot"));
-    expect(plan.skills).toHaveLength(3);
-    expect(fs.readFileSync(plan.skills[0].target, "utf8")).toContain("tokenpilot-managed-skill");
-    expect(fs.readFileSync(plan.skills[1].target, "utf8")).toContain("tokenpilot-managed-skill");
-    expect(fs.readFileSync(plan.skills[2].target, "utf8")).toContain("tokenpilot-managed-skill");
-    expect(fs.readFileSync(plan.skills[0].target, "utf8")).toContain(`'${plan.command}' report --view summary --format md`);
-    expect(fs.readFileSync(plan.skills[0].target, "utf8")).not.toContain("{{TOKENPILOT_COMMAND}}");
-    expect(plan.skills.map((skill) => skill.state)).toEqual(["installed", "installed", "installed"]);
+    expect(plan.skills).toHaveLength(4);
+    expect(plan.skills.map((skill) => skill.provider)).toEqual(["codex", "claude", "grok", "kimi"]);
+    for (const skill of plan.skills) {
+      const contents = fs.readFileSync(skill.target, "utf8");
+      expect(contents).toContain(`tokenpilot-managed-skill:v2 ${skill.provider}`);
+      expect(contents).toContain(`'${plan.command}' report --provider ${skill.provider} --view summary --format md`);
+      expect(contents).not.toContain("{{TOKENPILOT_COMMAND}}");
+      expect(skill.state).toBe("installed");
+    }
     const shim = fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8");
     expect(shim).toContain("__shim codex");
     expect(shim).toContain("# tokenpilot-shim");
@@ -48,9 +50,7 @@ describe("installation and fail-open launcher lookup", () => {
     uninstall(paths);
     expect(fs.existsSync(path.join(paths.shimDir, "codex"))).toBe(false);
     expect(fs.existsSync(plan.command)).toBe(false);
-    expect(fs.existsSync(plan.skills[0].target)).toBe(false);
-    expect(fs.existsSync(plan.skills[1].target)).toBe(false);
-    expect(fs.existsSync(plan.skills[2].target)).toBe(false);
+    for (const skill of plan.skills) expect(fs.existsSync(skill.target)).toBe(false);
     cleanup(paths);
   });
 
@@ -234,6 +234,7 @@ describe("installation and fail-open launcher lookup", () => {
     const plan = install(paths, { noShellConfig: true, noAgent: true });
     expect(plan.skills.find((skill) => skill.target.includes(`${path.sep}.agents${path.sep}`))).toMatchObject({ state: "skipped" });
     expect(plan.skills.find((skill) => skill.target.includes(`${path.sep}.claude${path.sep}`))).toMatchObject({ state: "skipped" });
+    expect(plan.skills.find((skill) => skill.provider === "grok")).toMatchObject({ state: "installed" });
     expect(fs.existsSync(path.join(paths.shimDir, "claude"))).toBe(true);
     expect(fs.existsSync(plan.command)).toBe(true);
     expect(fs.existsSync(path.join(privateTarget, "skills", "tokenpilot", "SKILL.md"))).toBe(false);

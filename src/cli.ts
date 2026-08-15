@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { getPaths } from "./paths.js";
 import { install, uninstall } from "./installer.js";
 import { collectPendingRuns } from "./collector.js";
-import { buildReport, renderReportMarkdown, type ReportView } from "./report.js";
+import { buildReport, filterReportByProvider, renderReportMarkdown, type ReportView } from "./report.js";
 import { runProvider } from "./launcher.js";
 import { addPricing, disablePricing, ensureConfig, listPricing, setMode, setPricing } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
@@ -28,7 +28,7 @@ Usage:
   tokenpilot collect
   tokenpilot sessions [--days <1-365>] [--unclassified]
   tokenpilot classify <run-id> --kind <feature|bugfix|research|operations|benchmark|other> --outcome <completed|rework|abandoned>
-  tokenpilot report [--days <1-365>] [--view <summary|detail|diagnostics>] [--format <md|json>]
+  tokenpilot report [--days <1-365>] [--provider <claude|codex|grok|kimi>] [--view <summary|detail|diagnostics>] [--format <md|json>]
   tokenpilot status
 
 Daily usage after install is unchanged: claude, codex, grok, or kimi.
@@ -255,7 +255,12 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   }
   if (command === "report") {
     const days = daysArgument(args);
-    const report = buildReport(paths, days);
+    const requestedProvider = flag(args, "--provider");
+    if (requestedProvider !== undefined && !isProvider(requestedProvider)) {
+      throw new Error("--provider must be claude, codex, grok, or kimi");
+    }
+    const completeReport = buildReport(paths, days);
+    const report = requestedProvider === undefined ? completeReport : filterReportByProvider(completeReport, requestedProvider);
     const format = flag(args, "--format") ?? "md";
     const view = flag(args, "--view") ?? "summary";
     if (!(["summary", "detail", "diagnostics"] as const).includes(view as ReportView)) {

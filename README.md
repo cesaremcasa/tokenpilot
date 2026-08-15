@@ -46,14 +46,14 @@ tokenpilot doctor
 
 The installer creates the `tokenpilot` command and per-provider shims at `~/.tokenpilot/bin`, then places its exact managed PATH block at the end of `~/.zshrc` or, for Bash, both `~/.bashrc` and the existing login startup file (`.bash_profile`, `.bash_login`, or `.profile`). This gives shims precedence even when a login profile appends `~/.local/bin` after sourcing `.bashrc`; a modified managed block is never overwritten. On macOS it also starts a user-only LaunchAgent; on Linux each finished wrapped session finalizes its own collection state, so no system service or root access is required. It copies the compiled runtime into private TokenPilot state, so installed commands keep working if the cloned checkout is moved or deleted.
 
-The report skills are optional integrations. Each destination is inspected independently: an unsafe directory, symlink, or third-party skill is ignored without blocking provider wrappers. `install` prints the resulting state and `tokenpilot doctor` explains the correction. The same versioned skill is installed per user, not per repository or company account:
+The report skills are optional integrations. Each destination is inspected independently: an unsafe directory, symlink, or third-party skill is ignored without blocking provider wrappers. `install` prints the resulting state and `tokenpilot doctor` explains the correction. Codex, Claude, Grok, and Kimi have separate versioned skill sources because their discovery and measurement capabilities evolve independently. Each skill is installed per user, not per repository or company account, and filters the report to its own provider:
 
 | Provider | Open the seven-day report |
 | --- | --- |
 | Claude Code | `/tokenpilot` |
 | Codex | `$tokenpilot` (or select it after typing `/`) |
+| Grok Build | `/tokenpilot` |
 | Kimi Code CLI | `/skill:tokenpilot` |
-| Grok | `tokenpilot report` in the terminal until its CLI exposes a documented skill extension |
 
 The installed skill calls its user-owned TokenPilot executable directly rather than relying on `PATH`; it therefore works in Codex and other GUI skill runners that do not load an interactive shell. Its report command defaults to the latest seven days and is read-only: before the first personal session it returns an empty report without creating a database or directory. A legacy WAL database is deliberately not opened by the report because SQLite would create sidecar files; start one personal session once to migrate it. The skill never reads transcripts, prompts, provider logs, project files, environment variables, or the SQLite database directly. Use `tokenpilot install --no-skills` only when a managed environment must distribute the skill separately.
 
@@ -108,6 +108,8 @@ tokenpilot classify <run-id> --kind benchmark --outcome completed
 
 # Short audit summary for the latest seven days.
 tokenpilot report
+# The same summary limited to one provider (used by its installed skill).
+tokenpilot report --provider codex
 # Full comparison evidence or adapter limitations.
 tokenpilot report --view detail
 tokenpilot report --view diagnostics
@@ -181,7 +183,7 @@ Claude handles prompt caching itself, and its cache prefix is sensitive to model
 ## Personal experiment
 
 1. Install once, then use the CLIs normally. Sessions are measured automatically and can be classified only when you are comfortable doing so.
-2. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for the rolling seven-day report. Claude and Codex measure normal sessions through a local metrics-only receiver; Grok measures explicit JSON single-turn sessions. Other sessions correctly show unavailable rather than an estimate.
+2. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for that host's rolling seven-day provider report. Claude and Codex measure normal sessions through a local metrics-only receiver; Grok measures explicit JSON single-turn sessions. Other sessions correctly show unavailable rather than an estimate.
 3. `balanced` is the initial mode; set `tokenpilot mode observe` to establish an unchanged-only baseline or use `deep`/`off` as immediate controls. A verified provider policy is applied only when the CLI advertises the necessary flags.
 4. A reduction is validated only after five measured baseline and five measured treatment sessions for the same provider, known non-benchmark task type, complete cache-aware total basis, policy version, and price-profile snapshot. `unknown` and benchmark work can only be a preliminary signal and never a savings claim.
 5. Use `TOKENPILOT_BYPASS=1 <provider>` or `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.

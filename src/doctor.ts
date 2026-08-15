@@ -91,7 +91,7 @@ function providerCapability(provider: Provider, binary: string): { provider: Pro
 }
 
 function skillCheck(skill: SkillPlan): DoctorCheck {
-  const destination = skill.target.includes(`${path.sep}.agents${path.sep}`) ? "Codex skill" : skill.target.includes(`${path.sep}.claude${path.sep}`) ? "Claude skill" : "Kimi skill";
+  const destination = `${skill.provider === "codex" ? "Codex" : skill.provider === "claude" ? "Claude" : skill.provider === "grok" ? "Grok" : "Kimi"} skill`;
   if (skill.state === "skipped") {
     return { name: destination, status: "warning", detail: `optional skill ignored: ${skill.reason ?? "local safety check"}`, fix: "Keep the directory private and non-symlinked, or install the skill separately. Provider wrappers remain available." };
   }
