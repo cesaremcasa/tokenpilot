@@ -12,6 +12,8 @@ export const TOKEN_EFFICIENCY_INSTRUCTION = "Minimize token use without reducing
 /**
  * Grok v2 still spent context loading unrelated skills, narrating tool use, and
  * reading broader source/test surfaces than the requested answer required.
+ * Grok v3's generic "minimal" help value was rejected by the installed model;
+ * v4 retains the empirically accepted "low" value while keeping the new rule.
  * This provider-specific rule is fixed and content-free. It preserves tools,
  * the native system prompt, safety checks, and the user's requested scope.
  */
@@ -69,7 +71,7 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
   if (provider === "grok") {
     const effortOption = supports(help, "--reasoning-effort") ? "--reasoning-effort" : supports(help, "--effort") ? "--effort" : undefined;
     return effortOption && supports(help, "--rules") && supports(help, "--verbatim")
-      ? { args: [effortOption, "minimal", "--verbatim", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION], applied: true, profile: "grok-balanced-v3", summary: "minimal reasoning, verbatim prompt, targeted context without tool narration" }
+      ? { args: [effortOption, "low", "--verbatim", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION], applied: true, profile: "grok-balanced-v4", summary: "low reasoning, verbatim prompt, targeted context without tool narration" }
       : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete token-reduction policy" };
   }
 
