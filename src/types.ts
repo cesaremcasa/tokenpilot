@@ -61,6 +61,12 @@ export interface UsageMetrics {
   modelCalls?: number;
   /** A provider-published session total that has no safe category breakdown. */
   reportedTotal?: number;
+  /**
+   * Set only when the adapter has verified that `reportedTotal` includes
+   * cached input. It lets a report distinguish an actual lower total from a
+   * move from newly-created input into cache reads.
+   */
+  reportedTotalIncludesCachedInput?: boolean;
 }
 
 export interface UsageRecord extends UsageMetrics {
@@ -139,6 +145,9 @@ export interface SessionSummary {
   output: number;
   reasoning: number;
   reportedTotal?: number;
+  reportedTotalIncludesCachedInput?: boolean;
+  /** All base categories required to construct a category total are present. */
+  categoryMetricsComplete?: boolean;
   measurementBasis?: "token-pressure" | "provider-total";
   /** All numeric categories needed by the attached pricing profile were published. */
   pricingCompatible?: boolean;
@@ -151,11 +160,25 @@ export interface TreatmentComparison {
   provider: Provider;
   taskKind: TaskKind;
   optimizationProfile: string;
-  metricLabel: "token pressure" | "provider-reported total";
+  /** The complete, cache-aware counter used for the experimental conclusion. */
+  metricLabel: "category total" | "provider-reported total";
   baselineSessions: number;
   treatmentSessions: number;
   baselineMedianTokenPressure: number;
   treatmentMedianTokenPressure: number;
+  baselineMedianInputNew: number;
+  treatmentMedianInputNew: number;
+  baselineMedianCachedInput: number;
+  treatmentMedianCachedInput: number;
+  baselineMedianCacheCreated: number;
+  treatmentMedianCacheCreated: number;
+  baselineMedianOutput: number;
+  treatmentMedianOutput: number;
+  baselineMedianReasoning: number;
+  treatmentMedianReasoning: number;
+  /** Complete, cache-aware total; provider-published when verified, else categories. */
+  baselineMedianComparableTotal: number;
+  treatmentMedianComparableTotal: number;
   /**
    * Counterfactual treatment total using the matched observe median. This is
    * deliberately a within-provider token estimate, never a money estimate.
@@ -164,10 +187,10 @@ export interface TreatmentComparison {
   /** Tokens actually reported by the matched treatment sessions. */
   treatmentRecordedTokens: number;
   /** Matched-baseline estimate minus measured treatment use; may be negative. */
-  estimatedTokensAvoided: number;
+  estimatedTokensAvoided?: number;
   /** Positive means the treatment's median used fewer tokens. */
-  tokenReductionPercent: number;
-  tokenPressureDeltaPercent: number;
+  tokenReductionPercent?: number;
+  tokenPressureDeltaPercent?: number;
   baselineIqrTokenPressure: number;
   treatmentIqrTokenPressure: number;
   baselineMedianDurationSeconds: number;
@@ -184,6 +207,14 @@ export interface TreatmentComparison {
   estimatedUsdAvoided?: number;
   usdReductionPercent?: number;
   readiness: "ready" | "preliminary";
-  /** A token-only conclusion. Preliminary results are intentionally not claims. */
-  tokenResult: "preliminary" | "measured-reduction" | "no-reduction";
+  /**
+   * A cache shift never becomes a saving. A preliminary signal can expose a
+   * directional number, but it is never an economy claim.
+   */
+  tokenResult: "limited" | "cache-shift" | "preliminary-signal" | "validated-reduction";
+  /** Complete source used by the cache-shift guard. */
+  totalSource: "provider-reported total" | "category total";
+  /** Opaque local evidence only; it never contains provider content. */
+  baselineSessionIds: string[];
+  treatmentSessionIds: string[];
 }

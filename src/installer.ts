@@ -318,12 +318,30 @@ function writeCommandShim(target: string, nodeExecutable: string, executable: st
   fs.writeFileSync(target, contents, { mode: 0o700 });
 }
 
-function appendShellBlock(file: string, block: string): void {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * The managed block must be last: user startup files often append an npm or
+ * ~/.local/bin PATH later. Only an exact block owned by this version may be
+ * moved. Modified markers are treated as user content and never overwritten.
+ */
+function replaceShellBlock(file: string, block: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   if (existingRegularFile(file) === false && fs.existsSync(file)) throw new Error(`Refusing non-regular shell startup file: ${file}`);
   const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-  if (existing.includes(SHELL_MARKER_START)) return;
-  fs.appendFileSync(file, `${existing.endsWith("\n") || existing.length === 0 ? "" : "\n"}${block}`, { mode: 0o600 });
+  const exact = new RegExp(`${escapeRegExp(SHELL_MARKER_START)}\n${escapeRegExp(block.split("\n")[1])}\n${escapeRegExp(SHELL_MARKER_END)}\n?`, "g");
+  const ownedBlocks = existing.match(exact) ?? [];
+  if (existing.includes(SHELL_MARKER_START) || existing.includes(SHELL_MARKER_END)) {
+    const markerPairs = (existing.match(new RegExp(escapeRegExp(SHELL_MARKER_START), "g")) ?? []).length
+      + (existing.match(new RegExp(escapeRegExp(SHELL_MARKER_END), "g")) ?? []).length;
+    if (markerPairs !== ownedBlocks.length * 2) {
+      throw new Error("Refusing to modify a changed TokenPilot shell PATH block");
+    }
+  }
+  const withoutOwnedBlock = existing.replace(exact, "").replace(/\n+$/, "");
+  fs.writeFileSync(file, `${withoutOwnedBlock}${withoutOwnedBlock.length > 0 ? "\n" : ""}${block}`, { mode: 0o600 });
 }
 
 function launchAgentPlist(nodeExecutable: string, executable: string): string {
@@ -393,7 +411,7 @@ export function install(paths: TokenPilotPaths, options: InstallOptions = {}): I
   for (const provider of PROVIDERS) writeShim(path.join(paths.shimDir, provider), provider, nodeExecutable, installedExecutable);
   writeCommandShim(plan.command, nodeExecutable, installedExecutable);
   writeSkills(paths, plan.skills, plan.command);
-  if (plan.shellFile) appendShellBlock(plan.shellFile, shellBlock(paths.shimDir));
+  if (plan.shellFile) replaceShellBlock(plan.shellFile, shellBlock(paths.shimDir));
   if (plan.launchAgent) {
     ensurePrivateDirectory(paths, path.dirname(plan.launchAgent));
     assertLaunchAgentTarget(plan.launchAgent);
@@ -440,7 +458,7 @@ export function uninstall(paths: TokenPilotPaths, dryRun = false): InstallPlan {
   for (const shellFile of [path.join(paths.userHome, ".zshrc"), path.join(paths.userHome, ".bashrc")]) {
     if (!fs.existsSync(shellFile) || !existingRegularFile(shellFile)) continue;
     const source = fs.readFileSync(shellFile, "utf8");
-    const expression = new RegExp(`\\n?${SHELL_MARKER_START.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\n[\\s\\S]*?${SHELL_MARKER_END.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\n?`, "g");
+    const expression = new RegExp(`\\n?${escapeRegExp(SHELL_MARKER_START)}\\n[\\s\\S]*?${escapeRegExp(SHELL_MARKER_END)}\\n?`, "g");
     fs.writeFileSync(shellFile, source.replace(expression, ""), { mode: 0o600 });
   }
   return plan;

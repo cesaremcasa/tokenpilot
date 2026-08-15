@@ -34,7 +34,7 @@ describe("installation and fail-open launcher lookup", () => {
     expect(fs.readFileSync(plan.skills[0].target, "utf8")).toContain("tokenpilot-managed-skill");
     expect(fs.readFileSync(plan.skills[1].target, "utf8")).toContain("tokenpilot-managed-skill");
     expect(fs.readFileSync(plan.skills[2].target, "utf8")).toContain("tokenpilot-managed-skill");
-    expect(fs.readFileSync(plan.skills[0].target, "utf8")).toContain(`'${plan.command}' report --format md`);
+    expect(fs.readFileSync(plan.skills[0].target, "utf8")).toContain(`'${plan.command}' report --view summary --format md`);
     expect(fs.readFileSync(plan.skills[0].target, "utf8")).not.toContain("{{TOKENPILOT_COMMAND}}");
     expect(plan.skills.map((skill) => skill.state)).toEqual(["installed", "installed", "installed"]);
     const shim = fs.readFileSync(path.join(paths.shimDir, "codex"), "utf8");
@@ -67,6 +67,20 @@ describe("installation and fail-open launcher lookup", () => {
     expect(fs.readFileSync(shellFile, "utf8")).toContain(paths.shimDir);
     uninstall(paths);
     expect(fs.readFileSync(shellFile, "utf8")).not.toContain("tokenpilot");
+    cleanup(paths);
+  });
+
+  it("moves its exact PATH block to the end on reinstall so later local bins cannot shadow shims", () => {
+    const paths = temporaryPaths();
+    const shellFile = path.join(paths.userHome, ".zshrc");
+    fs.writeFileSync(shellFile, `export PATH='${path.join(paths.userHome, ".local", "bin")}:$PATH\n`, { mode: 0o600 });
+    install(paths, { noAgent: true, shell: "/bin/zsh", executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
+    // Simulate a package manager appending its own bin path after the first install.
+    fs.appendFileSync(shellFile, `export PATH='${path.join(paths.userHome, ".local", "bin")}:$PATH\n`, { mode: 0o600 });
+    install(paths, { noAgent: true, shell: "/bin/zsh", executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });
+    const contents = fs.readFileSync(shellFile, "utf8");
+    expect((contents.match(/# >>> tokenpilot >>>/g) ?? [])).toHaveLength(1);
+    expect(contents.lastIndexOf("# >>> tokenpilot >>>")).toBeGreaterThan(contents.lastIndexOf(".local/bin"));
     cleanup(paths);
   });
 

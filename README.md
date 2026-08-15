@@ -13,7 +13,7 @@ It does **not** create a shared cache, proxy model traffic, receive provider cre
 
 ## Current scope: personal measurement and reduction
 
-Version 0.2 is a local macOS/Linux tool. A new install defaults to `balanced`: it persistently alternates provider-local `observe` and `balanced` assignments, starting randomly, so there is still a matched baseline. `deep`, `off`, `observe`, and `TOKENPILOT_BYPASS=1` are immediate controls. The wrapper changes a provider session only after that exact installed CLI advertises the required documented flag; any failed probe starts the original CLI unchanged.
+Version 0.3 is a local macOS/Linux tool. A new install defaults to `balanced`: it persistently alternates provider-local `observe` and `balanced` assignments, starting randomly, so there is still a matched baseline. `deep`, `off`, `observe`, and `TOKENPILOT_BYPASS=1` are immediate controls. The wrapper changes a provider session only after that exact installed CLI advertises the required documented flag; any failed probe starts the original CLI unchanged. Windows native support remains unavailable until its separate clean-machine acceptance suite is complete.
 
 Claude and current Codex CLIs can publish local, authenticated metrics through a per-run receiver. Older Codex CLIs fall back only to their published `exec` total. Grok is measured only in explicit one-turn JSON mode; normal Grok TTY sessions are correctly unavailable for token comparison. Kimi remains a session envelope: it does not claim token measurement or savings until documented correlation exists. TokenPilot never scans ambient provider folders, transcripts, or logs.
 
@@ -44,7 +44,7 @@ exec "$SHELL" -l
 tokenpilot doctor
 ```
 
-The installer creates the `tokenpilot` command and per-provider shims at `~/.tokenpilot/bin`, then adds that directory to `~/.zshrc` or `~/.bashrc`. On macOS it also starts a user-only LaunchAgent; on Linux each finished wrapped session finalizes its own collection state, so no system service or root access is required. It copies the compiled runtime into private TokenPilot state, so installed commands keep working if the cloned checkout is moved or deleted. It never uses `sudo`, downloads no runtime, and performs a platform/Node preflight before writing.
+The installer creates the `tokenpilot` command and per-provider shims at `~/.tokenpilot/bin`, then places its exact managed PATH block at the end of `~/.zshrc` or `~/.bashrc`. This gives shims precedence over a later `~/.local/bin`; a modified managed block is never overwritten. On macOS it also starts a user-only LaunchAgent; on Linux each finished wrapped session finalizes its own collection state, so no system service or root access is required. It copies the compiled runtime into private TokenPilot state, so installed commands keep working if the cloned checkout is moved or deleted.
 
 The report skills are optional integrations. Each destination is inspected independently: an unsafe directory, symlink, or third-party skill is ignored without blocking provider wrappers. `install` prints the resulting state and `tokenpilot doctor` explains the correction. The same versioned skill is installed per user, not per repository or company account:
 
@@ -104,9 +104,11 @@ tokenpilot classify <run-id> --kind bugfix --outcome completed
 # Use benchmark only for controlled checks, never for ordinary work.
 tokenpilot classify <run-id> --kind benchmark --outcome completed
 
-# Aggregate report for the latest seven days. It intentionally never compares
-# raw token totals across providers.
+# Short audit summary for the latest seven days.
 tokenpilot report
+# Full comparison evidence or adapter limitations.
+tokenpilot report --view detail
+tokenpilot report --view diagnostics
 ```
 
 ### Optional API-equivalent USD
@@ -179,10 +181,10 @@ Claude handles prompt caching itself, and its cache prefix is sensitive to model
 1. Install once, then use the CLIs normally. Sessions are measured automatically and can be classified only when you are comfortable doing so.
 2. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for the rolling seven-day report. Claude and Codex measure normal sessions through a local metrics-only receiver; Grok measures explicit JSON single-turn sessions. Other sessions correctly show unavailable rather than an estimate.
 3. `balanced` is the initial mode; set `tokenpilot mode observe` to establish an unchanged-only baseline or use `deep`/`off` as immediate controls. A verified provider policy is applied only when the CLI advertises the necessary flags.
-4. A comparison becomes `ready` only after five measured baseline and five measured treatment sessions for the same provider, known task type, metric basis, policy version, and price-profile snapshot. `unknown` and `benchmark` work are reported automatically but always remain preliminary; benchmarks never mix with ordinary work.
+4. A reduction is validated only after five measured baseline and five measured treatment sessions for the same provider, known non-benchmark task type, complete cache-aware total basis, policy version, and price-profile snapshot. `unknown` and benchmark work can only be a preliminary signal and never a savings claim.
 5. Use `TOKENPILOT_BYPASS=1 <provider>` or `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.
 
-There is intentionally no pre-set savings target. The report begins with coverage (measured and unavailable sessions), then shows a per-provider **reduction and latency summary**: percentage token reduction, estimated tokens avoided, baseline-to-treatment median duration, and whether end-to-end local CLI latency became faster or slower. It also provides matched within-provider comparisons of median token pressure, variation, duration, and classified completion rate. **Estimated tokens avoided** is the matched observe median multiplied by the number of treatment sessions, minus the tokens actually recorded for those treatment sessions. This is a token counterfactual and can be negative when a policy uses more tokens. When category metrics and a selected snapshot are available, the report separately shows expected, used, and avoided **API-equivalent USD**—never a personal subscription saving or actual provider invoice. A changed policy or price snapshot starts a new paired experiment; TokenPilot never compares it against an earlier baseline.
+There is intentionally no pre-set savings target. Coverage comes first. Each provider then shows new input, cache reads, cache creation, token pressure, a complete cache-aware total, latency, and opaque local evidence IDs. A complete total is the verified provider total when it includes cache reads; otherwise it is `new + cached + cache creation + output + reasoning`. If new input moves into cache reads while that total changes by less than 2%, TokenPilot emits `cache-shift`, never a percentage, tokens avoided, or USD avoided. `cache-shift`, limited measurement, and missing comparable baselines have no savings number. A preliminary signal is directional only; **validated reduction** is the sole reduction claim. A changed policy or price snapshot starts a new paired experiment; TokenPilot never compares it against an earlier baseline.
 
 ## Removing TokenPilot
 

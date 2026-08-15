@@ -6,7 +6,7 @@ describe("Grok JSON usage telemetry", () => {
     const parser = new GrokJsonUsageParser();
     parser.accept('{\n  "text": "private output",\n  "thought": "private reasoning",\n  "usage": {\n    "input_tokens": 7');
     parser.accept('542,\n    "cache_read_input_tokens": 11520,\n    "cache_creation_input_tokens": 0,\n    "output_tokens": 57,\n    "reasoning_tokens": 41,\n    "total_tokens": 19119\n  },\n  "modelUsage": {\n    "private": {\n      "inputTokens": 999\n    }\n  }\n}\n');
-    expect(parser.finish()).toEqual({ inputNew: 7542, inputCached: 11520, cacheCreated: 0, output: 57, reasoning: 41, reportedTotal: 19119 });
+    expect(parser.finish()).toEqual({ inputNew: 7542, inputCached: 11520, cacheCreated: 0, output: 57, reasoning: 41, reportedTotal: 19119, reportedTotalIncludesCachedInput: true });
   });
 
   it("observes only explicit JSON single-turn invocations", () => {

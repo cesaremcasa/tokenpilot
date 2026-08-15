@@ -33,6 +33,22 @@ function onPath(directory: string, value = process.env.PATH ?? ""): boolean {
   });
 }
 
+/** Resolve the command that a POSIX PATH lookup would actually execute. */
+function resolvedPathCommand(command: string, value: string): string | undefined {
+  for (const directory of value.split(path.delimiter).filter(Boolean)) {
+    const candidate = path.join(directory, command);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      const stat = fs.lstatSync(candidate);
+      if (!stat.isFile() && !stat.isSymbolicLink()) continue;
+      return fs.realpathSync(candidate);
+    } catch {
+      // Continue to the next PATH entry; doctor is a non-mutating check.
+    }
+  }
+  return undefined;
+}
+
 function regularFile(target: string): boolean {
   try {
     const stat = fs.lstatSync(target);
@@ -91,10 +107,20 @@ export function doctor(paths: TokenPilotPaths, options: { platform?: string; nod
 
   const wrappers = PROVIDERS.map((provider) => regularFile(path.join(paths.shimDir, provider)));
   const command = regularFile(path.join(paths.shimDir, "tokenpilot"));
-  const shimActive = onPath(paths.shimDir, options.pathValue);
-  checks.push(wrappers.every(Boolean) && command && shimActive
-    ? { name: "Wrappers and PATH", status: "ready", detail: "tokenpilot and all provider wrappers are installed and active on PATH" }
-    : { name: "Wrappers and PATH", status: "warning", detail: "one or more wrappers are missing or the shim directory is not active on PATH", fix: "Run tokenpilot install, then start a new terminal or run exec \"$SHELL\" -l." });
+  const pathValue = options.pathValue ?? process.env.PATH ?? "";
+  const shimActive = onPath(paths.shimDir, pathValue);
+  const shadowed = PROVIDERS.filter((provider) => {
+    const resolved = resolvedPathCommand(provider, pathValue);
+    const shim = path.join(paths.shimDir, provider);
+    try {
+      return !resolved || fs.realpathSync(shim) !== resolved;
+    } catch {
+      return true;
+    }
+  });
+  checks.push(wrappers.every(Boolean) && command && shimActive && shadowed.length === 0
+    ? { name: "Wrappers and PATH", status: "ready", detail: "tokenpilot and each provider wrapper win PATH resolution" }
+    : { name: "Wrappers and PATH", status: "warning", detail: shadowed.length > 0 ? `${shadowed.join(", ")} ${shadowed.length === 1 ? "is" : "are"} shadowed or not resolvable through TokenPilot` : "one or more wrappers are missing or the shim directory is not active on PATH", fix: "Run tokenpilot install, then start a new terminal or run exec \"$SHELL\" -l." });
 
   let providerCount = 0;
   for (const provider of PROVIDERS) {

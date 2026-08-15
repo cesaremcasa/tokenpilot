@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
-import { buildReport, reportMarkdown, treatmentComparisons } from "../src/report.js";
+import { buildReport, reportMarkdown, reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
 import type { PricingProfile, SessionSummary } from "../src/types.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
@@ -72,6 +72,17 @@ describe("aggregate reporting", () => {
     cleanup(paths);
   });
 
+  it("recognizes the versioned Grok JSON source as a cache-inclusive provider total after migration", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    const now = new Date().toISOString();
+    database.createRun({ id: "grok-legacy", provider: "grok", mode: "observe", startedAt: now, endedAt: now, collectionState: "collected", taskKind: "benchmark", outcome: "completed" });
+    database.addUsage({ runId: "grok-legacy", observedAt: now, source: "grok-cli-json-usage-v1", inputNew: 10, inputCached: 90, cacheCreated: 0, output: 0, reportedTotal: 100 });
+    expect(database.sessionSummariesSince(new Date(Date.now() - 60_000).toISOString())).toMatchObject([{ reportedTotal: 100, reportedTotalIncludesCachedInput: true }]);
+    database.close();
+    cleanup(paths);
+  });
+
   it("compares matched treatment sessions by median and variation without crossing providers", () => {
     const comparisons = treatmentComparisons([
       { id: "observe-1", provider: "codex", mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v1", taskKind: "bugfix", outcome: "completed", durationSeconds: 20, inputNew: 100, inputCached: 500, cacheCreated: 0, output: 20, reasoning: 80, compactions: 0, retries: 0 },
@@ -85,20 +96,20 @@ describe("aggregate reporting", () => {
       optimizationProfile: "codex-balanced-v1",
       baselineSessions: 2,
       treatmentSessions: 1,
-      baselineExpectedTreatmentTokens: 250,
-      treatmentRecordedTokens: 150,
+      baselineExpectedTreatmentTokens: 700,
+      treatmentRecordedTokens: 600,
       estimatedTokensAvoided: 100,
-      tokenReductionPercent: 40,
+      tokenReductionPercent: 100 / 700 * 100,
       tokenPressureDeltaPercent: -40,
       latencyDeltaSeconds: -5,
       latencyDeltaPercent: -(5 / 30) * 100,
       latencyResult: "faster",
       readiness: "preliminary",
-      tokenResult: "preliminary"
+      tokenResult: "preliminary-signal"
     });
   });
 
-  it("calculates token-only avoidance from a matched baseline without counting cache reads", () => {
+  it("does not manufacture a reduction when cache reads make the complete category total larger", () => {
     const sessions = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
       id: `${mode}-${index}`,
       provider: "grok" as const,
@@ -120,15 +131,99 @@ describe("aggregate reporting", () => {
     })));
     const [comparison] = treatmentComparisons(sessions);
     expect(comparison).toMatchObject({
-      baselineExpectedTreatmentTokens: 500,
-      treatmentRecordedTokens: 350,
-      estimatedTokensAvoided: 150,
+      baselineExpectedTreatmentTokens: 505,
+      treatmentRecordedTokens: 500350,
+      estimatedTokensAvoided: -499845,
       readiness: "ready",
-      tokenResult: "measured-reduction"
+      tokenResult: "preliminary-signal"
     });
   });
 
-  it("reports a ready non-reduction instead of hiding increased token use", () => {
+  it("labels a flat category total with moved new input as cache-shift, including for Claude", () => {
+    const sessions: SessionSummary[] = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
+      id: `${mode}-${index}`,
+      provider: "claude" as const,
+      mode,
+      optimizationApplied: mode === "balanced",
+      optimizationProfile: mode === "balanced" ? "claude-balanced-v2" : undefined,
+      comparisonProfile: "claude-balanced-v2",
+      taskKind: "feature" as const,
+      outcome: "completed" as const,
+      durationSeconds: 5,
+      inputNew: mode === "observe" ? 7_543 : 120,
+      inputCached: mode === "observe" ? 11_520 : 18_944,
+      cacheCreated: 0,
+      output: mode === "observe" ? 64 : 48,
+      reasoning: 0,
+      categoryMetricsComplete: true,
+      measurementBasis: "token-pressure" as const,
+      compactions: 0,
+      retries: 0
+    })));
+    const [comparison] = treatmentComparisons(sessions);
+    expect(comparison).toMatchObject({
+      totalSource: "category total",
+      baselineMedianComparableTotal: 19_127,
+      treatmentMedianComparableTotal: 19_112,
+      tokenResult: "cache-shift",
+      estimatedTokensAvoided: undefined,
+      estimatedUsdAvoided: undefined
+    });
+    const summary = reportSummaryMarkdown({
+      generatedAt: "now",
+      since: "then",
+      rows: [],
+      coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
+      comparisons: [comparison]
+    });
+    expect(summary).toContain("cache-shift — no reduction emitted");
+    expect(summary).not.toContain("97.4%");
+    expect(summary).not.toContain("feature/claude-balanced-v2: 97.4% validated reduction");
+    const serialized = JSON.stringify(comparison);
+    expect(serialized).not.toContain("estimatedTokensAvoided");
+    expect(serialized).not.toContain("tokenReductionPercent");
+    expect(serialized).not.toContain("estimatedUsdAvoided");
+  });
+
+  it("allows Claude category totals to produce a validated reduction when cache is stable", () => {
+    const sessions: SessionSummary[] = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
+      id: `claude-${mode}-${index}`,
+      provider: "claude" as const,
+      mode,
+      optimizationApplied: mode === "balanced",
+      optimizationProfile: mode === "balanced" ? "claude-balanced-v2" : undefined,
+      comparisonProfile: "claude-balanced-v2",
+      taskKind: "feature" as const,
+      outcome: "completed" as const,
+      durationSeconds: 4,
+      inputNew: mode === "observe" ? 100 : 50,
+      inputCached: 10,
+      cacheCreated: 0,
+      output: 10,
+      reasoning: 0,
+      categoryMetricsComplete: true,
+      measurementBasis: "token-pressure" as const,
+      compactions: 0,
+      retries: 0
+    })));
+    const [comparison] = treatmentComparisons(sessions);
+    expect(comparison).toMatchObject({ totalSource: "category total", tokenResult: "validated-reduction", tokenReductionPercent: 100 / 120 * 50 });
+  });
+
+  it("shows Grok TTY coverage as limited rather than estimating zero", () => {
+    const summary = reportSummaryMarkdown({
+      generatedAt: "now",
+      since: "then",
+      rows: [],
+      coverage: [{ provider: "grok", sessions: 3, measuredSessions: 0, unavailableSessions: 3 }],
+      comparisons: []
+    });
+    expect(summary).toContain("limited measurement");
+    expect(summary).toContain("no comparable numeric session");
+    expect(summary).not.toContain("0.0% reduction");
+  });
+
+  it("does not call increased complete totals a reduction", () => {
     const sessions = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
       id: `${mode}-${index}`,
       provider: "claude" as const,
@@ -151,7 +246,7 @@ describe("aggregate reporting", () => {
     expect(comparison).toMatchObject({
       estimatedTokensAvoided: -100,
       readiness: "ready",
-      tokenResult: "no-reduction"
+      tokenResult: "preliminary-signal"
     });
   });
 
@@ -180,7 +275,7 @@ describe("aggregate reporting", () => {
   it("keeps unknown and benchmark work preliminary even after five measured sessions per arm", () => {
     for (const taskKind of ["unknown", "benchmark"] as const) {
       const [comparison] = treatmentComparisons(pricedSessions(taskKind));
-      expect(comparison).toMatchObject({ taskKind, baselineSessions: 5, treatmentSessions: 5, readiness: "preliminary", tokenResult: "preliminary" });
+      expect(comparison).toMatchObject({ taskKind, baselineSessions: 5, treatmentSessions: 5, readiness: "preliminary", tokenResult: "preliminary-signal" });
     }
   });
 
@@ -201,6 +296,8 @@ describe("aggregate reporting", () => {
       output: 0,
       reasoning: 0,
       reportedTotal: mode === "observe" ? 100 : 50,
+      reportedTotalIncludesCachedInput: true,
+      categoryMetricsComplete: false,
       measurementBasis: "provider-total",
       pricingProfile: pricedCodex,
       pricingCompatible: false,
@@ -208,7 +305,7 @@ describe("aggregate reporting", () => {
       retries: 0
     })));
     const [comparison] = treatmentComparisons(sessions);
-    expect(comparison).toMatchObject({ tokenResult: "measured-reduction", baselineExpectedUsd: undefined, treatmentRecordedUsd: undefined, estimatedUsdAvoided: undefined });
+    expect(comparison).toMatchObject({ tokenResult: "validated-reduction", baselineExpectedUsd: undefined, treatmentRecordedUsd: undefined, estimatedUsdAvoided: undefined });
   });
 
   it("stores the selected price profile inside the session record", () => {
@@ -221,22 +318,17 @@ describe("aggregate reporting", () => {
     cleanup(paths);
   });
 
-  it("renders the counterfactual and distinguishes API-equivalent USD from a provider bill", () => {
+  it("renders audit evidence and distinguishes API-equivalent USD from a provider bill", () => {
     const comparisons = treatmentComparisons([
-      { id: "observe", provider: "codex", mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v1", taskKind: "benchmark", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, reportedTotal: 100, measurementBasis: "provider-total", compactions: 0, retries: 0 },
-      { id: "balanced", provider: "codex", mode: "balanced", optimizationApplied: true, optimizationProfile: "codex-balanced-v1", comparisonProfile: "codex-balanced-v1", taskKind: "benchmark", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, reportedTotal: 80, measurementBasis: "provider-total", compactions: 0, retries: 0 }
+      { id: "observe", provider: "codex", mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v1", taskKind: "benchmark", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, reportedTotal: 100, reportedTotalIncludesCachedInput: true, categoryMetricsComplete: false, measurementBasis: "provider-total", compactions: 0, retries: 0 },
+      { id: "balanced", provider: "codex", mode: "balanced", optimizationApplied: true, optimizationProfile: "codex-balanced-v1", comparisonProfile: "codex-balanced-v1", taskKind: "benchmark", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, reportedTotal: 80, reportedTotalIncludesCachedInput: true, categoryMetricsComplete: false, measurementBasis: "provider-total", compactions: 0, retries: 0 }
     ]);
     const markdown = reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons });
-    expect(markdown).toContain("## Estimated token avoidance");
-    expect(markdown).toContain("Estimated tokens avoided");
+    expect(markdown).toContain("## Matched audit comparisons");
+    expect(markdown).toContain("baseline: observe");
     expect(markdown).toContain("## API-equivalent USD");
     expect(markdown).toContain("not a provider bill");
-    expect(markdown).toContain("## Reduction and latency summary");
-    expect(markdown).toContain("Baseline expected");
-    expect(markdown).toContain("Actual tokens used");
-    expect(markdown).toContain("not tokens blocked by the provider");
-    expect(markdown).toContain("| codex | benchmark | codex-balanced-v1 | preliminary | 100 | 80 | 20 | 20.0% reduction");
-    expect(markdown).toContain("20.0% reduction");
+    expect(markdown).toContain("preliminary signal");
   });
 
   it("does not compare a treatment with a baseline assigned to another policy version", () => {

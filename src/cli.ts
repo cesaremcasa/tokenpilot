@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { getPaths } from "./paths.js";
 import { install, uninstall } from "./installer.js";
 import { collectPendingRuns } from "./collector.js";
-import { buildReport, reportMarkdown } from "./report.js";
+import { buildReport, renderReportMarkdown, type ReportView } from "./report.js";
 import { runProvider } from "./launcher.js";
 import { addPricing, disablePricing, ensureConfig, listPricing, setMode, setPricing } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
@@ -27,7 +27,7 @@ Usage:
   tokenpilot collect
   tokenpilot sessions [--days <1-365>] [--unclassified]
   tokenpilot classify <run-id> --kind <feature|bugfix|research|operations|benchmark|other> --outcome <completed|rework|abandoned>
-  tokenpilot report [--days <1-365>] [--format <md|json>]
+  tokenpilot report [--days <1-365>] [--view <summary|detail|diagnostics>] [--format <md|json>]
   tokenpilot status
 
 Daily usage after install is unchanged: claude, codex, grok, or kimi.
@@ -178,10 +178,10 @@ function sessions(args: string[]): void {
       process.stdout.write("No matching TokenPilot sessions.\n");
       return;
     }
-    process.stdout.write("Run ID                              Provider  Started                   Mode      Policy                 Task        Outcome\n");
+    process.stdout.write("Run ID                              Provider  Started                   Mode      Policy                 Task        Outcome     Measurement\n");
     for (const row of rows) {
       const policy = row.optimizationProfile ?? row.comparisonProfile ?? "none";
-      process.stdout.write(`${row.id}  ${row.provider.padEnd(8)}  ${row.startedAt.slice(0, 19)}  ${row.mode.padEnd(8)}  ${policy.padEnd(21)}  ${row.taskKind.padEnd(10)}  ${row.outcome}\n`);
+      process.stdout.write(`${row.id}  ${row.provider.padEnd(8)}  ${row.startedAt.slice(0, 19)}  ${row.mode.padEnd(8)}  ${policy.padEnd(21)}  ${row.taskKind.padEnd(10)}  ${row.outcome.padEnd(10)}  ${row.collectionState}\n`);
     }
   } finally {
     database.close();
@@ -260,8 +260,12 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const days = daysArgument(args);
     const report = buildReport(paths, days);
     const format = flag(args, "--format") ?? "md";
+    const view = flag(args, "--view") ?? "summary";
+    if (!(["summary", "detail", "diagnostics"] as const).includes(view as ReportView)) {
+      throw new Error("--view must be summary, detail, or diagnostics");
+    }
     if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    else if (format === "md") process.stdout.write(reportMarkdown(report));
+    else if (format === "md") process.stdout.write(renderReportMarkdown(report, view as ReportView));
     else throw new Error("--format must be md or json");
     return 0;
   }

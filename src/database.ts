@@ -12,6 +12,7 @@ export interface TelemetryDatabaseOptions {
 export class TelemetryDatabase {
   private readonly db: DatabaseSync;
   private readonly hasReportedTotalColumn: boolean;
+  private readonly hasReportedTotalSemanticsColumn: boolean;
   private readonly hasComparisonProfileColumn: boolean;
   private readonly hasPricingProfileColumn: boolean;
 
@@ -21,6 +22,7 @@ export class TelemetryDatabase {
       assertSafeStateFile(paths, paths.databaseFile);
       this.db = new DatabaseSync(paths.databaseFile, { readOnly: true });
       this.hasReportedTotalColumn = this.usageColumnExists("reported_total");
+      this.hasReportedTotalSemanticsColumn = this.usageColumnExists("reported_total_includes_cached_input");
       this.hasComparisonProfileColumn = this.runColumnExists("comparison_profile");
       this.hasPricingProfileColumn = this.runColumnExists("pricing_profile");
       return;
@@ -34,6 +36,7 @@ export class TelemetryDatabase {
     this.db.exec("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON;");
     this.migrate();
     this.hasReportedTotalColumn = this.usageColumnExists("reported_total");
+    this.hasReportedTotalSemanticsColumn = this.usageColumnExists("reported_total_includes_cached_input");
     this.hasComparisonProfileColumn = this.runColumnExists("comparison_profile");
     this.hasPricingProfileColumn = this.runColumnExists("pricing_profile");
   }
@@ -67,7 +70,8 @@ export class TelemetryDatabase {
         output INTEGER,
         reasoning INTEGER,
         model_calls INTEGER,
-        reported_total INTEGER
+        reported_total INTEGER,
+        reported_total_includes_cached_input INTEGER
       ) STRICT;
       CREATE TABLE IF NOT EXISTS session_events (
         id INTEGER PRIMARY KEY,
@@ -90,6 +94,7 @@ export class TelemetryDatabase {
     this.ensureRunColumn("comparison_profile", "TEXT");
     this.ensureRunColumn("pricing_profile", "TEXT");
     this.ensureUsageColumn("reported_total", "INTEGER");
+    this.ensureUsageColumn("reported_total_includes_cached_input", "INTEGER");
   }
 
   private usageColumnExists(name: string): boolean {
@@ -97,7 +102,7 @@ export class TelemetryDatabase {
     return columns.some((column) => column.name === name);
   }
 
-  private ensureUsageColumn(name: "reported_total", definition: string): void {
+  private ensureUsageColumn(name: "reported_total" | "reported_total_includes_cached_input", definition: string): void {
     if (!this.usageColumnExists(name)) this.db.exec(`ALTER TABLE usage_records ADD COLUMN ${name} ${definition}`);
   }
 
@@ -165,11 +170,11 @@ export class TelemetryDatabase {
   addUsage(record: UsageRecord): void {
     safeUsage(record);
     this.db.prepare(`INSERT INTO usage_records
-      (run_id, observed_at, source, input_new, input_cached, cache_created, output, reasoning, model_calls, reported_total)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (run_id, observed_at, source, input_new, input_cached, cache_created, output, reasoning, model_calls, reported_total, reported_total_includes_cached_input)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(record.runId, record.observedAt, record.source, record.inputNew ?? null, record.inputCached ?? null,
         record.cacheCreated ?? null, record.output ?? null, record.reasoning ?? null, record.modelCalls ?? null,
-        record.reportedTotal ?? null);
+        record.reportedTotal ?? null, record.reportedTotalIncludesCachedInput === true ? 1 : null);
   }
 
   addEvent(record: SessionEvent): void {
@@ -288,6 +293,7 @@ export class TelemetryDatabase {
 
   sessionSummariesSince(since: string): SessionSummary[] {
     const reportedTotal = this.hasReportedTotalColumn ? "u.reported_total" : "NULL";
+    const reportedTotalSemantics = this.hasReportedTotalSemanticsColumn ? "u.reported_total_includes_cached_input" : "0";
     return (this.db.prepare(`
       WITH usage AS (
         SELECT run_id, SUM(COALESCE(input_new, 0)) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
@@ -298,7 +304,7 @@ export class TelemetryDatabase {
           MAX(CASE WHEN input_cached IS NOT NULL THEN 1 ELSE 0 END) AS has_input_cached,
           MAX(CASE WHEN cache_created IS NOT NULL THEN 1 ELSE 0 END) AS has_cache_created,
           MAX(CASE WHEN output IS NOT NULL THEN 1 ELSE 0 END) AS has_output,
-          MAX(CASE WHEN reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_reasoning${this.hasReportedTotalColumn ? ", SUM(COALESCE(reported_total, 0)) AS reported_total" : ""}
+          MAX(CASE WHEN reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_reasoning${this.hasReportedTotalColumn ? ", SUM(CASE WHEN reported_total IS NOT NULL THEN reported_total ELSE 0 END) AS reported_total, MAX(CASE WHEN reported_total IS NOT NULL THEN 1 ELSE 0 END) AS has_reported_total" : ""}${this.hasReportedTotalSemanticsColumn ? ", MAX(CASE WHEN reported_total IS NOT NULL AND (reported_total_includes_cached_input = 1 OR source = 'grok-cli-json-usage-v1') THEN 1 ELSE 0 END) AS reported_total_includes_cached_input" : ""}
         FROM usage_records GROUP BY run_id
       ), events AS (
         SELECT run_id,
@@ -312,7 +318,7 @@ export class TelemetryDatabase {
         MAX(0, strftime('%s', r.ended_at) - strftime('%s', r.started_at)) AS durationSeconds,
         u.input_new AS inputNew, u.input_cached AS inputCached, u.cache_created AS cacheCreated,
         u.output AS output, u.reasoning AS reasoning,
-        ${reportedTotal} AS reportedTotal, COALESCE(u.has_detailed_usage, 0) AS hasDetailedUsage,
+        ${reportedTotal} AS reportedTotal, COALESCE(u.has_reported_total, 0) AS hasReportedTotal, COALESCE(${reportedTotalSemantics}, 0) AS reportedTotalIncludesCachedInput, COALESCE(u.has_detailed_usage, 0) AS hasDetailedUsage,
         COALESCE(u.has_input_new, 0) AS hasInputNew, COALESCE(u.has_input_cached, 0) AS hasInputCached,
         COALESCE(u.has_cache_created, 0) AS hasCacheCreated, COALESCE(u.has_output, 0) AS hasOutput,
         COALESCE(u.has_reasoning, 0) AS hasReasoning,
@@ -320,7 +326,7 @@ export class TelemetryDatabase {
       FROM runs r JOIN usage u ON u.run_id = r.id LEFT JOIN events e ON e.run_id = r.id
       WHERE r.started_at >= ? AND r.ended_at IS NOT NULL
       ORDER BY r.provider, r.task_kind, r.started_at
-    `).all(since) as unknown as Array<Omit<SessionSummary, "optimizationApplied" | "measurementBasis" | "pricingProfile" | "pricingCompatible"> & {
+    `).all(since) as unknown as Array<Omit<SessionSummary, "optimizationApplied" | "measurementBasis" | "pricingProfile" | "pricingCompatible" | "reportedTotalIncludesCachedInput" | "categoryMetricsComplete"> & {
       optimizationApplied: number;
       pricingProfile?: string | null;
       hasDetailedUsage: number;
@@ -329,6 +335,8 @@ export class TelemetryDatabase {
       hasCacheCreated: number;
       hasOutput: number;
       hasReasoning: number;
+      hasReportedTotal: number;
+      reportedTotalIncludesCachedInput: number;
     }>).map((row) => {
       const pricingProfile = this.storedPricingProfile(row.pricingProfile);
       const categoriesPresent = row.hasInputNew === 1 && row.hasInputCached === 1 && row.hasCacheCreated === 1 && row.hasOutput === 1;
@@ -337,7 +345,9 @@ export class TelemetryDatabase {
         ...row,
         pricingProfile,
         pricingCompatible: Boolean(pricingProfile && categoriesPresent && reasoningPresent),
-        reportedTotal: row.reportedTotal ?? undefined,
+        reportedTotal: row.hasReportedTotal === 1 ? row.reportedTotal : undefined,
+        reportedTotalIncludesCachedInput: row.hasReportedTotal === 1 && row.reportedTotalIncludesCachedInput === 1,
+        categoryMetricsComplete: categoriesPresent,
         measurementBasis: row.hasDetailedUsage === 1 ? "token-pressure" : "provider-total",
         optimizationApplied: Boolean(row.optimizationApplied)
       };
