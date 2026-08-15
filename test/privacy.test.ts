@@ -6,8 +6,12 @@ describe("privacy guard", () => {
     expect(() => assertTelemetrySafe({ provider: "codex", inputNew: 1, inputCached: 2, output: 3 })).not.toThrow();
   });
 
-  it("rejects prompt and credential fields", () => {
+  it("rejects prompts, content, paths, commands, arguments, and credentials", () => {
     expect(() => assertTelemetrySafe({ prompt: "secret source code" })).toThrow(/prompt/i);
+    expect(() => assertTelemetrySafe({ response: "secret" })).toThrow(/response/i);
+    expect(() => assertTelemetrySafe({ path: "/private/work" })).toThrow(/path/i);
+    expect(() => assertTelemetrySafe({ command: "private command" })).toThrow(/command/i);
+    expect(() => assertTelemetrySafe({ args: ["private argument"] })).toThrow(/args/i);
     expect(() => assertTelemetrySafe({ nested: { credential: "secret" } })).toThrow(/credential/i);
   });
 });

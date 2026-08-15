@@ -32,9 +32,40 @@ export interface InstallOptions {
 export interface InstallPlan {
   shims: string[];
   command: string;
-  skills: string[];
+  skills: SkillPlan[];
   shellFile?: string;
   launchAgent?: string;
+}
+
+export interface SkillPlan {
+  target: string;
+  /** `skipped` is safe and does not prevent the core launcher install. */
+  state: "install" | "update" | "installed" | "skipped";
+  reason?: string;
+}
+
+export interface RuntimeSupport {
+  supported: boolean;
+  reason?: string;
+}
+
+/** Pure preflight used by install and doctor; it never writes local state. */
+export function runtimeSupport(platform: string = process.platform, nodeVersion = process.versions.node): RuntimeSupport {
+  if (platform !== "darwin" && platform !== "linux") {
+    return { supported: false, reason: `Unsupported platform: ${platform}. TokenPilot supports macOS and Linux only.` };
+  }
+  const match = /^(\d+)\.(\d+)/.exec(nodeVersion);
+  const major = match ? Number(match[1]) : 0;
+  const minor = match ? Number(match[2]) : 0;
+  if (major < 22 || (major === 22 && minor < 5)) {
+    return { supported: false, reason: `Node ${nodeVersion} is unsupported. Install Node 22.5 or later and run tokenpilot install again.` };
+  }
+  return { supported: true };
+}
+
+export function assertRuntimeSupported(platform: string = process.platform, nodeVersion = process.versions.node): void {
+  const support = runtimeSupport(platform, nodeVersion);
+  if (!support.supported) throw new Error(support.reason);
 }
 
 /**
@@ -129,24 +160,69 @@ function sourceSkillFile(): string {
   return source;
 }
 
-function assertSkillTarget(paths: TokenPilotPaths, target: string): void {
+/**
+ * Skills are optional integrations. A bad or third-party skill target is a
+ * local warning, never a reason to withhold the core provider wrappers.
+ */
+export function assessSkillTarget(paths: TokenPilotPaths, target: string): SkillPlan {
   const directory = path.dirname(target);
-  if (fs.existsSync(directory)) {
-    if (!hasSafePrivateDirectory(paths, directory)) throw new Error(`Refusing unsafe TokenPilot skill directory: ${directory}`);
-    if (!fs.existsSync(target)) throw new Error(`Refusing to add a TokenPilot skill to an existing foreign directory: ${directory}`);
+  try {
+    // This also validates every existing ancestor while permitting a missing
+    // final TokenPilot-owned directory to be created with 0700 permissions.
+    hasSafePrivateDirectory(paths, directory);
+  } catch {
+    return { target, state: "skipped", reason: "skill directory is unsafe or symlinked" };
   }
-  if (fs.existsSync(target) && (!existingRegularFile(target) || !hasOwnedSkill(fs.readFileSync(target, "utf8")))) {
-    throw new Error(`Refusing to overwrite non-TokenPilot skill: ${target}`);
+  try {
+    if (!fs.existsSync(target)) return { target, state: "install" };
+    if (!existingRegularFile(target)) return { target, state: "skipped", reason: "skill target is not a private regular file" };
+    if (!hasOwnedSkill(fs.readFileSync(target, "utf8"))) {
+      return { target, state: "skipped", reason: "a third-party skill already owns this target" };
+    }
+    return { target, state: "update" };
+  } catch {
+    return { target, state: "skipped", reason: "skill target could not be safely inspected" };
   }
 }
 
-function writeSkills(paths: TokenPilotPaths, targets: string[], command: string): void {
-  if (targets.length === 0) return;
+function skipSkills(skills: SkillPlan[], reason: string): void {
+  for (const skill of skills) {
+    if (skill.state !== "skipped") {
+      skill.state = "skipped";
+      skill.reason = reason;
+    }
+  }
+}
+
+function writeSkills(paths: TokenPilotPaths, skills: SkillPlan[], command: string): void {
+  const candidates = skills.filter((skill) => skill.state === "install" || skill.state === "update");
+  if (candidates.length === 0) return;
   assertSafeText(command, "skill command path");
-  const contents = fs.readFileSync(sourceSkillFile(), "utf8").replaceAll(SKILL_COMMAND_PLACEHOLDER, quoteShell(command));
-  for (const target of targets) {
-    ensurePrivateDirectory(paths, path.dirname(target));
-    fs.writeFileSync(target, contents, { mode: 0o600 });
+  let contents: string;
+  try {
+    contents = fs.readFileSync(sourceSkillFile(), "utf8").replaceAll(SKILL_COMMAND_PLACEHOLDER, quoteShell(command));
+  } catch {
+    skipSkills(candidates, "packaged TokenPilot skill is unavailable");
+    return;
+  }
+  for (const skill of candidates) {
+    try {
+      // Reassess immediately before writing so a concurrent replacement can
+      // only disable this optional integration, never redirect the write.
+      const latest = assessSkillTarget(paths, skill.target);
+      if (latest.state === "skipped") {
+        skill.state = "skipped";
+        skill.reason = latest.reason;
+        continue;
+      }
+      ensurePrivateDirectory(paths, path.dirname(skill.target));
+      fs.writeFileSync(skill.target, contents, { mode: 0o600 });
+      skill.state = "installed";
+      delete skill.reason;
+    } catch {
+      skill.state = "skipped";
+      skill.reason = "skill write was refused by local safety checks";
+    }
   }
 }
 
@@ -216,14 +292,15 @@ function stageRuntimeBundle(paths: TokenPilotPaths, executable: string): string 
 
 export function createInstallPlan(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
   const shellFile = options.noShellConfig ? undefined : shellStartupFile(options.shell ?? process.env.SHELL, paths.userHome);
+  const skillTargets = options.noSkills ? [] : [
+    path.join(paths.userHome, ".agents", "skills", SKILL_RELATIVE_PATH),
+    path.join(paths.userHome, ".claude", "skills", SKILL_RELATIVE_PATH),
+    path.join(paths.userHome, ".kimi", "skills", SKILL_RELATIVE_PATH)
+  ];
   return {
     shims: PROVIDERS.map((provider) => path.join(paths.shimDir, provider)),
     command: path.join(paths.shimDir, "tokenpilot"),
-    skills: options.noSkills ? [] : [
-      path.join(paths.userHome, ".agents", "skills", SKILL_RELATIVE_PATH),
-      path.join(paths.userHome, ".claude", "skills", SKILL_RELATIVE_PATH),
-      path.join(paths.userHome, ".kimi", "skills", SKILL_RELATIVE_PATH)
-    ],
+    skills: skillTargets.map((target) => assessSkillTarget(paths, target)),
     shellFile,
     launchAgent: shouldInstallLaunchAgent(process.platform, options.noAgent === true) ? paths.launchAgentFile : undefined
   };
@@ -295,16 +372,15 @@ function bootstrapAgent(plist: string): void {
 }
 
 export function install(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
+  assertRuntimeSupported();
   const plan = createInstallPlan(paths, options);
   if (options.dryRun) return plan;
 
   const executable = options.executable ?? fileURLToPath(import.meta.url).replace(/installer\.js$/, "cli.js");
   const nodeExecutable = options.nodeExecutable ?? process.execPath;
 
-  // Validate all user-owned targets before creating any TokenPilot state,
-  // shim, or shell configuration. A foreign target leaves no partial install.
-  sourceSkillFile();
-  for (const target of plan.skills) assertSkillTarget(paths, target);
+  // Validate all required user-owned targets before creating TokenPilot state.
+  // Optional skills are assessed independently and can be safely skipped.
   for (const provider of PROVIDERS) assertShimTarget(path.join(paths.shimDir, provider), provider);
   assertCommandTarget(plan.command);
   if (plan.shellFile) assertShellStartupFile(plan.shellFile);
@@ -346,14 +422,18 @@ export function uninstall(paths: TokenPilotPaths, dryRun = false): InstallPlan {
     if (existingRegularFile(plan.command) && hasOwnedCommand(fs.readFileSync(plan.command, "utf8"))) fs.rmSync(plan.command);
   }
   for (const skill of plan.skills) {
-    const skillDirectory = path.dirname(skill);
-    if (!hasSafePrivateDirectory(paths, skillDirectory) || !existingRegularFile(skill)) continue;
-    if (!hasOwnedSkill(fs.readFileSync(skill, "utf8"))) continue;
-    fs.rmSync(skill);
+    const skillDirectory = path.dirname(skill.target);
     try {
-      fs.rmdirSync(skillDirectory);
+      if (!hasSafePrivateDirectory(paths, skillDirectory) || !existingRegularFile(skill.target)) continue;
+      if (!hasOwnedSkill(fs.readFileSync(skill.target, "utf8"))) continue;
+      fs.rmSync(skill.target);
+      try {
+        fs.rmdirSync(skillDirectory);
+      } catch {
+        // Keep a directory containing user-owned supporting files.
+      }
     } catch {
-      // Keep a directory containing user-owned supporting files.
+      // Optional unsafe integrations are never modified during uninstall.
     }
   }
   if (plan.launchAgent && ownsLaunchAgent) fs.rmSync(plan.launchAgent);

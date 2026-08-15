@@ -6,9 +6,31 @@ export type TaskKind = "feature" | "bugfix" | "research" | "operations" | "bench
 export type TaskOutcome = "completed" | "rework" | "abandoned" | "unknown";
 export type CollectionState = "pending" | "collected" | "unavailable";
 
+/** API-equivalent USD rates, expressed per one million units. */
+export interface PricingRates {
+  inputUsdPerMillion: number;
+  cachedInputUsdPerMillion: number;
+  cacheCreationUsdPerMillion: number;
+  outputUsdPerMillion: number;
+  /** Omit when the provider does not publish reasoning usage separately. */
+  reasoningUsdPerMillion?: number;
+}
+
+/** A user-chosen, local-only API-equivalent pricing profile. */
+export interface PricingProfile {
+  id: string;
+  provider: Provider;
+  version: string;
+  label: string;
+  currency: "USD";
+  rates: PricingRates;
+}
+
 export interface TokenPilotConfig {
-  version: 1;
+  version: 2;
   defaultMode: RunMode;
+  pricingProfiles: PricingProfile[];
+  activePricing: Partial<Record<Provider, string>>;
 }
 
 export interface RunRecord {
@@ -23,6 +45,8 @@ export interface RunRecord {
   optimizationProfile?: string;
   /** The policy profile assigned to this observe/treatment experiment pair. */
   comparisonProfile?: string;
+  /** Local API-equivalent profile snapshot captured before the provider starts. */
+  pricingProfile?: PricingProfile;
   collectionState: CollectionState;
   taskKind: TaskKind;
   outcome: TaskOutcome;
@@ -116,6 +140,9 @@ export interface SessionSummary {
   reasoning: number;
   reportedTotal?: number;
   measurementBasis?: "token-pressure" | "provider-total";
+  /** All numeric categories needed by the attached pricing profile were published. */
+  pricingCompatible?: boolean;
+  pricingProfile?: PricingProfile;
   compactions: number;
   retries: number;
 }
@@ -151,6 +178,11 @@ export interface TreatmentComparison {
   latencyResult: "faster" | "slower" | "unchanged";
   baselineCompletionRate?: number;
   treatmentCompletionRate?: number;
+  pricingProfile?: Pick<PricingProfile, "id" | "version" | "label" | "currency">;
+  baselineExpectedUsd?: number;
+  treatmentRecordedUsd?: number;
+  estimatedUsdAvoided?: number;
+  usdReductionPercent?: number;
   readiness: "ready" | "preliminary";
   /** A token-only conclusion. Preliminary results are intentionally not claims. */
   tokenResult: "preliminary" | "measured-reduction" | "no-reduction";

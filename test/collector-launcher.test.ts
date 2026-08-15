@@ -5,6 +5,7 @@ import { collectPendingRuns } from "../src/collector.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
+import { buildReport, reportMarkdown } from "../src/report.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("local launcher and collector", () => {
@@ -45,6 +46,9 @@ describe("local launcher and collector", () => {
   it("records an envelope but never imports ambient provider telemetry", async () => {
     const paths = temporaryPaths();
     const originalBin = writeFakeCodex(paths, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'fake-codex 1.0\\n'; fi\nexit 0\n");
+    const config = ensureConfig(paths);
+    config.defaultMode = "observe";
+    writeConfig(paths, config);
 
     expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
     const before = new TelemetryDatabase(paths);
@@ -76,7 +80,7 @@ describe("local launcher and collector", () => {
     expect(allocator.allocateBalancedMode("codex", () => 0.9)).toBe("observe");
     allocator.close();
 
-    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "test"], paths))).toBe(0);
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "super-secret-command-argument"], paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
@@ -100,6 +104,12 @@ describe("local launcher and collector", () => {
     const aggregate = database.aggregateSince(new Date(Date.now() - 60_000).toISOString());
     expect(aggregate[0]).toMatchObject({ provider: "codex", reportedTotal: 7675, inputNew: 0, output: 0 });
     database.close();
+    const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
+    const markdown = reportMarkdown(buildReport(paths, 7));
+    for (const forbidden of ["response that must not persist", "super-secret-command-argument", "fake-codex"]) {
+      expect(rawDatabase).not.toContain(forbidden);
+      expect(markdown).not.toContain(forbidden);
+    }
     cleanup(paths);
   });
 

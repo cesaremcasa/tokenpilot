@@ -102,6 +102,27 @@ function metricLabel(session: SessionSummary): TreatmentComparison["metricLabel"
   return session.measurementBasis === "provider-total" ? "provider-reported total" : "token pressure";
 }
 
+function pricingSignature(session: SessionSummary): string {
+  const profile = session.pricingProfile;
+  if (!profile) return "none";
+  // A snapshot, rather than the mutable current configuration, makes old
+  // reports reproducible if the user later updates a local price profile.
+  return JSON.stringify({ id: profile.id, version: profile.version, rates: profile.rates });
+}
+
+function apiEquivalentUsd(session: SessionSummary): number | undefined {
+  const profile = session.pricingProfile;
+  if (!profile || !session.pricingCompatible || session.measurementBasis !== "token-pressure") return undefined;
+  const rates = profile.rates;
+  if (rates.reasoningUsdPerMillion !== undefined && session.reasoning === undefined) return undefined;
+  const units = 1_000_000;
+  return (session.inputNew * rates.inputUsdPerMillion
+    + session.inputCached * rates.cachedInputUsdPerMillion
+    + session.cacheCreated * rates.cacheCreationUsdPerMillion
+    + session.output * rates.outputUsdPerMillion
+    + session.reasoning * (rates.reasoningUsdPerMillion ?? 0)) / units;
+}
+
 function completionRate(sessions: SessionSummary[]): number | undefined {
   const classified = sessions.filter((session) => session.outcome !== "unknown");
   if (classified.length === 0) return undefined;
@@ -116,7 +137,7 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const basis = session.measurementBasis ?? "token-pressure";
     const profile = session.comparisonProfile ?? (session.mode === "balanced" ? session.optimizationProfile : undefined);
     if (!profile) continue;
-    const scope = `${session.provider}\u0000${session.taskKind}\u0000${basis}\u0000${profile}`;
+    const scope = `${session.provider}\u0000${session.taskKind}\u0000${basis}\u0000${profile}\u0000${pricingSignature(session)}`;
     if (session.mode === "observe") baselines.set(scope, [...(baselines.get(scope) ?? []), session]);
     if (session.mode === "balanced" && session.optimizationApplied && session.optimizationProfile) {
       treatments.set(scope, [...(treatments.get(scope) ?? []), session]);
@@ -143,10 +164,29 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const latencyDeltaSeconds = treatmentMedianDurationSeconds - baselineMedianDurationSeconds;
     const latencyDeltaPercent = baselineMedianDurationSeconds === 0 ? 0 : (latencyDeltaSeconds / baselineMedianDurationSeconds) * 100;
     const latencyResult: TreatmentComparison["latencyResult"] = latencyDeltaSeconds < 0 ? "faster" : latencyDeltaSeconds > 0 ? "slower" : "unchanged";
-    const readiness = baseline.length >= 5 && treatment.length >= 5 ? "ready" as const : "preliminary" as const;
+    // Unknown work can be useful for personal monitoring, but it mixes task
+    // shapes. Benchmarks are intentionally kept out of real-work claims.
+    const classifiedWork = taskKind !== "unknown" && taskKind !== "benchmark";
+    const readiness = classifiedWork && baseline.length >= 5 && treatment.length >= 5 ? "ready" as const : "preliminary" as const;
     const tokenResult: TreatmentComparison["tokenResult"] = readiness === "preliminary"
       ? "preliminary"
       : estimatedTokensAvoided > 0 ? "measured-reduction" : "no-reduction";
+    const baselineUsd = baseline.map(apiEquivalentUsd);
+    const treatmentUsd = treatment.map(apiEquivalentUsd);
+    const hasComparableUsd = baselineUsd.every((value): value is number => value !== undefined)
+      && treatmentUsd.every((value): value is number => value !== undefined);
+    const pricedBaselineUsd = hasComparableUsd ? baselineUsd.map((value) => value as number) : [];
+    const pricedTreatmentUsd = hasComparableUsd ? treatmentUsd.map((value) => value as number) : [];
+    const baselineMedianUsd = hasComparableUsd ? median(pricedBaselineUsd) : undefined;
+    const treatmentRecordedUsd = hasComparableUsd ? sum(pricedTreatmentUsd) : undefined;
+    const baselineExpectedUsd = baselineMedianUsd === undefined ? undefined : baselineMedianUsd * treatment.length;
+    const estimatedUsdAvoided = baselineExpectedUsd === undefined || treatmentRecordedUsd === undefined
+      ? undefined
+      : baselineExpectedUsd - treatmentRecordedUsd;
+    const usdReductionPercent = baselineMedianUsd === undefined || baselineMedianUsd === 0 || pricedTreatmentUsd.length === 0
+      ? undefined
+      : ((baselineMedianUsd - median(pricedTreatmentUsd)) / baselineMedianUsd) * 100;
+    const attachedProfile = treatment[0].pricingProfile;
     return [{
       provider,
       taskKind,
@@ -170,6 +210,16 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       latencyResult,
       baselineCompletionRate: completionRate(baseline),
       treatmentCompletionRate: completionRate(treatment),
+      pricingProfile: attachedProfile ? {
+        id: attachedProfile.id,
+        version: attachedProfile.version,
+        label: attachedProfile.label,
+        currency: attachedProfile.currency
+      } : undefined,
+      baselineExpectedUsd,
+      treatmentRecordedUsd,
+      estimatedUsdAvoided,
+      usdReductionPercent,
       readiness,
       tokenResult
     }];
@@ -182,6 +232,10 @@ function percent(value: number | undefined): string {
 
 function reduction(value: number): string {
   return value >= 0 ? `${value.toFixed(1)}% reduction` : `${Math.abs(value).toFixed(1)}% increase`;
+}
+
+function usd(value: number | undefined): string {
+  return value === undefined ? "—" : `$${value.toFixed(6)}`;
 }
 
 function latency(comparison: TreatmentComparison): string {
@@ -197,7 +251,7 @@ export function reportMarkdown(report: Report): string {
     `Generated: ${report.generatedAt}`,
     `Window: last seven days (starts ${report.since})`,
     "",
-    "> This report contains aggregate numeric telemetry only. Do not compare raw token totals across providers.",
+    "> This report contains aggregate numeric telemetry only. Do not compare raw token totals or API-equivalent USD across providers.",
     "",
     "## Measurement coverage",
     "",
@@ -213,6 +267,13 @@ export function reportMarkdown(report: Report): string {
     lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.optimizationProfile} | ${comparison.tokenResult} | ${integer(comparison.baselineExpectedTreatmentTokens)} | ${integer(comparison.treatmentRecordedTokens)} | ${integer(comparison.estimatedTokensAvoided)} | ${reduction(comparison.tokenReductionPercent)} | ${integer(comparison.baselineMedianDurationSeconds)}s → ${integer(comparison.treatmentMedianDurationSeconds)}s | ${latency(comparison)} |`);
   }
   if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — | — | — |");
+  lines.push("", "## API-equivalent USD", "", "> API-equivalent USD uses only the local price-profile snapshot attached before each session started, and only category-level metrics (new input, cached input, cache creation, output, and reasoning when priced). It is **not a provider bill**. Personal subscriptions must never be presented as money actually saved.", "", "| Provider | Task type | Price profile | Expected without policy | Used in treatment | Equivalent avoided | Equivalent reduction |", "| --- | --- | --- | ---: | ---: | ---: | ---: |");
+  for (const comparison of report.comparisons) {
+    const profile = comparison.pricingProfile ? `${comparison.pricingProfile.label} (${comparison.pricingProfile.id}@${comparison.pricingProfile.version})` : "not configured / incompatible metrics";
+    const percentage = comparison.usdReductionPercent === undefined ? "—" : reduction(comparison.usdReductionPercent);
+    lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${profile} | ${usd(comparison.baselineExpectedUsd)} | ${usd(comparison.treatmentRecordedUsd)} | ${usd(comparison.estimatedUsdAvoided)} | ${percentage} |`);
+  }
+  if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — |");
   lines.push(
     "",
     "## Session metrics",
@@ -225,16 +286,16 @@ export function reportMarkdown(report: Report): string {
     lines.push(`| ${row.provider} | ${row.mode} | ${policy} | ${row.taskKind} | ${integer(row.sessions)} | ${integer(row.completed)} | ${integer(row.rework)} | ${integer(row.abandoned)} | ${integer(row.inputNew)} | ${integer(row.inputCached)} | ${integer(row.cacheCreated)} | ${integer(row.output)} | ${integer(row.reasoning)} | ${integer(row.reportedTotal)} | ${integer(row.retries)} |`);
   }
   if (report.rows.length === 0) lines.push("| — | — | — | — | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |");
-  lines.push("", "## Matched treatment comparison", "", "> `Token pressure` is new input + cache creation + output + reasoning. It excludes cached reads. `Provider-reported total` is the provider's own final session total when no category breakdown is published. Each metric is compared only with the same provider, task type, metric, and experimental policy version. A result becomes `ready` after at least five measured baseline and five measured treatment sessions.", "", "| Provider | Task type | Metric | Policy | Status | Baseline / treatment sessions | Baseline median | Treatment median | Change | Baseline / treatment IQR | Baseline / treatment median duration | Completion |", "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
+  lines.push("", "## Matched treatment comparison", "", "> `Token pressure` is new input + cache creation + output + reasoning. It excludes cached reads. `Provider-reported total` is the provider's own final session total when no category breakdown is published. Each metric is compared only with the same provider, task type, metric, policy version, and price-profile snapshot. A result becomes `ready` only for classified non-benchmark work after at least five measured baseline and five measured treatment sessions.", "", "| Provider | Task type | Metric | Policy | Status | Baseline / treatment sessions | Baseline median | Treatment median | Change | Baseline / treatment IQR | Baseline / treatment median duration | Completion |", "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
   for (const comparison of report.comparisons) {
     lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.metricLabel} | ${comparison.optimizationProfile} | ${comparison.readiness} | ${integer(comparison.baselineSessions)} / ${integer(comparison.treatmentSessions)} | ${integer(comparison.baselineMedianTokenPressure)} | ${integer(comparison.treatmentMedianTokenPressure)} | ${comparison.tokenPressureDeltaPercent.toFixed(1)}% | ${integer(comparison.baselineIqrTokenPressure)} / ${integer(comparison.treatmentIqrTokenPressure)} | ${integer(comparison.baselineMedianDurationSeconds)}s / ${integer(comparison.treatmentMedianDurationSeconds)}s | ${percent(comparison.baselineCompletionRate)} / ${percent(comparison.treatmentCompletionRate)} |`);
   }
   if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — | — | — | — | — |");
-  lines.push("", "## Estimated token avoidance", "", "> This is a token-only counterfactual estimate, not a provider invoice and not a money calculation. For each matched treatment group: `(matched observe median × treatment sessions) − treatment tokens actually recorded`. A negative number means the policy used more tokens.", "", "| Provider | Task type | Metric | Policy | Token result | Expected without policy | Treatment tokens recorded | Estimated tokens avoided |", "| --- | --- | --- | --- | --- | ---: | ---: | ---: |");
+  lines.push("", "## Estimated token avoidance", "", "> This is a token counterfactual estimate. For each matched treatment group: `(matched observe median × treatment sessions) − treatment tokens actually recorded`. A negative number means the policy used more tokens. API-equivalent USD, when present above, uses the same counterfactual and is not a provider invoice.", "", "| Provider | Task type | Metric | Policy | Token result | Expected without policy | Treatment tokens recorded | Estimated tokens avoided |", "| --- | --- | --- | --- | --- | ---: | ---: | ---: |");
   for (const comparison of report.comparisons) {
     lines.push(`| ${comparison.provider} | ${comparison.taskKind} | ${comparison.metricLabel} | ${comparison.optimizationProfile} | ${comparison.tokenResult} | ${integer(comparison.baselineExpectedTreatmentTokens)} | ${integer(comparison.treatmentRecordedTokens)} | ${integer(comparison.estimatedTokensAvoided)} |`);
   }
   if (report.comparisons.length === 0) lines.push("| — | — | — | — | — | — | — | — |");
-  lines.push("", "## Interpretation", "", "- `observe` establishes the personal baseline and does not change CLI behavior.", "- A `balanced` row with a named policy is a real provider-specific treatment. A `balanced` row with `none` means the installed CLI did not advertise a validated flag, so TokenPilot deliberately left it unchanged.", "- `estimated tokens avoided` is calculated only against matched sessions from the same provider, task type, metric, and policy version. It is not a cross-provider total and never converts tokens to money.", "- A `preliminary` token result is visible for learning, not a savings claim. `measured-reduction` requires a ready comparison with positive estimated tokens avoided; `no-reduction` is shown when a ready treatment does not lower tokens.", "- Compare a provider and task type only with its own `observe` rows; cached input is shown separately because it is not equivalent to newly created context.", "- `off` writes no telemetry. `TOKENPILOT_BYPASS=1 <provider>` bypasses TokenPilot immediately.", "");
+  lines.push("", "## Interpretation", "", "- `observe` establishes the personal baseline and does not change CLI behavior.", "- A `balanced` row with a named policy is a real provider-specific treatment. A `balanced` row with `none` means the installed CLI did not advertise a validated flag, so TokenPilot deliberately left it unchanged.", "- `estimated tokens avoided` is calculated only against matched sessions from the same provider, task type, metric, policy version, and price-profile snapshot. It is not a cross-provider total.", "- A `preliminary` token result is visible for learning, not a savings claim. `unknown` and `benchmark` work always remain preliminary. `measured-reduction` requires a ready classified-work comparison with positive estimated tokens avoided; `no-reduction` is shown when a ready treatment does not lower tokens.", "- API-equivalent USD is optional and reproducible from the session's price snapshot. It is a modeled API value, never a subscription saving or real billing figure.", "- Compare a provider and task type only with its own `observe` rows; cached input is shown separately because it is not equivalent to newly created context.", "- `off` writes no telemetry. `TOKENPILOT_BYPASS=1 <provider>` bypasses TokenPilot immediately.", "");
   return lines.join("\n");
 }

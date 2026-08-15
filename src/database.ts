@@ -1,7 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
-import type { AggregateRow, MeasurementCoverage, Provider, RunMode, RunRecord, SessionEvent, SessionSummary, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
+import type { AggregateRow, MeasurementCoverage, PricingProfile, Provider, RunMode, RunRecord, SessionEvent, SessionSummary, TaskKind, TaskOutcome, UsageRecord } from "./types.js";
 import { safeEvent, safeRun, safeUsage } from "./privacy.js";
 import { assertSafeStateFile, ensurePrivateDirectory, hasSafePrivateDirectory, type TokenPilotPaths } from "./paths.js";
+import { isPricingProfile } from "./pricing.js";
 
 export interface TelemetryDatabaseOptions {
   /** A report must never create, migrate, or journal a database. */
@@ -12,6 +13,7 @@ export class TelemetryDatabase {
   private readonly db: DatabaseSync;
   private readonly hasReportedTotalColumn: boolean;
   private readonly hasComparisonProfileColumn: boolean;
+  private readonly hasPricingProfileColumn: boolean;
 
   constructor(paths: TokenPilotPaths, options: TelemetryDatabaseOptions = {}) {
     if (options.readOnly) {
@@ -20,6 +22,7 @@ export class TelemetryDatabase {
       this.db = new DatabaseSync(paths.databaseFile, { readOnly: true });
       this.hasReportedTotalColumn = this.usageColumnExists("reported_total");
       this.hasComparisonProfileColumn = this.runColumnExists("comparison_profile");
+      this.hasPricingProfileColumn = this.runColumnExists("pricing_profile");
       return;
     }
     ensurePrivateDirectory(paths, paths.dataDir);
@@ -32,6 +35,7 @@ export class TelemetryDatabase {
     this.migrate();
     this.hasReportedTotalColumn = this.usageColumnExists("reported_total");
     this.hasComparisonProfileColumn = this.runColumnExists("comparison_profile");
+    this.hasPricingProfileColumn = this.runColumnExists("pricing_profile");
   }
 
   private migrate(): void {
@@ -47,6 +51,7 @@ export class TelemetryDatabase {
         optimization_applied INTEGER NOT NULL DEFAULT 0,
         optimization_profile TEXT,
         comparison_profile TEXT,
+        pricing_profile TEXT,
         collection_state TEXT NOT NULL,
         task_kind TEXT NOT NULL DEFAULT 'unknown',
         outcome TEXT NOT NULL DEFAULT 'unknown'
@@ -83,6 +88,7 @@ export class TelemetryDatabase {
     this.ensureRunColumn("optimization_applied", "INTEGER NOT NULL DEFAULT 0");
     this.ensureRunColumn("optimization_profile", "TEXT");
     this.ensureRunColumn("comparison_profile", "TEXT");
+    this.ensureRunColumn("pricing_profile", "TEXT");
     this.ensureUsageColumn("reported_total", "INTEGER");
   }
 
@@ -100,7 +106,7 @@ export class TelemetryDatabase {
     return columns.some((column) => column.name === name);
   }
 
-  private ensureRunColumn(name: "optimization_applied" | "optimization_profile" | "comparison_profile", definition: string): void {
+  private ensureRunColumn(name: "optimization_applied" | "optimization_profile" | "comparison_profile" | "pricing_profile", definition: string): void {
     if (!this.runColumnExists(name)) this.db.exec(`ALTER TABLE runs ADD COLUMN ${name} ${definition}`);
   }
 
@@ -139,11 +145,12 @@ export class TelemetryDatabase {
   createRun(record: RunRecord): void {
     safeRun(record);
     this.db.prepare(`INSERT INTO runs
-      (id, provider, mode, started_at, ended_at, exit_code, cli_version, optimization_applied, optimization_profile, comparison_profile, collection_state, task_kind, outcome)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, provider, mode, started_at, ended_at, exit_code, cli_version, optimization_applied, optimization_profile, comparison_profile, pricing_profile, collection_state, task_kind, outcome)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(record.id, record.provider, record.mode, record.startedAt, record.endedAt ?? null, record.exitCode ?? null,
         record.cliVersion ?? null, record.optimizationApplied ? 1 : 0, record.optimizationProfile ?? null,
-        record.comparisonProfile ?? null, record.collectionState, record.taskKind, record.outcome);
+        record.comparisonProfile ?? null, record.pricingProfile ? JSON.stringify(record.pricingProfile) : null,
+        record.collectionState, record.taskKind, record.outcome);
   }
 
   finishRun(id: string, exitCode: number | null, endedAt: string): void {
@@ -171,14 +178,26 @@ export class TelemetryDatabase {
       .run(record.runId, record.observedAt, record.source, record.type, record.count);
   }
 
-  private normalizeRun(row: RunRecord & { optimizationApplied?: boolean | number }): RunRecord {
-    return { ...row, optimizationApplied: Boolean(row.optimizationApplied) };
+  private storedPricingProfile(value: unknown): PricingProfile | undefined {
+    if (typeof value !== "string" || value.length > 2_048) return undefined;
+    try {
+      const profile = JSON.parse(value) as unknown;
+      return isPricingProfile(profile) ? profile : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private normalizeRun(row: RunRecord & { optimizationApplied?: boolean | number; pricingProfile?: string | PricingProfile | null }): RunRecord {
+    const pricingProfile = typeof row.pricingProfile === "string" ? this.storedPricingProfile(row.pricingProfile) : row.pricingProfile;
+    return { ...row, pricingProfile, optimizationApplied: Boolean(row.optimizationApplied) };
   }
 
   getPendingRuns(): RunRecord[] {
     return (this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
         exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
         optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile, collection_state AS collectionState,
+        ${this.hasPricingProfileColumn ? "pricing_profile" : "NULL"} AS pricingProfile,
         task_kind AS taskKind, outcome FROM runs
         WHERE collection_state = 'pending' AND ended_at IS NOT NULL ORDER BY ended_at ASC`)
       .all() as unknown as Array<RunRecord & { optimizationApplied?: number }>).map((row) => this.normalizeRun(row));
@@ -195,6 +214,7 @@ export class TelemetryDatabase {
     return (this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
         exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
         optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile,
+        ${this.hasPricingProfileColumn ? "pricing_profile" : "NULL"} AS pricingProfile,
         collection_state AS collectionState, task_kind AS taskKind, outcome
         FROM runs WHERE started_at >= ? ${filter} ORDER BY started_at DESC LIMIT ?`)
       .all(since, limit) as unknown as Array<RunRecord & { optimizationApplied?: number }>).map((row) => this.normalizeRun(row));
@@ -213,7 +233,8 @@ export class TelemetryDatabase {
   getRun(id: string): RunRecord | undefined {
     const row = this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
       exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,
-      optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile, collection_state AS collectionState,
+      optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "comparison_profile" : "NULL"} AS comparisonProfile,
+      ${this.hasPricingProfileColumn ? "pricing_profile" : "NULL"} AS pricingProfile, collection_state AS collectionState,
       task_kind AS taskKind, outcome FROM runs WHERE id = ?`).get(id) as RunRecord & { optimizationApplied?: number } | undefined;
     return row ? this.normalizeRun(row) : undefined;
   }
@@ -272,7 +293,12 @@ export class TelemetryDatabase {
         SELECT run_id, SUM(COALESCE(input_new, 0)) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
           SUM(COALESCE(cache_created, 0)) AS cache_created, SUM(COALESCE(output, 0)) AS output,
           SUM(COALESCE(reasoning, 0)) AS reasoning,
-          MAX(CASE WHEN input_new IS NOT NULL OR input_cached IS NOT NULL OR cache_created IS NOT NULL OR output IS NOT NULL OR reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_detailed_usage${this.hasReportedTotalColumn ? ", SUM(COALESCE(reported_total, 0)) AS reported_total" : ""}
+          MAX(CASE WHEN input_new IS NOT NULL OR input_cached IS NOT NULL OR cache_created IS NOT NULL OR output IS NOT NULL OR reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_detailed_usage,
+          MAX(CASE WHEN input_new IS NOT NULL THEN 1 ELSE 0 END) AS has_input_new,
+          MAX(CASE WHEN input_cached IS NOT NULL THEN 1 ELSE 0 END) AS has_input_cached,
+          MAX(CASE WHEN cache_created IS NOT NULL THEN 1 ELSE 0 END) AS has_cache_created,
+          MAX(CASE WHEN output IS NOT NULL THEN 1 ELSE 0 END) AS has_output,
+          MAX(CASE WHEN reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_reasoning${this.hasReportedTotalColumn ? ", SUM(COALESCE(reported_total, 0)) AS reported_total" : ""}
         FROM usage_records GROUP BY run_id
       ), events AS (
         SELECT run_id,
@@ -281,21 +307,41 @@ export class TelemetryDatabase {
         FROM session_events GROUP BY run_id
       )
       SELECT r.id, r.provider, r.mode, r.optimization_applied AS optimizationApplied,
-        r.optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "r.comparison_profile" : "NULL"} AS comparisonProfile, r.task_kind AS taskKind, r.outcome,
+        r.optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "r.comparison_profile" : "NULL"} AS comparisonProfile,
+        ${this.hasPricingProfileColumn ? "r.pricing_profile" : "NULL"} AS pricingProfile, r.task_kind AS taskKind, r.outcome,
         MAX(0, strftime('%s', r.ended_at) - strftime('%s', r.started_at)) AS durationSeconds,
         u.input_new AS inputNew, u.input_cached AS inputCached, u.cache_created AS cacheCreated,
         u.output AS output, u.reasoning AS reasoning,
         ${reportedTotal} AS reportedTotal, COALESCE(u.has_detailed_usage, 0) AS hasDetailedUsage,
+        COALESCE(u.has_input_new, 0) AS hasInputNew, COALESCE(u.has_input_cached, 0) AS hasInputCached,
+        COALESCE(u.has_cache_created, 0) AS hasCacheCreated, COALESCE(u.has_output, 0) AS hasOutput,
+        COALESCE(u.has_reasoning, 0) AS hasReasoning,
         COALESCE(e.compactions, 0) AS compactions, COALESCE(e.retries, 0) AS retries
       FROM runs r JOIN usage u ON u.run_id = r.id LEFT JOIN events e ON e.run_id = r.id
       WHERE r.started_at >= ? AND r.ended_at IS NOT NULL
       ORDER BY r.provider, r.task_kind, r.started_at
-    `).all(since) as unknown as Array<Omit<SessionSummary, "optimizationApplied" | "measurementBasis"> & { optimizationApplied: number; hasDetailedUsage: number }>).map((row) => ({
-      ...row,
-      reportedTotal: row.reportedTotal ?? undefined,
-      measurementBasis: row.hasDetailedUsage === 1 ? "token-pressure" : "provider-total",
-      optimizationApplied: Boolean(row.optimizationApplied)
-    }));
+    `).all(since) as unknown as Array<Omit<SessionSummary, "optimizationApplied" | "measurementBasis" | "pricingProfile" | "pricingCompatible"> & {
+      optimizationApplied: number;
+      pricingProfile?: string | null;
+      hasDetailedUsage: number;
+      hasInputNew: number;
+      hasInputCached: number;
+      hasCacheCreated: number;
+      hasOutput: number;
+      hasReasoning: number;
+    }>).map((row) => {
+      const pricingProfile = this.storedPricingProfile(row.pricingProfile);
+      const categoriesPresent = row.hasInputNew === 1 && row.hasInputCached === 1 && row.hasCacheCreated === 1 && row.hasOutput === 1;
+      const reasoningPresent = pricingProfile?.rates.reasoningUsdPerMillion === undefined || row.hasReasoning === 1;
+      return {
+        ...row,
+        pricingProfile,
+        pricingCompatible: Boolean(pricingProfile && categoriesPresent && reasoningPresent),
+        reportedTotal: row.reportedTotal ?? undefined,
+        measurementBasis: row.hasDetailedUsage === 1 ? "token-pressure" : "provider-total",
+        optimizationApplied: Boolean(row.optimizationApplied)
+      };
+    });
   }
 
   close(): void {

@@ -2,12 +2,37 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DEFAULT_CONFIG, ensureConfig } from "../src/config.js";
+import { addPricing, DEFAULT_CONFIG, disablePricing, ensureConfig, setPricing } from "../src/config.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { getPaths } from "../src/paths.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("configuration and balanced allocation", () => {
+  it("defaults new installations to balanced while retaining a safe v1 migration", () => {
+    const paths = temporaryPaths();
+    expect(ensureConfig(paths)).toEqual(DEFAULT_CONFIG);
+    expect(DEFAULT_CONFIG).toMatchObject({ version: 2, defaultMode: "balanced", pricingProfiles: [], activePricing: {} });
+    fs.writeFileSync(paths.configFile, JSON.stringify({ version: 1, defaultMode: "observe" }), { mode: 0o600 });
+    expect(ensureConfig(paths)).toMatchObject({ version: 2, defaultMode: "observe", pricingProfiles: [], activePricing: {} });
+    cleanup(paths);
+  });
+
+  it("stores manually selected local API-equivalent profiles without a network lookup", () => {
+    const paths = temporaryPaths();
+    addPricing(paths, {
+      id: "codex-example",
+      provider: "codex",
+      version: "2026-08-14",
+      label: "Manually verified example",
+      currency: "USD",
+      rates: { inputUsdPerMillion: 2, cachedInputUsdPerMillion: 0.5, cacheCreationUsdPerMillion: 2.5, outputUsdPerMillion: 8 }
+    });
+    setPricing(paths, "codex", "codex-example");
+    expect(ensureConfig(paths).activePricing).toEqual({ codex: "codex-example" });
+    disablePricing(paths, "codex");
+    expect(ensureConfig(paths).activePricing).toEqual({});
+    cleanup(paths);
+  });
   it("persists a balanced 50/50 sequence independently for each provider", () => {
     const paths = temporaryPaths();
     const database = new TelemetryDatabase(paths);
@@ -35,7 +60,9 @@ describe("configuration and balanced allocation", () => {
       else process.env.HOME = originalHome;
     }
     expect(production.home).toBe(path.join(os.userInfo().homedir, ".tokenpilot"));
-    expect(production.configDir).toBe(path.join(os.userInfo().homedir, ".config", "tokenpilot"));
+    expect(production.configDir).toBe(process.platform === "linux"
+      ? path.join(os.userInfo().homedir, ".tokenpilot", "config")
+      : path.join(os.userInfo().homedir, ".config", "tokenpilot"));
 
     const testOnly = getPaths({ HOME: redirected, TOKENPILOT_HOME: redirected, TOKENPILOT_CONFIG_HOME: redirected, TOKENPILOT_DATA_HOME: redirected }, { allowEnvironmentOverrides: true });
     expect(testOnly.home).toBe(redirected);

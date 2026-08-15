@@ -2,7 +2,7 @@ import type { RunRecord, SessionEvent, UsageRecord } from "./types.js";
 
 const FORBIDDEN_KEYS = new Set([
   "prompt", "prompts", "response", "responses", "content", "text", "message", "messages",
-  "command", "commands", "arguments", "args", "token", "tokens", "secret", "credential", "code"
+  "command", "commands", "arguments", "args", "path", "paths", "token", "tokens", "secret", "credential", "code"
 ]);
 
 export function assertTelemetrySafe(value: unknown): void {

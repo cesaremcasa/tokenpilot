@@ -7,6 +7,7 @@ import { getAdapter } from "./adapters/index.js";
 import { ensureConfig } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
 import { planForInstalledCli, planFromHelp } from "./optimization.js";
+import { pricingProfile } from "./pricing.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
 import { CodexExecTokenParser, isCodexExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
@@ -223,6 +224,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
         optimizationApplied: optimization.applied,
         optimizationProfile: optimization.profile,
         comparisonProfile: experiment?.profile,
+        pricingProfile: pricingProfile(config, provider),
         collectionState: "pending",
         taskKind: "unknown",
         outcome: "unknown"

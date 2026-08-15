@@ -3,9 +3,49 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
 import { buildReport, reportMarkdown, treatmentComparisons } from "../src/report.js";
+import type { PricingProfile, SessionSummary } from "../src/types.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("aggregate reporting", () => {
+  const pricedCodex: PricingProfile = {
+    id: "codex-local-example",
+    provider: "codex",
+    version: "2026-08-14",
+    label: "Manually verified example",
+    currency: "USD",
+    rates: {
+      inputUsdPerMillion: 10,
+      cachedInputUsdPerMillion: 1,
+      cacheCreationUsdPerMillion: 20,
+      outputUsdPerMillion: 30,
+      reasoningUsdPerMillion: 40
+    }
+  };
+
+  function pricedSessions(taskKind: SessionSummary["taskKind"] = "feature", profile = pricedCodex): SessionSummary[] {
+    return (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
+      id: `${mode}-${index}`,
+      provider: "codex" as const,
+      mode,
+      optimizationApplied: mode === "balanced",
+      optimizationProfile: mode === "balanced" ? "codex-balanced-v1" : undefined,
+      comparisonProfile: "codex-balanced-v1",
+      taskKind,
+      outcome: "completed" as const,
+      durationSeconds: mode === "observe" ? 20 : 15,
+      inputNew: mode === "observe" ? 1_000_000 : 500_000,
+      inputCached: mode === "observe" ? 1_000_000 : 500_000,
+      cacheCreated: 0,
+      output: mode === "observe" ? 1_000_000 : 500_000,
+      reasoning: mode === "observe" ? 1_000_000 : 500_000,
+      measurementBasis: "token-pressure" as const,
+      pricingCompatible: true,
+      pricingProfile: profile,
+      compactions: 0,
+      retries: 0
+    })));
+  }
+
   it("returns an empty report without creating telemetry state", () => {
     const paths = temporaryPaths();
     const report = buildReport(paths, 7);
@@ -115,7 +155,73 @@ describe("aggregate reporting", () => {
     });
   });
 
-  it("renders the counterfactual token calculation without a money conversion", () => {
+  it("calculates reproducible API-equivalent USD only from compatible categories", () => {
+    const [comparison] = treatmentComparisons(pricedSessions());
+    expect(comparison).toMatchObject({
+      readiness: "ready",
+      pricingProfile: { id: "codex-local-example", version: "2026-08-14" },
+      baselineExpectedUsd: 405,
+      treatmentRecordedUsd: 202.5,
+      estimatedUsdAvoided: 202.5,
+      usdReductionPercent: 50
+    });
+  });
+
+  it("does not compare sessions whose price snapshots differ, even when profile ids match", () => {
+    const changed: PricingProfile = {
+      ...pricedCodex,
+      rates: { ...pricedCodex.rates, outputUsdPerMillion: 31 }
+    };
+    const baseline = pricedSessions().filter((session) => session.mode === "observe");
+    const treatment = pricedSessions("feature", changed).filter((session) => session.mode === "balanced");
+    expect(treatmentComparisons([...baseline, ...treatment])).toEqual([]);
+  });
+
+  it("keeps unknown and benchmark work preliminary even after five measured sessions per arm", () => {
+    for (const taskKind of ["unknown", "benchmark"] as const) {
+      const [comparison] = treatmentComparisons(pricedSessions(taskKind));
+      expect(comparison).toMatchObject({ taskKind, baselineSessions: 5, treatmentSessions: 5, readiness: "preliminary", tokenResult: "preliminary" });
+    }
+  });
+
+  it("never converts a provider-reported total to USD without category metrics", () => {
+    const sessions: SessionSummary[] = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
+      id: `total-${mode}-${index}`,
+      provider: "codex",
+      mode,
+      optimizationApplied: mode === "balanced",
+      optimizationProfile: mode === "balanced" ? "codex-balanced-v1" : undefined,
+      comparisonProfile: "codex-balanced-v1",
+      taskKind: "feature",
+      outcome: "completed",
+      durationSeconds: 1,
+      inputNew: 0,
+      inputCached: 0,
+      cacheCreated: 0,
+      output: 0,
+      reasoning: 0,
+      reportedTotal: mode === "observe" ? 100 : 50,
+      measurementBasis: "provider-total",
+      pricingProfile: pricedCodex,
+      pricingCompatible: false,
+      compactions: 0,
+      retries: 0
+    })));
+    const [comparison] = treatmentComparisons(sessions);
+    expect(comparison).toMatchObject({ tokenResult: "measured-reduction", baselineExpectedUsd: undefined, treatmentRecordedUsd: undefined, estimatedUsdAvoided: undefined });
+  });
+
+  it("stores the selected price profile inside the session record", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    const now = new Date().toISOString();
+    database.createRun({ id: "price-snapshot", provider: "codex", mode: "observe", startedAt: now, pricingProfile: pricedCodex, collectionState: "pending", taskKind: "unknown", outcome: "unknown" });
+    expect(database.getRun("price-snapshot")).toMatchObject({ pricingProfile: pricedCodex });
+    database.close();
+    cleanup(paths);
+  });
+
+  it("renders the counterfactual and distinguishes API-equivalent USD from a provider bill", () => {
     const comparisons = treatmentComparisons([
       { id: "observe", provider: "codex", mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v1", taskKind: "benchmark", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, reportedTotal: 100, measurementBasis: "provider-total", compactions: 0, retries: 0 },
       { id: "balanced", provider: "codex", mode: "balanced", optimizationApplied: true, optimizationProfile: "codex-balanced-v1", comparisonProfile: "codex-balanced-v1", taskKind: "benchmark", outcome: "completed", durationSeconds: 1, inputNew: 0, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, reportedTotal: 80, measurementBasis: "provider-total", compactions: 0, retries: 0 }
@@ -123,7 +229,8 @@ describe("aggregate reporting", () => {
     const markdown = reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons });
     expect(markdown).toContain("## Estimated token avoidance");
     expect(markdown).toContain("Estimated tokens avoided");
-    expect(markdown).toContain("not a provider invoice and not a money calculation");
+    expect(markdown).toContain("## API-equivalent USD");
+    expect(markdown).toContain("not a provider bill");
     expect(markdown).toContain("## Reduction and latency summary");
     expect(markdown).toContain("Baseline expected");
     expect(markdown).toContain("Actual tokens used");
