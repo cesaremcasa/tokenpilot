@@ -23,7 +23,10 @@ const PASSTHROUGH_ARGUMENTS = new Set([
 const PROVIDER_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
 export function isPassthrough(args: string[]): boolean {
-  return args.length > 0 && PASSTHROUGH_ARGUMENTS.has(args[0]);
+  const sentinel = args.indexOf("--");
+  const providerArguments = sentinel >= 0 ? args.slice(0, sentinel) : args;
+  return providerArguments.some((argument) => ["--help", "-h", "--version", "-V"].includes(argument))
+    || (providerArguments.length > 0 && PASSTHROUGH_ARGUMENTS.has(providerArguments[0]));
 }
 
 function trustedExecutable(candidate: string): string | undefined {

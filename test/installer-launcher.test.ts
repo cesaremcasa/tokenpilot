@@ -165,6 +165,8 @@ describe("installation and fail-open launcher lookup", () => {
     expect(isPassthrough(["--version"])).toBe(true);
     expect(isPassthrough(["update"])).toBe(true);
     expect(isPassthrough(["mcp"])).toBe(true);
+    expect(isPassthrough(["--config", "model_reasoning_effort=\"low\"", "--help"])).toBe(true);
+    expect(isPassthrough(["exec", "--", "--help"])).toBe(false);
     expect(isPassthrough([])).toBe(false);
     cleanup(paths);
   });

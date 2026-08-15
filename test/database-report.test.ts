@@ -187,6 +187,44 @@ describe("aggregate reporting", () => {
     expect(serialized).not.toContain("estimatedUsdAvoided");
   });
 
+  it("labels a flat total with cached input replaced by new input as reverse cache-shift", () => {
+    const sessions: SessionSummary[] = (["observe", "balanced"] as const).map((mode) => ({
+      id: `reverse-${mode}`,
+      provider: "claude",
+      mode,
+      optimizationApplied: mode === "balanced",
+      optimizationProfile: mode === "balanced" ? "claude-balanced-v4" : undefined,
+      comparisonProfile: "claude-balanced-v4",
+      taskKind: "benchmark",
+      outcome: "completed",
+      durationSeconds: 5,
+      inputNew: mode === "observe" ? 9_658 : 34_182,
+      inputCached: mode === "observe" ? 24_832 : 320,
+      cacheCreated: 0,
+      output: mode === "observe" ? 497 : 392,
+      reasoning: 0,
+      categoryMetricsComplete: true,
+      compactions: 0,
+      retries: 0
+    }));
+    const [comparison] = treatmentComparisons(sessions);
+    expect(comparison).toMatchObject({
+      baselineMedianComparableTotal: 34_987,
+      treatmentMedianComparableTotal: 34_894,
+      tokenResult: "cache-shift",
+      estimatedTokensAvoided: undefined,
+      tokenReductionPercent: undefined
+    });
+    expect(reportSummaryMarkdown({
+      generatedAt: "now",
+      since: "then",
+      rows: [],
+      coverage: [{ provider: "claude", sessions: 2, measuredSessions: 2, unavailableSessions: 0 }],
+      comparisons: [comparison]
+    }))
+      .toContain("cache-shift — no reduction emitted");
+  });
+
   it("allows Claude category totals to produce a validated reduction when cache is stable", () => {
     const sessions: SessionSummary[] = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
       id: `claude-${mode}-${index}`,
