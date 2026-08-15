@@ -200,7 +200,7 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const readiness = classifiedWork && baseline.length >= 5 && treatment.length >= 5 ? "ready" as const : "preliminary" as const;
     const tokenResult: TreatmentComparison["tokenResult"] = isCacheShift
       ? "cache-shift"
-      : readiness === "ready" && estimatedTokensAvoided > 0 ? "validated-reduction" : "preliminary-signal";
+      : readiness === "ready" && estimatedTokensAvoided > 0 && tokenReductionPercent > 0 ? "validated-reduction" : "preliminary-signal";
     const baselineUsd = baseline.map(apiEquivalentUsd);
     const treatmentUsd = treatment.map(apiEquivalentUsd);
     const hasComparableUsd = baselineUsd.every((value): value is number => value !== undefined)
@@ -262,7 +262,7 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       usdReductionPercent: isCacheShift ? undefined : usdReductionPercent,
       readiness,
       tokenResult,
-      reason: isCacheShift ? "new input moved into cache reads while the complete total stayed flat" : readiness === "ready" && estimatedTokensAvoided > 0 ? undefined : "sample is directional and does not satisfy validated-reduction criteria",
+      reason: isCacheShift ? "new input moved into cache reads while the complete total stayed flat" : tokenResult === "validated-reduction" ? undefined : "sample is directional and does not satisfy validated-reduction criteria",
       baselineSessionIds: baseline.map((session) => session.id),
       treatmentSessionIds: treatment.map((session) => session.id)
     }];
@@ -361,11 +361,19 @@ function summaryComparison(comparisons: TreatmentComparison[]): TreatmentCompari
 
 function conciseResult(comparison: TreatmentComparison): string {
   const group = `${comparison.taskKind}, ${comparison.optimizationProfile}, ${comparison.totalSource}`;
+  const expected = comparison.baselineExpectedTreatmentTokens;
+  const used = comparison.treatmentRecordedTokens;
+  const avoided = comparison.estimatedTokensAvoided;
+  const aggregatePercent = expected && avoided !== undefined ? avoided / expected * 100 : undefined;
+  const treatmentLabel = `treatment session${comparison.treatmentSessions === 1 ? "" : "s"}`;
+  const cohort = expected === undefined || used === undefined || avoided === undefined || aggregatePercent === undefined
+    ? "cohort totals unavailable"
+    : `cohort expected ${integer(expected)}, used ${integer(used)}, avoided ${integer(avoided)} (${aggregatePercent.toFixed(1)}% aggregate across ${comparison.treatmentSessions} ${treatmentLabel})`;
   if (comparison.tokenResult === "validated-reduction") {
-    return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated reduction; ${integer(comparison.estimatedTokensAvoided ?? 0)} fewer tokens per comparable session (${group})`;
+    return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated median reduction; ${cohort} (${group})`;
   }
   if (comparison.tokenResult === "preliminary-signal") {
-    return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% preliminary signal; ${integer(comparison.estimatedTokensAvoided ?? 0)} fewer tokens per comparable session — not an economy (${group})`;
+    return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% preliminary median signal; ${cohort} — not an economy (${group})`;
   }
   return `${comparisonResult(comparison)} (${group})`;
 }
@@ -391,7 +399,7 @@ export function reportSummaryMarkdown(report: Report): string {
   }
   if (report.coverage.length === 0) lines.push("- No sessions: 0/0 measured; limited measurement.");
   const validated = report.comparisons.filter((comparison) => comparison.tokenResult === "validated-reduction");
-  lines.push("", `Validated reduction: ${validated.length === 0 ? "none in this window" : validated.map((comparison) => `${comparison.provider} ${comparison.tokenReductionPercent?.toFixed(1)}%`).join(", ")}.`, "Cache-shift, limited measurement, and missing comparable bases never emit savings. Preliminary signals are not economies. Grok TTY/TUI remains unavailable and receives no estimate.", "");
+  lines.push("", `Validated reduction: ${validated.length === 0 ? "none in this window" : validated.map((comparison) => `${comparison.provider} ${comparison.tokenReductionPercent?.toFixed(1)}% median`).join(", ")}.`, "Cache-shift, limited measurement, and missing comparable bases never emit savings. Preliminary signals are not economies. Grok TTY/TUI remains unavailable and receives no estimate.", "");
   return lines.join("\n");
 }
 
