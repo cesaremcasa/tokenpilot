@@ -7,7 +7,7 @@ import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
 import { TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 import { buildReport, reportMarkdown } from "../src/report.js";
-import { cleanup, temporaryPaths } from "./helpers.js";
+import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
 describe("local launcher and collector", () => {
   async function withProviderPath<T>(providerPath: string, action: () => Promise<T>): Promise<T> {
@@ -129,6 +129,32 @@ describe("local launcher and collector", () => {
     expect(database.getPendingRuns()).toHaveLength(0);
     expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ provider: "grok", inputNew: 12, inputCached: 34, output: 5, reasoning: 6, reportedTotal: 57 });
     database.close();
+    cleanup(paths);
+  });
+
+  it("measures a normal Grok TTY/TUI run through its session-scoped External OTEL stream", async () => {
+    const paths = temporaryPaths();
+    const payload = grokOtlpFixture({ input: 21, cache_read: 55, output: 8, reasoning: 13 }).toString("base64");
+    const originalBin = writeFakeGrok(paths, `#!/usr/bin/env node
+if (process.argv.includes("--version")) { console.log("grok 1.0.3"); process.exit(0); }
+const endpoint = process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT;
+const header = process.env.OTEL_EXPORTER_OTLP_METRICS_HEADERS?.split("=")[1];
+if (!endpoint || !header || process.env.OTEL_LOG_USER_PROMPTS !== "0" || process.env.OTEL_LOG_TOOL_DETAILS !== "0") process.exit(2);
+const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/x-protobuf", "x-tokenpilot-metrics": header }, body: Buffer.from("${payload}", "base64") });
+process.exit(response.ok ? 0 : 3);
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "observe";
+    writeConfig(paths, config);
+
+    expect(await withProviderPath(originalBin, () => runProvider("grok", [], paths))).toBe(0);
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({ provider: "grok", collectionState: "collected" });
+    expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({
+      provider: "grok", inputNew: 21, inputCached: 55, cacheCreated: 0, output: 8, reasoning: 13
+    });
+    database.close();
+    expect(fs.readFileSync(paths.databaseFile).toString("latin1")).not.toContain("person@example.test");
     cleanup(paths);
   });
 

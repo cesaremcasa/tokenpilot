@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { getAdapter } from "./adapters/index.js";
 import { createInstallPlan, runtimeSupport, type SkillPlan } from "./installer.js";
-import { findOriginalBinary } from "./launcher.js";
+import { findOriginalBinary, supportsGrokExternalOtel } from "./launcher.js";
 import { planForInstalledCli } from "./optimization.js";
 import type { Provider } from "./types.js";
 import { PROVIDERS } from "./types.js";
@@ -77,10 +77,12 @@ function providerCapability(provider: Provider, binary: string): { provider: Pro
   else if (provider === "codex") telemetry = plan.applied
     ? "metrics-only local OTLP for normal and exec sessions when the local CLI accepts session config"
     : "only the published total from codex exec is available on this local CLI";
-  else if (provider === "grok") telemetry = "only one-turn JSON mode is measured; the adapter does not measure TTY/TUI — no estimate";
+  else if (provider === "grok") telemetry = supportsGrokExternalOtel(binary)
+    ? "normal TTY/TUI and headless sessions use the documented content-free External OTEL v1 token metrics; JSON single-turn remains a fallback"
+    : "only one-turn JSON mode is measured; update to Grok Build 1.0.3+ for documented TTY/TUI External OTEL metrics";
   else telemetry = "session envelope only; no token or savings measurement is declared";
   const optimization = plan.applied ? `balanced available (${plan.profile})` : `balanced not injected (${plan.unavailableReason ?? "local help probe did not confirm it"})`;
-  const state: ProviderDoctorState = provider === "grok" || provider === "kimi" || (provider === "codex" && !plan.applied) ? "limited" : "active";
+  const state: ProviderDoctorState = provider === "kimi" || (provider === "grok" && !supportsGrokExternalOtel(binary)) || (provider === "codex" && !plan.applied) ? "limited" : "active";
   const intentionallyObserveOnly = provider === "claude" && plan.unavailableReason?.includes("observe-only");
   return {
     provider,

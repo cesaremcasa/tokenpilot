@@ -4,7 +4,7 @@
 
 TokenPilot is a local, provider-neutral measurement layer for developer AI CLIs. A developer still opens the VS Code terminal and types `claude`, `codex`, `grok`, or `kimi`. Authentication remains entirely with that provider; TokenPilot adds no login and never reads credentials.
 
-The tool records a content-free session envelope locally and can report it by provider, task class, and experimental mode. It does not proxy requests or create a provider-independent cache. Provider caches remain server-side. Current Claude and Codex CLIs can publish metrics to a short-lived, authenticated local receiver; older Codex falls back only to its published `exec` total, Grok only measures explicit one-turn JSON output, and Kimi is envelope-only. No provider folder is scanned and unavailable data is not estimated.
+The tool records a content-free session envelope locally and can report it by provider, task class, and experimental mode. It does not proxy requests or create a provider-independent cache. Provider caches remain server-side. Current Claude and Codex CLIs can publish metrics to a short-lived, authenticated local receiver; older Codex falls back only to its published `exec` total. Grok Build 1.0.3+ publishes documented content-free External OTEL v1 token metrics for normal TTY/TUI and headless sessions, while older versions keep the JSON single-turn fallback. Kimi is envelope-only. No provider folder is scanned and unavailable data is not estimated.
 
 ## Why start personally
 

@@ -52,14 +52,15 @@ describe("doctor", () => {
     const originalBin = path.join(paths.userHome, "original-bin");
     fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
     for (const provider of ["claude", "codex", "grok", "kimi"]) {
-      fs.writeFileSync(path.join(originalBin, provider), "#!/bin/sh\nif [ \"$1\" = \"--help\" ]; then echo '--config'; fi\nexit 0\n", { mode: 0o700 });
+      const version = provider === "grok" ? "1.0.3" : "1.0.0";
+      fs.writeFileSync(path.join(originalBin, provider), `#!/bin/sh\nif [ "$1" = "--help" ]; then echo '--config'; fi\nif [ "$1" = "--version" ]; then echo '${provider} ${version}'; fi\nexit 0\n`, { mode: 0o700 });
     }
     const report = doctor(paths, { platform: "linux", nodeVersion: "22.5.0", pathValue: `${paths.shimDir}${path.delimiter}${originalBin}` });
     expect(report).toMatchObject({ installationReady: true, measurementReady: false });
     expect(report.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({ provider: "claude", state: "active", fix: undefined }),
       expect.objectContaining({ provider: "codex", state: "active" }),
-      expect.objectContaining({ provider: "grok", state: "limited", detail: expect.stringContaining("does not measure TTY/TUI — no estimate") }),
+      expect.objectContaining({ provider: "grok", state: "active", detail: expect.stringContaining("normal TTY/TUI and headless sessions") }),
       expect.objectContaining({ provider: "kimi", state: "limited", detail: expect.stringContaining("session envelope only") })
     ]));
     const markdown = doctorMarkdown(report);

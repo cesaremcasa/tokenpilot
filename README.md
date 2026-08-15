@@ -15,7 +15,7 @@ It does **not** create a shared cache, proxy model traffic, receive provider cre
 
 Version 0.3 is a local macOS/Linux tool. A new install defaults to `balanced`: it persistently alternates provider-local `observe` and `balanced` assignments, starting randomly, so there is still a matched baseline. `deep`, `off`, `observe`, and `TOKENPILOT_BYPASS=1` are immediate controls. The wrapper changes a provider session only after that exact installed CLI advertises the required documented flag; any failed probe starts the original CLI unchanged. Windows native support remains unavailable until its separate clean-machine acceptance suite is complete.
 
-Claude and current Codex CLIs can publish local, authenticated metrics through a per-run receiver. Older Codex CLIs fall back only to their published `exec` total. Grok is measured only in explicit one-turn JSON mode; normal Grok TTY sessions are correctly unavailable for token comparison. Kimi remains a session envelope: it does not claim token measurement or savings until documented correlation exists. TokenPilot never scans ambient provider folders, transcripts, or logs.
+Claude, current Codex CLIs, and Grok Build 1.0.3+ can publish local, authenticated metrics through a per-run receiver. Older Codex CLIs fall back only to their published `exec` total; older Grok versions fall back only to explicit one-turn JSON usage. Kimi remains a session envelope: it does not claim token measurement or savings until documented correlation exists. TokenPilot never scans ambient provider folders, transcripts, or logs.
 
 `balanced` is a durable 50/50 provider-local experimental assignment and a real token-reduction treatment. Its first assignment per provider is random; later sessions alternate between `observe` and `balanced`, even across terminal restarts. Task type is intentionally classified only after a session, so it never influences launch-time assignment. Before every treated session, TokenPilot asks only the installed provider CLI for `--help`. It injects a policy only if that exact local version advertises the required flag. A failed probe or missing capability starts the original CLI unchanged.
 
@@ -140,11 +140,11 @@ Provider-published numeric measurement is automatic in these non-interactive com
 # Codex final provider-reported session total
 codex exec "implement the requested change"
 
-# Grok's published input/cache/output/reasoning counters
+# Grok JSON single-turn fallback (normal Grok 1.0.3+ TTY/TUI uses External OTEL)
 grok --output-format json --single "summarize this change"
 ```
 
-Normal interactive Codex and Grok sessions retain their original TTY streams and record a content-free envelope when the provider does not publish a safe correlated counter.
+Normal interactive Codex and Grok sessions retain their original TTY streams. Grok Build 1.0.3+ exports the documented `grok_code.token.usage` metric for `input`, `cache_read`, `output`, and `reasoning`; an unsupported version or a session that publishes no correlated counter remains unavailable rather than estimated.
 
 `off` and `TOKENPILOT_BYPASS=1` are immediate no-telemetry bypasses. If TokenPilot cannot initialize its telemetry database, it starts the original CLI normally.
 
@@ -167,6 +167,8 @@ TokenPilot treats provider logs as an evolving local interface. It never scans p
 
 For a local Claude session, TokenPilot starts a short-lived receiver on `127.0.0.1` and configures Claude's documented OTLP **metrics-only** exporter for that child process. It disables logs, traces, prompt/response logging, tool-detail logging, raw API bodies, account UUIDs, session IDs, and custom resource labels. Each receiver has an unguessable per-run header and accepts only the documented `claude_code.token.usage` metric. It extracts only the numeric `input`, `cacheRead`, `cacheCreation`, and `output` counters; every other field is discarded before storage. It does not change Claude authentication or send telemetry over the network.
 
+For Grok Build 1.0.3+, TokenPilot uses the CLI's documented External OpenTelemetry v1 stream for the wrapped child only. It selects the local HTTP/protobuf metrics exporter, disables logs and content gates, omits session/version attributes, and authenticates an ephemeral `127.0.0.1` receiver with a per-run secret. The bounded parser accepts only `grok_code.token.usage`; resource identity, model, session, prompts, tools, paths, commands, and unknown metrics are discarded. External OTEL v1 has no cache-creation category: non-cached input and cache reads are reported separately, and cache creation is not applicable rather than estimated.
+
 Claude's metrics can still contain account identity attributes in the transient provider export. TokenPilot neither logs nor stores them, but this is why the receiver is local, authenticated per session, and destroyed when the CLI exits.
 
 The four adapters are all available for observation:
@@ -175,7 +177,7 @@ The four adapters are all available for observation:
 | --- | --- | --- |
 | Claude | Metrics-only local OTLP receiver, correlated by the wrapper's unique per-run endpoint header | observe-only until a treatment demonstrates total-token reduction |
 | Codex | Current CLIs: metrics-only local OTLP for interactive and `exec`; older CLIs: only the published `exec` total | low effort/verbosity, no reasoning summary, concise execution, 32k body compaction when the full policy probe passes |
-| Grok | For explicit `grok --output-format json --single`, parses only its top-level numeric `usage` object | low effort, concise verified execution |
+| Grok | Build 1.0.3+: metrics-only local External OTEL for TTY/TUI and headless; older versions: explicit JSON single-turn fallback | low effort, concise verified execution |
 | Kimi | Not yet enabled: documented run correlation required | version-gated only |
 
 Claude handles prompt caching itself, and its cache prefix is sensitive to model, tools, MCP connections, and context changes. [Claude Code documentation](https://code.claude.com/docs/en/prompt-caching) explains these limits. Codex exposes user-level profiles, reasoning effort, automatic compaction, and telemetry configuration; its official configuration reference is the source of truth for any later adapter experiment. [OpenAI Docs](https://learn.chatgpt.com/docs/config-file/config-reference)
@@ -183,7 +185,7 @@ Claude handles prompt caching itself, and its cache prefix is sensitive to model
 ## Personal experiment
 
 1. Install once, then use the CLIs normally. Sessions are measured automatically and can be classified only when you are comfortable doing so.
-2. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for that host's rolling seven-day provider report. Claude and Codex measure normal sessions through a local metrics-only receiver; Grok measures explicit JSON single-turn sessions. Other sessions correctly show unavailable rather than an estimate.
+2. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for that host's rolling seven-day provider report. Claude, current Codex, and Grok Build 1.0.3+ measure normal sessions through a local metrics-only receiver. Unsupported sessions correctly show unavailable rather than an estimate.
 3. `balanced` is the initial mode; set `tokenpilot mode observe` to establish an unchanged-only baseline or use `deep`/`off` as immediate controls. A verified provider policy is applied only when the CLI advertises the necessary flags.
 4. A reduction is validated only after five measured baseline and five measured treatment sessions for the same provider, known non-benchmark task type, complete cache-aware total basis, policy version, and price-profile snapshot. `unknown` and benchmark work can only be a preliminary signal and never a savings claim.
 5. Use `TOKENPILOT_BYPASS=1 <provider>` or `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.

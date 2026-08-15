@@ -23,5 +23,5 @@ Return the command's Markdown verbatim. Do not add another heading, table, summa
 - Call a reduction only when the summary says `validated reduction`.
 - Treat `cache-shift`, limited measurement, and a missing comparable base as no estimate: never infer savings from them.
 - Keep new input, cache reads, cache creation, pressure, and provider total distinct.
-- Grok TTY/TUI is unavailable unless the CLI publishes correlated numeric counters; do not scrape or estimate it.
+- Grok Build 1.0.3+ TTY/TUI is measured only through its documented External OTEL counters. Older or missing counters remain unavailable; never scrape or estimate them.
 - If the command is missing or fails, say so plainly and give no substitute token estimate.

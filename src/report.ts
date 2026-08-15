@@ -437,7 +437,7 @@ function singleProviderSummary(report: Report, coverage: MeasurementCoverage): s
     ? "USD: API-equivalent unavailable."
     : `USD: ${usd(comparison.estimatedUsdAvoided)} API-equivalent ${comparison.tokenResult === "validated-reduction" ? "validated" : "preliminary"}; not a bill.`);
   lines.push(`Basis: ${group}.`);
-  if (coverage.provider === "grok") lines.push("Grok TTY/TUI is unavailable and receives no estimate.");
+  if (coverage.provider === "grok" && coverage.unavailableSessions > 0) lines.push("Grok sessions without correlated External OTEL counters remain unavailable and receive no estimate.");
   lines.push("");
   return lines.join("\n");
 }
@@ -470,7 +470,7 @@ export function reportSummaryMarkdown(report: Report): string {
   }
   if (report.coverage.length === 0) lines.push("- No sessions: 0/0 measured; limited measurement.");
   const validated = report.comparisons.filter((comparison) => comparison.tokenResult === "validated-reduction");
-  lines.push("", `Validated reduction: ${validated.length === 0 ? "none in this window" : validated.map((comparison) => `${comparison.provider} ${comparison.tokenReductionPercent?.toFixed(1)}% median`).join(", ")}.`, "Cache-shift, limited measurement, and missing comparable bases never emit savings. Preliminary signals are not economies. Grok TTY/TUI remains unavailable and receives no estimate.", "");
+  lines.push("", `Validated reduction: ${validated.length === 0 ? "none in this window" : validated.map((comparison) => `${comparison.provider} ${comparison.tokenReductionPercent?.toFixed(1)}% median`).join(", ")}.`, "Cache-shift, limited measurement, and missing comparable bases never emit savings. Preliminary signals are not economies. Unsupported Grok sessions remain unavailable and receive no estimate.", "");
   return lines.join("\n");
 }
 
@@ -511,7 +511,7 @@ export function reportDiagnosticsMarkdown(report: Report): string {
   const lines = ["# TokenPilot — diagnostics", "", "| Provider | Measured / unavailable | Limitation |", "| --- | --- | --- |"];
   for (const row of report.coverage) {
     let limitation = "compare only matching task, policy, total basis, and price snapshot";
-    if (row.provider === "grok") limitation = "normal TTY/TUI is unavailable; only documented JSON single-turn counters are measured";
+    if (row.provider === "grok") limitation = "Grok Build 1.0.3+ TTY/TUI uses documented External OTEL v1; sessions without correlated counters remain unavailable; JSON single-turn is a fallback";
     if (row.provider === "kimi") limitation = "session envelope only; no token correlation is declared";
     lines.push(`| ${row.provider} | ${row.measuredSessions} / ${row.unavailableSessions} | ${limitation} |`);
   }
