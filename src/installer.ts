@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { ensureConfig } from "./config.js";
 import { assertSafeUserHome, ensurePrivateDirectory, hasSafePrivateDirectory, type TokenPilotPaths } from "./paths.js";
-import { PROVIDERS } from "./types.js";
+import { PROVIDERS, type Provider } from "./types.js";
 
 const SHELL_MARKER_START = "# >>> tokenpilot >>>";
 const SHELL_MARKER_END = "# <<< tokenpilot <<<";
@@ -18,6 +18,13 @@ const SKILL_RELATIVE_PATH = path.join("tokenpilot", "SKILL.md");
 const SKILL_COMMAND_PLACEHOLDER = "{{TOKENPILOT_COMMAND}}";
 const COMMAND_MARKER = "# tokenpilot-command-shim";
 const RUNTIME_RELEASES_DIRECTORY = "releases";
+const SKILL_HOST_DIRECTORY: Record<Provider, string> = {
+  claude: ".claude",
+  codex: ".agents",
+  grok: ".grok",
+  kimi: ".kimi"
+};
+const SKILL_HOSTS: Provider[] = ["codex", "claude", "grok", "kimi"];
 
 export interface InstallOptions {
   dryRun?: boolean;
@@ -41,6 +48,7 @@ export interface InstallPlan {
 }
 
 export interface SkillPlan {
+  provider: Provider;
   target: string;
   /** `skipped` is safe and does not prevent the core launcher install. */
   state: "install" | "update" | "installed" | "skipped";
@@ -162,8 +170,8 @@ function hasOwnedSkill(contents: string): boolean {
   return contents.includes(SKILL_MARKER);
 }
 
-function sourceSkillFile(): string {
-  const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".agents", "skills", SKILL_RELATIVE_PATH);
+function sourceSkillFile(provider: Provider): string {
+  const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", SKILL_HOST_DIRECTORY[provider], "skills", SKILL_RELATIVE_PATH);
   if (!existingRegularFile(source)) {
     throw new Error("TokenPilot skill source is missing or invalid");
   }
@@ -178,33 +186,24 @@ function sourceSkillFile(): string {
  * Skills are optional integrations. A bad or third-party skill target is a
  * local warning, never a reason to withhold the core provider wrappers.
  */
-export function assessSkillTarget(paths: TokenPilotPaths, target: string): SkillPlan {
+export function assessSkillTarget(paths: TokenPilotPaths, target: string, provider: Provider = "codex"): SkillPlan {
   const directory = path.dirname(target);
   try {
     // This also validates every existing ancestor while permitting a missing
     // final TokenPilot-owned directory to be created with 0700 permissions.
     hasSafePrivateDirectory(paths, directory);
   } catch {
-    return { target, state: "skipped", reason: "skill directory is unsafe or symlinked" };
+    return { provider, target, state: "skipped", reason: "skill directory is unsafe or symlinked" };
   }
   try {
-    if (!fs.existsSync(target)) return { target, state: "install" };
-    if (!existingRegularFile(target)) return { target, state: "skipped", reason: "skill target is not a private regular file" };
+    if (!fs.existsSync(target)) return { provider, target, state: "install" };
+    if (!existingRegularFile(target)) return { provider, target, state: "skipped", reason: "skill target is not a private regular file" };
     if (!hasOwnedSkill(fs.readFileSync(target, "utf8"))) {
-      return { target, state: "skipped", reason: "a third-party skill already owns this target" };
+      return { provider, target, state: "skipped", reason: "a third-party skill already owns this target" };
     }
-    return { target, state: "update" };
+    return { provider, target, state: "update" };
   } catch {
-    return { target, state: "skipped", reason: "skill target could not be safely inspected" };
-  }
-}
-
-function skipSkills(skills: SkillPlan[], reason: string): void {
-  for (const skill of skills) {
-    if (skill.state !== "skipped") {
-      skill.state = "skipped";
-      skill.reason = reason;
-    }
+    return { provider, target, state: "skipped", reason: "skill target could not be safely inspected" };
   }
 }
 
@@ -212,18 +211,12 @@ function writeSkills(paths: TokenPilotPaths, skills: SkillPlan[], command: strin
   const candidates = skills.filter((skill) => skill.state === "install" || skill.state === "update");
   if (candidates.length === 0) return;
   assertSafeText(command, "skill command path");
-  let contents: string;
-  try {
-    contents = fs.readFileSync(sourceSkillFile(), "utf8").replaceAll(SKILL_COMMAND_PLACEHOLDER, quoteShell(command));
-  } catch {
-    skipSkills(candidates, "packaged TokenPilot skill is unavailable");
-    return;
-  }
   for (const skill of candidates) {
     try {
+      const contents = fs.readFileSync(sourceSkillFile(skill.provider), "utf8").replaceAll(SKILL_COMMAND_PLACEHOLDER, quoteShell(command));
       // Reassess immediately before writing so a concurrent replacement can
       // only disable this optional integration, never redirect the write.
-      const latest = assessSkillTarget(paths, skill.target);
+      const latest = assessSkillTarget(paths, skill.target, skill.provider);
       if (latest.state === "skipped") {
         skill.state = "skipped";
         skill.reason = latest.reason;
@@ -233,9 +226,11 @@ function writeSkills(paths: TokenPilotPaths, skills: SkillPlan[], command: strin
       fs.writeFileSync(skill.target, contents, { mode: 0o600 });
       skill.state = "installed";
       delete skill.reason;
-    } catch {
+    } catch (error) {
       skill.state = "skipped";
-      skill.reason = "skill write was refused by local safety checks";
+      skill.reason = error instanceof Error && error.message.includes("skill source")
+        ? `packaged ${skill.provider} TokenPilot skill is unavailable`
+        : "skill write was refused by local safety checks";
     }
   }
 }
@@ -292,7 +287,10 @@ function stageRuntimeBundle(paths: TokenPilotPaths, executable: string): string 
   try {
     fs.mkdirSync(release, { mode: 0o700 });
     copyPrivateTree(path.join(source, "dist"), path.join(release, "dist"));
-    copyPrivateTree(path.join(source, ".agents"), path.join(release, ".agents"));
+    for (const directory of new Set(Object.values(SKILL_HOST_DIRECTORY))) {
+      const skillSource = path.join(source, directory);
+      if (fs.existsSync(skillSource)) copyPrivateTree(skillSource, path.join(release, directory));
+    }
     const stagedCli = path.join(release, "dist", "cli.js");
     if (!existingRegularFile(stagedCli)) throw new Error("TokenPilot runtime bundle is incomplete");
     return stagedCli;
@@ -306,15 +304,14 @@ function stageRuntimeBundle(paths: TokenPilotPaths, executable: string): string 
 
 export function createInstallPlan(paths: TokenPilotPaths, options: InstallOptions = {}): InstallPlan {
   const shellFiles = options.noShellConfig ? [] : shellStartupFiles(options.shell ?? process.env.SHELL, paths.userHome);
-  const skillTargets = options.noSkills ? [] : [
-    path.join(paths.userHome, ".agents", "skills", SKILL_RELATIVE_PATH),
-    path.join(paths.userHome, ".claude", "skills", SKILL_RELATIVE_PATH),
-    path.join(paths.userHome, ".kimi", "skills", SKILL_RELATIVE_PATH)
-  ];
+  const skillTargets = options.noSkills ? [] : SKILL_HOSTS.map((provider) => ({
+    provider,
+    target: path.join(paths.userHome, SKILL_HOST_DIRECTORY[provider], "skills", SKILL_RELATIVE_PATH)
+  }));
   return {
     shims: PROVIDERS.map((provider) => path.join(paths.shimDir, provider)),
     command: path.join(paths.shimDir, "tokenpilot"),
-    skills: skillTargets.map((target) => assessSkillTarget(paths, target)),
+    skills: skillTargets.map(({ provider, target }) => assessSkillTarget(paths, target, provider)),
     shellFiles: shellFiles.length > 0 ? shellFiles : undefined,
     shellFile: shellFiles[0],
     launchAgent: shouldInstallLaunchAgent(process.platform, options.noAgent === true) ? paths.launchAgentFile : undefined

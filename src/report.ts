@@ -14,6 +14,22 @@ export interface Report {
   sessions?: AuditableSession[];
 }
 
+/**
+ * Limit an already-built read-only report to one provider. Skills use this so
+ * each host reports only the experiment it can actually run. An explicit
+ * zero-coverage row keeps the empty state clear without inventing telemetry.
+ */
+export function filterReportByProvider(report: Report, provider: Provider): Report {
+  const coverage = report.coverage.filter((row) => row.provider === provider);
+  return {
+    ...report,
+    rows: report.rows.filter((row) => row.provider === provider),
+    coverage: coverage.length > 0 ? coverage : [{ provider, sessions: 0, measuredSessions: 0, unavailableSessions: 0 }],
+    comparisons: report.comparisons.filter((comparison) => comparison.provider === provider),
+    sessions: report.sessions?.filter((session) => session.provider === provider)
+  };
+}
+
 const CACHE_SHIFT_TOTAL_FLAT_PERCENT = 0.02;
 const CACHE_SHIFT_MIN_CACHE_RECOVERY = 0.5;
 
@@ -378,15 +394,70 @@ function conciseResult(comparison: TreatmentComparison): string {
   return `${comparisonResult(comparison)} (${group})`;
 }
 
+function providerName(provider: Provider): string {
+  return provider === "codex" ? "Codex" : provider === "claude" ? "Claude" : provider === "grok" ? "Grok" : "Kimi";
+}
+
+function singleProviderSummary(report: Report, coverage: MeasurementCoverage): string {
+  const comparison = summaryComparison(report.comparisons);
+  const lines = [
+    `# TokenPilot — ${providerName(coverage.provider)} — last seven days`,
+    "",
+    `Window starts: ${report.since}`,
+    `Coverage: ${coverage.measuredSessions}/${coverage.sessions} measured; ${coverage.unavailableSessions} unavailable.`
+  ];
+  if (!comparison) {
+    const result = coverage.sessions === 0
+      ? "No sessions in this seven-day window; no comparison yet."
+      : coverage.measuredSessions === 0
+        ? "Limited measurement; no comparable numeric session."
+        : "No comparable baseline; no percentage or avoided tokens.";
+    lines.push(`Result: ${result}`, "");
+    return lines.join("\n");
+  }
+
+  const group = `${comparison.taskKind}; ${comparison.optimizationProfile}; ${comparison.totalSource}`;
+  if (comparison.tokenResult === "validated-reduction" || comparison.tokenResult === "preliminary-signal") {
+    const label = comparison.tokenResult === "validated-reduction" ? "validated median reduction" : "preliminary median signal — not an economy";
+    lines.push(`Result: ${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% ${label}.`);
+    const expected = comparison.baselineExpectedTreatmentTokens;
+    const used = comparison.treatmentRecordedTokens;
+    const avoided = comparison.estimatedTokensAvoided;
+    if (expected !== undefined && used !== undefined && avoided !== undefined) {
+      const percent = expected === 0 ? 0 : avoided / expected * 100;
+      lines.push(`Cohort tokens: expected ${integer(expected)}; used ${integer(used)}; avoided ${integer(avoided)} (${percent.toFixed(1)}% across ${comparison.treatmentSessions} treatment session${comparison.treatmentSessions === 1 ? "" : "s"}).`);
+    }
+  } else {
+    lines.push(`Result: ${comparisonResult(comparison)}.`);
+  }
+  const metrics = categoryLine(comparison);
+  if (metrics !== "—") lines.push(`Medians: ${metrics}.`);
+  lines.push(`Latency: ${latency(comparison)}.`);
+  lines.push(comparison.estimatedUsdAvoided === undefined
+    ? "USD: API-equivalent unavailable."
+    : `USD: ${usd(comparison.estimatedUsdAvoided)} API-equivalent ${comparison.tokenResult === "validated-reduction" ? "validated" : "preliminary"}; not a bill.`);
+  lines.push(`Basis: ${group}.`);
+  if (coverage.provider === "grok") lines.push("Grok TTY/TUI is unavailable and receives no estimate.");
+  lines.push("");
+  return lines.join("\n");
+}
+
 /** Short skill-facing view: coverage first, and no provider totals are combined. */
 export function reportSummaryMarkdown(report: Report): string {
+  if (report.coverage.length === 1 && report.rows.every((row) => row.provider === report.coverage[0].provider)) {
+    return singleProviderSummary(report, report.coverage[0]);
+  }
   const lines = ["# TokenPilot — last seven days", "", `Generated: ${report.generatedAt}`, `Window starts: ${report.since}`, "", "Coverage and result:", ""];
   for (const coverage of report.coverage) {
     const comparisons = report.comparisons.filter((comparison) => comparison.provider === coverage.provider);
     const comparison = summaryComparison(comparisons);
     const coverageText = `${coverage.measuredSessions}/${coverage.sessions} measured; ${coverage.unavailableSessions} unavailable`;
     if (!comparison) {
-      const state = coverage.measuredSessions === 0 ? "limited measurement — no comparable numeric session" : "no comparable baseline — no percentage or avoided tokens";
+      const state = coverage.sessions === 0
+        ? "no sessions in this seven-day window — no comparison yet"
+        : coverage.measuredSessions === 0
+          ? "limited measurement — no comparable numeric session"
+          : "no comparable baseline — no percentage or avoided tokens";
       lines.push(`- ${coverage.provider}: ${coverageText}. ${state}.`);
       continue;
     }
