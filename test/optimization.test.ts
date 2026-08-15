@@ -2,12 +2,24 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { GROK_TOKEN_EFFICIENCY_INSTRUCTION, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, GROK_TOKEN_EFFICIENCY_INSTRUCTION, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
-  it("keeps Claude observe-only after tested controls produced cache-shift", () => {
+  it("uses a complete session-only Claude core-tool policy", () => {
     const plan = planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt> --tools <tools>");
-    expect(plan).toMatchObject({ applied: false, args: [], unavailableReason: expect.stringContaining("cache-shift") });
+    expect(plan).toMatchObject({
+      applied: true,
+      profile: "claude-balanced-v6",
+      args: ["--effort", "low", "--tools", CLAUDE_CORE_TOOLS, "--append-system-prompt", TOKEN_EFFICIENCY_INSTRUCTION]
+    });
+  });
+
+  it("leaves Claude unchanged when the complete v6 policy is unavailable", () => {
+    expect(planFromHelp("claude", "balanced", "--effort <level> --tools <tools>")).toMatchObject({
+      applied: false,
+      args: [],
+      unavailableReason: expect.stringContaining("complete token-reduction policy")
+    });
   });
 
   it("uses session-only Codex overrides and does not enable prompt telemetry", () => {

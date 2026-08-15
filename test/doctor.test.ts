@@ -53,7 +53,12 @@ describe("doctor", () => {
     fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
     for (const provider of ["claude", "codex", "grok", "kimi"]) {
       const version = provider === "grok" ? "1.0.3" : "1.0.0";
-      fs.writeFileSync(path.join(originalBin, provider), `#!/bin/sh\nif [ "$1" = "--help" ]; then echo '--config'; fi\nif [ "$1" = "--version" ]; then echo '${provider} ${version}'; fi\nexit 0\n`, { mode: 0o700 });
+      const help = provider === "claude"
+        ? "--effort <level> --tools <tools> --append-system-prompt <prompt>"
+        : provider === "grok"
+          ? "--reasoning-effort <effort> --rules <rules> --verbatim"
+          : "--config";
+      fs.writeFileSync(path.join(originalBin, provider), `#!/bin/sh\nif [ "$1" = "--help" ]; then echo '${help}'; fi\nif [ "$1" = "--version" ]; then echo '${provider} ${version}'; fi\nexit 0\n`, { mode: 0o700 });
     }
     const report = doctor(paths, { platform: "linux", nodeVersion: "22.5.0", pathValue: `${paths.shimDir}${path.delimiter}${originalBin}` });
     expect(report).toMatchObject({ installationReady: true, measurementReady: false });

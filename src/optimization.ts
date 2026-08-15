@@ -10,6 +10,15 @@ import type { Provider, RunMode } from "./types.js";
 export const TOKEN_EFFICIENCY_INSTRUCTION = "Minimize token use without reducing correctness. Inspect narrowly, batch independent reads, avoid rereading unchanged data or repeating context, keep intermediate explanations concise, and stop after the requested result is verified. Do not skip necessary validation or change requested scope.";
 
 /**
+ * Claude's default tool catalog is useful but expensive to send on every
+ * request. Balanced v6 keeps the local coding primitives required to inspect,
+ * search, create, and edit a repository while leaving the full native catalog
+ * available through `deep` or the immediate bypass. The value is fixed product
+ * code and is never derived from a project or stored in telemetry.
+ */
+export const CLAUDE_CORE_TOOLS = "Bash,Edit,Read,Write,Grep,Glob";
+
+/**
  * Grok v2 still spent context loading unrelated skills, narrating tool use, and
  * reading broader source/test surfaces than the requested answer required.
  * Grok v3's generic "minimal" help value was rejected by the installed model;
@@ -42,11 +51,22 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
   if (mode !== "balanced") return NONE;
 
   if (provider === "claude") {
-    // Local paired measurements of v2-v5 kept Claude's complete total flat
-    // while moving tokens between new and cached input; v5 also increased
-    // latency. Keep authenticated measurement active, but do not inject a
-    // treatment until a versioned policy demonstrates a real total reduction.
-    return { ...NONE, unavailableReason: "Claude optimization is observe-only: tested policies produced cache-shift, not total-token reduction" };
+    if (!supports(help, "--effort") || !supports(help, "--tools") || !supports(help, "--append-system-prompt")) {
+      return { ...NONE, unavailableReason: "this Claude CLI does not expose the complete token-reduction policy" };
+    }
+    // v2-v5 changed effort and cache placement but left the complete total
+    // flat. v6 instead bounds the repeated tool-schema payload while retaining
+    // the core repository workflow and a concise, scope-preserving instruction.
+    return {
+      args: [
+        "--effort", "low",
+        "--tools", CLAUDE_CORE_TOOLS,
+        "--append-system-prompt", TOKEN_EFFICIENCY_INSTRUCTION
+      ],
+      applied: true,
+      profile: "claude-balanced-v6",
+      summary: "low effort, core coding tools, concise verified execution"
+    };
   }
 
   if (provider === "codex") {
