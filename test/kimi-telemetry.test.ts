@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KIMI_BALANCED_DISABLED_TOOLS, KimiUsageAccumulator, kimiHeadlessRequest, supportsKimiWebBridgeVersion } from "../src/telemetry/kimi.js";
+import { KIMI_BALANCED_DISABLED_TOOLS, KIMI_BALANCED_THINKING, KimiUsageAccumulator, kimiHeadlessRequest, supportsKimiWebBridgeVersion } from "../src/telemetry/kimi.js";
 
 describe("Kimi documented local session channel", () => {
   it("accepts only the bounded text print surface", () => {
@@ -21,6 +21,7 @@ describe("Kimi documented local session channel", () => {
   });
 
   it("keeps the local repository primitives while removing optional tool surfaces", () => {
+    expect(KIMI_BALANCED_THINKING).toBe("off");
     expect(KIMI_BALANCED_DISABLED_TOOLS).toContain("WebSearch");
     expect(KIMI_BALANCED_DISABLED_TOOLS).toContain("Agent");
     for (const core of ["Bash", "Edit", "Read", "Write", "Grep", "Glob"]) {

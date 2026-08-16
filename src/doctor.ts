@@ -87,7 +87,7 @@ function providerCapability(provider: Provider, binary: string): { provider: Pro
     ? "text print sessions use Kimi's authenticated local REST/WS counters; interactive TTY and unsupported print flags remain envelope-only"
     : "session envelope only; Kimi 0.36.1 local session counters were not confirmed";
   const optimization = kimiBridge
-    ? "balanced available for text print sessions (kimi-balanced-v3)"
+    ? "balanced available for text print sessions (kimi-balanced-v4)"
     : plan.applied ? `balanced available (${plan.profile})` : `balanced not injected (${plan.unavailableReason ?? "local help probe did not confirm it"})`;
   const state: ProviderDoctorState = provider === "kimi" || (provider === "grok" && !supportsGrokExternalOtel(binary)) || (provider === "codex" && !plan.applied) ? "limited" : "active";
   return {

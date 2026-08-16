@@ -46,6 +46,14 @@ interface KimiWireFrame {
 
 const KIMI_WEB_MIN_VERSION = [0, 36, 1] as const;
 
+/**
+ * Audited Kimi 0.36.x managed models without `support_efforts` expose the
+ * documented boolean thinking control. `off` is therefore the only reduced
+ * setting TokenPilot may claim for this protocol family; arbitrary labels
+ * such as `low` can be accepted and silently normalized by the server.
+ */
+export const KIMI_BALANCED_THINKING = "off" as const;
+
 /** Optional Kimi tools removed only from balanced text-print sessions. */
 export const KIMI_BALANCED_DISABLED_TOOLS = [
   "Agent",
@@ -306,7 +314,7 @@ async function runTurn(
                 profile: "agent",
                 model,
                 permission_mode: "auto",
-                ...(treatment ? { thinking: "low", disabled_tools: KIMI_BALANCED_DISABLED_TOOLS } : {})
+                ...(treatment ? { thinking: KIMI_BALANCED_THINKING, disabled_tools: KIMI_BALANCED_DISABLED_TOOLS } : {})
               })
             });
             return;

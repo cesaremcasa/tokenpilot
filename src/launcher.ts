@@ -252,8 +252,8 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       const kimiExperiment: OptimizationPlan | undefined = kimiBridgeAvailable ? {
         args: [],
         applied: true,
-        profile: "kimi-balanced-v3",
-        summary: "low thinking and core coding tools through Kimi's authenticated local per-session protocol"
+        profile: "kimi-balanced-v4",
+        summary: "thinking off and core coding tools through Kimi's authenticated local per-session protocol"
       } : undefined;
       const experiment = config.defaultMode === "balanced"
         ? kimiExperiment ?? planForInstalledCli(provider, "balanced", trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined)
