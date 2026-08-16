@@ -55,7 +55,7 @@ Common reasons include:
 - provider quota or service error before complete counters;
 - an older CLI without the documented telemetry surface;
 - Grok without correlated External OTEL/JSON counters;
-- interactive Kimi, unsupported Kimi flags, or a Kimi timeout;
+- Kimi, which is currently envelope-only while a safe correlated channel is unavailable;
 - a collector that started but received no accepted metric; or
 - an old total-only Codex path that cannot provide categories.
 
@@ -71,9 +71,7 @@ The cohort is directionally comparable but lacks a validation requirement, commo
 
 ## Kimi
 
-Only audited Kimi 0.36.x text-print sessions such as `kimi -p "..."` are measured through the local numeric bridge. Interactive TTY, stream JSON, resume, and unknown flag combinations run through the original CLI and remain measurement-limited.
-
-After a prompt is submitted through the bridge, a timeout is returned as a failed/unavailable session and is not retried through the original CLI.
+Kimi launches through its original CLI without a TokenPilot REST/WebSocket bridge. It remains envelope-only until a content-free, child-authenticated measurement channel is available.
 
 ## Provider quota errors
 

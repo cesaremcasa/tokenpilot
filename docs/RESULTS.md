@@ -2,6 +2,8 @@
 
 This document is the first manually reviewed TokenPilot research snapshot published by Mycellium Lab. It records what the local reports said at the end of the round; it is not a promise of future performance.
 
+The Kimi figures below are historical only. The Kimi REST/WebSocket bridge was disabled during the subsequent Codex Security hardening audit, so current Kimi sessions run unchanged and remain envelope-only.
+
 The next weekly snapshot is planned for Saturday, August 22, 2026. Future rounds should be appended as separate dated sections or files so earlier evidence remains reproducible.
 
 ## Environment

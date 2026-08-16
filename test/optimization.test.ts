@@ -67,12 +67,12 @@ describe("version-gated balanced optimization", () => {
     const plan = planFromHelp("kimi", "balanced", "Usage: kimi [--model MODEL] [PROMPT]");
     expect(plan).toMatchObject({ applied: false });
     expect(plan.args).toEqual([]);
-    expect(plan.unavailableReason).toContain("audited local session protocol");
+    expect(plan.unavailableReason).toContain("no enabled safe measurement channel");
   });
 
-  it("never enables Kimi from generic flags without the audited versioned bridge", () => {
+  it("never enables Kimi from generic flags without a safe measurement channel", () => {
     const plan = planFromHelp("kimi", "balanced", "--no-thinking --max-steps-per-turn N --max-retries-per-step N");
-    expect(plan).toMatchObject({ applied: false, unavailableReason: expect.stringContaining("audited local session protocol") });
+    expect(plan).toMatchObject({ applied: false, unavailableReason: expect.stringContaining("no enabled safe measurement channel") });
     expect(plan.args).toEqual([]);
   });
 

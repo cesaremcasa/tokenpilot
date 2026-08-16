@@ -31,6 +31,8 @@ The first controlled round was completed on August 15, 2026, on a Linux test hos
 
 These are early, task-specific research cohorts, not universal performance promises. Every validated row met TokenPilot's 5+5 minimum and cache-aware comparison rules. Provider/model coverage, session counts, medians, totals, unavailable sessions, and limitations are documented in [First research round](docs/RESULTS.md). The second weekly snapshot is planned for August 22, 2026.
 
+The Kimi result is historical: Kimi currently runs unchanged and is envelope-only while a safe correlated measurement channel is unavailable.
+
 ## What TokenPilot changes
 
 A new installation defaults to `balanced`. For each provider, TokenPilot persistently alternates between an unchanged `observe` session and a versioned `balanced` treatment. This preserves a provider-local baseline while testing a real reduction policy.
@@ -40,7 +42,7 @@ A new installation defaults to `balanced`. For each provider, TokenPilot persist
 | Claude | Low effort, stable cache prefix, latency-first instruction, core repository tools, and no Chrome startup. | Session flags only. Use `deep`, `off`, or the bypass for web, MCP, agents, notebooks, or other excluded tools. |
 | Codex | Low reasoning, no reasoning summary, low verbosity, concise execution, and compaction at 32k tokens. | Session-scoped `--config`; prompt telemetry remains disabled. |
 | Grok | Low reasoning, verbatim user prompt, and a fixed rule against irrelevant context and tool narration. | No system-prompt override, tool restriction, or API-only cache key. |
-| Kimi | For audited 0.36.x text-print sessions, `thinking: off` and core coding tools. | Interactive Kimi remains fail-open and measurement-limited. |
+| Kimi | No TokenPilot treatment is injected. | Runs through the original CLI and remains measurement-limited until a safe correlated channel exists. |
 
 Treatments are enabled only after the installed CLI passes the complete local help/version probe. If a probe, collector, or database operation fails, TokenPilot opens the original provider CLI without the treatment.
 
@@ -163,3 +165,7 @@ The npm package remains marked `private` to prevent accidental registry publicat
 ## License
 
 Copyright © 2026 Mycellium Lab. TokenPilot is available under the [MIT License](LICENSE).
+
+## Security audit
+
+Audited by Codex Security on 2026-08-15. The current release includes hardening for local endpoint authentication, managed-state permissions, provider executable resolution, and loopback receiver admission control.

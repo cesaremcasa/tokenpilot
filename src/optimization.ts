@@ -119,10 +119,9 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
       : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete token-reduction policy" };
   }
 
-  // Kimi is enabled only by the audited, version-gated local session bridge
-  // in launcher.ts. Advertised flags alone do not establish compatible
-  // semantics, so no generic CLI-argument policy is injected here.
-  return { ...NONE, unavailableReason: "this Kimi CLI version lacks the audited local session protocol" };
+  // Kimi remains fail-open until it offers a content-free, child-authenticated
+  // session measurement interface. Advertised flags alone are insufficient.
+  return { ...NONE, unavailableReason: "Kimi has no enabled safe measurement channel" };
 }
 
 /**

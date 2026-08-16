@@ -43,7 +43,7 @@ Cache reads, new input, cache creation, output, reasoning, pressure, and complet
 Balanced policies intentionally change reasoning, verbosity, compaction, or tool breadth. They may not be appropriate for every task.
 
 - Claude web, MCP, agent, notebook, and non-core tool work should use `deep`, `off`, or bypass.
-- Kimi interactive work is currently measurement-limited.
+- Kimi work is currently measurement-limited and has no TokenPilot treatment.
 - A provider/model quota failure is a provider event, not a TokenPilot optimization result.
 - Version gates reduce compatibility risk but do not replace a pilot on the organization's actual workflows.
 

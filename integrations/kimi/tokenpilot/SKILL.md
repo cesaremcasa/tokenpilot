@@ -18,7 +18,7 @@ Return the command's Markdown verbatim. Do not add another heading, table, summa
 ## Reporting rules
 
 - State measurement coverage first.
-- Audited Kimi 0.36.x text-print sessions may use the authenticated local REST/WebSocket numeric channel. Interactive, unsupported, timed-out, or uncorrelated sessions remain unavailable; never estimate them.
+- Kimi currently runs through its original CLI without a TokenPilot REST/WebSocket bridge. It remains envelope-only until a safe correlated measurement channel is available; never estimate unavailable sessions.
 - The command is already limited to Kimi. Never add another provider or combine provider totals.
 - Call a reduction only when the summary says `validated reduction`.
 - Treat limited measurement, a missing comparable base, cache-shift, and preliminary signals as not validated.
