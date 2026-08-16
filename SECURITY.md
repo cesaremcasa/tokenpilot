@@ -1,35 +1,54 @@
-# Security and privacy boundary
+# Security policy
 
-TokenPilot is a local measurement tool. It must remain outside the provider authentication path and outside model request/response traffic.
+TokenPilot is a local measurement and optimization tool developed by Mycellium Lab. Its primary security boundary is simple: it must remain outside provider authentication and must never retain model or developer content.
 
-## Never persist or export
+## Supported versions
 
-- API keys, OAuth tokens, cookies, passwords, or account emails;
-- prompts, replies, model reasoning text, source code, file paths, tool results, shell commands, or command-line arguments;
-- raw provider session logs or any unreviewed export.
+Security fixes are applied to the latest release on `main`. Older research builds may not receive backports. Include the TokenPilot version, operating system, Node.js version, and affected provider CLI version in a report.
 
-The personal Claude metrics receiver can transiently receive provider-supplied
-resource attributes in process memory. It immediately discards every resource
-attribute and writes only the allowed numeric counters below. It never logs,
-stores, or exports those transient fields.
+## Reporting a vulnerability
+
+Use GitHub's private **Report a vulnerability** / Security Advisory flow for this repository. If private reporting is unavailable, open a public issue containing only a request for a private maintainer contact. Do not include exploit details, credentials, prompts, source code, paths, account identifiers, databases, or raw provider output in a public issue.
+
+The maintainers will acknowledge a complete report, reproduce it with synthetic data, assess affected versions, and coordinate a fix before public disclosure when possible.
+
+## Data that must never persist or be exported
+
+- API keys, OAuth tokens, cookies, passwords, account emails, or provider session secrets;
+- prompts, responses, reasoning text, source code, file paths, tool results, shell commands, or command-line arguments;
+- raw provider session logs, histories, transcripts, JSONL files, or unreviewed exports; and
+- company identifiers or telemetry copied from an unapproved environment.
+
+Claude's metrics exporter may include provider-supplied resource attributes transiently in process memory. TokenPilot discards every resource attribute before storage and accepts only the documented numeric token metric.
 
 ## Allowed local fields
 
 - provider and CLI version;
-- pseudonymous run ID, timestamps, local exit status, mode, and optional task category/outcome;
-- numeric token, cache, request, retry, compaction, and duration counters.
+- opaque run ID, timestamps, duration, exit status, mode, policy, and collection status;
+- optional content-free task category and outcome; and
+- numeric token, cache, request, retry, compaction, model-call, and provider-total counters.
 
-## Fail-open behavior
+## Runtime controls
 
-If configuration, telemetry storage, or collection fails, the launcher starts the original provider CLI without optimization. `TOKENPILOT_BYPASS=1` bypasses the launcher for one command and records nothing.
+- `TOKENPILOT_BYPASS=1 <provider>` opens the original provider CLI and records nothing.
+- `tokenpilot mode off` disables treatment and measurement for future sessions.
+- If optional configuration, telemetry, policy probing, or storage fails, the original provider CLI opens without the treatment.
+- Authentication, logout, help, and version commands pass through without telemetry.
 
 ## Installation and executable boundary
 
-- The installed CLI ignores `HOME` and `TOKENPILOT_*` state-directory overrides. Test-only overrides are unavailable to normal commands.
-- Installation and removal refuse to overwrite or delete a non-TokenPilot shim, LaunchAgent, or shell startup file symlink.
-- The launcher never loads a provider executable path from configuration. It accepts only a regular executable outside its own shim directory, with a containing directory that is not group- or world-writable.
-- V0.1 does not scan ambient provider logs. A provider-specific adapter must prove a documented run correlation before it can write numeric usage records.
+- Production commands ignore environment-controlled state-root overrides.
+- Installation and removal refuse unsafe directories, symlinks, foreign launchers, and modified managed shell blocks.
+- Provider executables are resolved only as regular executables outside TokenPilot's launcher directory, and their containing directory must not be group- or world-writable.
+- TokenPilot runs as the current user and never requires root.
+- Raw telemetry remains under the current user's private local state directory.
+
+## Adapter requirements
+
+A measurement adapter must correlate documented numeric counters to the exact wrapped session. TokenPilot does not scrape terminal UIs, ambient provider logs, history folders, transcripts, timestamps, or provider cache files. Missing or unverified counters are marked unavailable.
+
+An optimization adapter must be versioned, session-scoped, verified against the installed CLI's documented surface, reversible, and fail-open. API-only cache controls must never be assumed to work in a provider CLI.
 
 ## Enterprise boundary
 
-No company account identifier, prompt, code, or metric may be copied to this personal repository. The personal deployment records only its content-free local session envelope and never uploads it; use it only with accounts and data approved for that personal experiment. A company pilot requires a company-owned codebase, approved storage, Security review, and user-visible opt-in/rollback controls.
+The MIT-licensed source may be reviewed and deployed by an organization, but production adoption still requires the organization's security, legal, privacy, and data-retention approval. Company telemetry must remain in company-approved local or company-owned storage. See [Enterprise adoption](docs/ENTERPRISE.md).

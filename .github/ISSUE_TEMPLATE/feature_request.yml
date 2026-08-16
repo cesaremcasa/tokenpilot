@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose a privacy-preserving product or adapter improvement.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the user problem without proprietary task content.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Provider documentation or evidence
+      description: Required for a new telemetry source, model control, or optimization policy.
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Boundaries
+      options:
+        - label: The proposal does not require storing prompts, responses, code, credentials, arguments, paths, or raw provider logs.
+          required: true
+        - label: The proposal can remain provider-local, version-gated, reversible, and fail-open.
+          required: true
