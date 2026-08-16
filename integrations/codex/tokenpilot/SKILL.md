@@ -1,6 +1,6 @@
 ---
 name: tokenpilot
-description: Show the private local Codex TokenPilot report for the last seven days. Use when the user asks about Codex token use, measured reduction, latency, cache effectiveness, coverage, or experiment quality.
+description: Show the privacy-preserving local Codex TokenPilot report for the last seven days. Use when the user asks about Codex token use, measured reduction, latency, cache effectiveness, coverage, or experiment quality.
 ---
 
 <!-- tokenpilot-managed-skill:v2 codex -->

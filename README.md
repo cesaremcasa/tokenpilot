@@ -1,6 +1,11 @@
 # TokenPilot
 
-TokenPilot is a private, local-first research tool for observing token use in the terminal versions of Claude, Codex, Grok, and Kimi. It preserves the developer workflow: after one installation, use the original commands and log in only with the original provider.
+[![CI](https://github.com/cesaremcasa/tokenpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/cesaremcasa/tokenpilot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js 22.5+](https://img.shields.io/badge/Node.js-22.5%2B-339933.svg)](https://nodejs.org/)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](docs/INSTALLATION.md)
+
+TokenPilot is a local-first measurement and optimization layer for the terminal versions of Claude Code, OpenAI Codex, Grok Build, and Kimi Code CLI. Developers keep using the provider commands and provider authentication they already know:
 
 ```sh
 claude
@@ -9,205 +14,152 @@ grok
 kimi
 ```
 
-It does **not** create a shared cache, proxy model traffic, receive provider credentials, or persist prompts, replies, code, tool output, command arguments, or working directories. Provider caches remain provider-side.
+TokenPilot measures provider-published numeric usage, runs version-gated token-reduction treatments, and produces cache-aware seven-day reports. It does not proxy model traffic, create a shared cache, read credentials, or store prompts, responses, source code, tool output, command arguments, or working directories.
 
-## Current scope: personal measurement and reduction
+Developed by **Mycellium Lab** and released under the [MIT License](LICENSE).
 
-Version 0.4.6 is a local macOS/Linux tool. A new install defaults to `balanced`: it persistently alternates provider-local `observe` and `balanced` assignments, starting randomly, so there is still a matched baseline. `deep`, `off`, `observe`, and `TOKENPILOT_BYPASS=1` are immediate controls. The wrapper changes a provider session only after that exact installed CLI advertises the required documented surface; any failed probe starts the original CLI unchanged. Windows native support remains unavailable until its separate clean-machine acceptance suite is complete.
+## First research round
 
-Claude, current Codex CLIs, and Grok Build 1.0.3+ can publish local, authenticated metrics through a per-run receiver. Older Codex CLIs fall back only to their published `exec` total; older Grok versions fall back only to explicit one-turn JSON usage. Audited Kimi 0.36.x text print sessions use Kimi's correlated local session counters; interactive Kimi and unsupported flags remain envelope-only and unavailable for token comparison. TokenPilot never scans ambient provider folders, transcripts, or logs.
+The first controlled round was completed on August 15, 2026, on a Linux test host with TokenPilot 0.4.6. Results are separated by provider and are not summed.
 
-`balanced` is a durable 50/50 provider-local experimental assignment and a real token-reduction treatment. Its first assignment per provider is random; later sessions alternate between `observe` and `balanced`, even across terminal restarts. Task type is intentionally classified only after a session, so it never influences launch-time assignment. TokenPilot probes only the installed provider CLI's version and documented help surface. It applies a policy only if that exact local version passes the complete probe. A failed probe or missing capability starts the original CLI unchanged.
+| Provider | Coverage | Validated median token reduction | Cohort token reduction | Median latency change |
+| --- | ---: | ---: | ---: | ---: |
+| Claude | 45/46 measured | **66.0%** | 66.3% | 35.3% faster |
+| Codex | 49/51 measured | **54.8%** | 55.5% | 69.0% faster |
+| Grok | 39/40 measured | **42.6%** | 50.8% | 68.4% faster |
+| Kimi | 42/46 measured | **51.6%** | 51.5% | 4.2% faster |
 
-| Provider | `balanced` policy | Safety boundary |
+These are early, task-specific research cohorts, not universal performance promises. Every validated row met TokenPilot's 5+5 minimum and cache-aware comparison rules. Provider/model coverage, session counts, medians, totals, unavailable sessions, and limitations are documented in [First research round](docs/RESULTS.md). The second weekly snapshot is planned for August 22, 2026.
+
+## What TokenPilot changes
+
+A new installation defaults to `balanced`. For each provider, TokenPilot persistently alternates between an unchanged `observe` session and a versioned `balanced` treatment. This preserves a provider-local baseline while testing a real reduction policy.
+
+| Provider | Current `balanced` treatment | Boundary |
 | --- | --- | --- |
-| Claude | Uses low effort, one fixed latency-first instruction, the core coding tools `Bash`, `Edit`, `Read`, `Write`, `Grep`, and `Glob`, no Chrome startup, and a stable cache prefix when the complete v7 probe passes. | Session flags only; older compatible CLIs retain v6. `deep`, `off`, or `TOKENPILOT_BYPASS=1` restores Claude's full native tool catalog immediately. Tasks requiring web, MCP, agents, notebooks, or another excluded tool must use one of those controls. |
-| Codex | Uses low reasoning, no reasoning summary, low verbosity, one fixed concise-execution instruction, and body compaction at 32k tokens. | Session `--config` overrides only; prompt OTEL export remains disabled. |
-| Grok | Uses low reasoning, verbatim user prompts, and one fixed `--rules` instruction against irrelevant skills, broad reads, rereads, and tool narration. | Does not override the system prompt, restrict tools, or use API-only cache keys. |
-| Kimi | For audited 0.36.x `-p` text sessions, turns thinking off and removes optional agent/web/scheduling tools while retaining the core coding tools. | A short-lived, password-authenticated loopback Kimi session is used for both baseline and treatment. The boolean `off` value matches the installed managed models' documented effort metadata. Interactive TTY, stream JSON, resume, and unknown flags run through the original CLI unchanged and remain measurement-limited. |
+| Claude | Low effort, stable cache prefix, latency-first instruction, core repository tools, and no Chrome startup. | Session flags only. Use `deep`, `off`, or the bypass for web, MCP, agents, notebooks, or other excluded tools. |
+| Codex | Low reasoning, no reasoning summary, low verbosity, concise execution, and compaction at 32k tokens. | Session-scoped `--config`; prompt telemetry remains disabled. |
+| Grok | Low reasoning, verbatim user prompt, and a fixed rule against irrelevant context and tool narration. | No system-prompt override, tool restriction, or API-only cache key. |
+| Kimi | For audited 0.36.x text-print sessions, `thinking: off` and core coding tools. | Interactive Kimi remains fail-open and measurement-limited. |
 
-The wrapper prints a one-line notice when a treatment is active. It never stores the injected arguments; reports retain only the TokenPilot policy name.
+Treatments are enabled only after the installed CLI passes the complete local help/version probe. If a probe, collector, or database operation fails, TokenPilot opens the original provider CLI without the treatment.
 
 ## Requirements
 
-- macOS or Linux and Node.js 22.5 or newer (Windows native is not supported)
-- At least one provider CLI already installed and working: `claude`, `codex`, `grok`, or `kimi`
-- zsh or bash for automatic integrated-terminal `PATH` setup
+- macOS or Linux;
+- Node.js 22.5 or newer;
+- zsh or bash; and
+- at least one supported provider CLI already installed and authenticated.
 
-## Install from this repository
+Windows native support is not yet released. See the current [provider and platform matrix](docs/PROVIDERS.md).
+
+## Quick start
 
 ```sh
+git clone https://github.com/cesaremcasa/tokenpilot.git
+cd tokenpilot
 npm ci --ignore-scripts
+npm test
 npm run build
 node dist/cli.js install
 exec "$SHELL" -l
 tokenpilot doctor
 ```
 
-The installer creates the `tokenpilot` command and per-provider shims at `~/.tokenpilot/bin`, then places its exact managed PATH block at the end of `~/.zshrc` or, for Bash, both `~/.bashrc` and the existing login startup file (`.bash_profile`, `.bash_login`, or `.profile`). This gives shims precedence even when a login profile appends `~/.local/bin` after sourcing `.bashrc`; a modified managed block is never overwritten. On macOS it also starts a user-only LaunchAgent; on Linux each finished wrapped session finalizes its own collection state, so no system service or root access is required. It copies the compiled runtime into private TokenPilot state, so installed commands keep working if the cloned checkout is moved or deleted.
+The installer creates the `tokenpilot`, `claude`, `codex`, `grok`, and `kimi` launchers under `~/.tokenpilot/bin`. It also installs optional report skills when their destination directories are safe. No root access or second provider login is required.
 
-The report skills are optional integrations. Each destination is inspected independently: an unsafe directory, symlink, or third-party skill is ignored without blocking provider wrappers. `install` prints the resulting state and `tokenpilot doctor` explains the correction. Codex, Claude, Grok, and Kimi have separate versioned skill sources because their discovery and measurement capabilities evolve independently. Each skill is installed per user, not per repository or company account, and filters the report to its own provider:
-
-| Provider | Open the seven-day report |
-| --- | --- |
-| Claude Code | `/tokenpilot` |
-| Codex | `$tokenpilot` (or select it after typing `/`) |
-| Grok Build | `/tokenpilot` |
-| Kimi Code CLI | `/skill:tokenpilot` |
-
-The installed skill calls its user-owned TokenPilot executable directly rather than relying on `PATH`; it therefore works in Codex and other GUI skill runners that do not load an interactive shell. Its report command defaults to the latest seven days and is read-only: before the first personal session it returns an empty report without creating a database or directory. A legacy WAL database is deliberately not opened by the report because SQLite would create sidecar files; start one personal session once to migrate it. The skill never reads transcripts, prompts, provider logs, project files, environment variables, or the SQLite database directly. Use `tokenpilot install --no-skills` only when a managed environment must distribute the skill separately.
-
-After installation, typing `claude`, `codex`, `grok`, or `kimi` records a content-free local session automatically and applies the selected mode. No terminal environment flag or extra login is required. Use this personal deployment only with the accounts and data that belong in its local experiment; a company rollout must use its own approved deployment and storage.
-
-Preview its changes without writing anything:
-
-```sh
-node dist/cli.js install --dry-run
-```
-
-The installed CLI deliberately ignores `HOME` and `TOKENPILOT_*` state-directory overrides. Its persistent state is fixed below the OS account home directory, so an untrusted environment cannot redirect installation, uninstallation, or telemetry. The test suite uses an internal, test-only path override to stay isolated.
-
-## Daily use and controls
-
-Normal use is unchanged:
+After installation, continue using the provider normally. TokenPilot records a content-free session envelope and marks it measured only when that exact session publishes correlated numeric counters.
 
 ```sh
 codex
-```
 
-The normal provider command automatically creates a content-free session envelope after installation. It is marked `measured` only when that provider modality publishes correlated numeric counters; otherwise it is `unavailable` with a closed diagnostic reason. `login`, `logout`, help, and version commands remain transparent and never create a session record.
-
-The original CLI continues to own authentication. Commands such as `codex login`, `claude auth`, `grok --help`, and `kimi --version` pass through without telemetry.
-
-```sh
-# Immediate, process-only bypass: run the original CLI and write nothing.
+# Immediate bypass: original provider CLI, no TokenPilot telemetry.
 TOKENPILOT_BYPASS=1 codex
 
-# Set the default mode for future sessions.
-tokenpilot mode observe
-tokenpilot mode balanced
-tokenpilot mode deep
-tokenpilot mode off
-
-# Check installation separately from measurement capability. Each provider is
-# active, shadowed, unavailable, or limited. This creates no telemetry/config.
+# Inspect installation and measurement capability separately.
 tokenpilot doctor
 
-# Inspect local state or finalize an older pending envelope as unavailable.
-tokenpilot status
-tokenpilot collect
-
-# Audit and optionally classify content-free sessions. The list includes an
-# opaque ID, provider/time/mode/policy/task/outcome, measured or unavailable,
-# metric basis/total source, price snapshot ID, and a closed reason.
-tokenpilot sessions
-tokenpilot sessions --unclassified
-tokenpilot classify <run-id> --kind bugfix --outcome completed
-# Use benchmark only for controlled checks, never for ordinary work.
-tokenpilot classify <run-id> --kind benchmark --outcome completed
-
-# Short audit summary for the latest seven days.
+# Show the concise rolling seven-day report.
 tokenpilot report
-# The same summary limited to one provider (used by its installed skill).
-tokenpilot report --provider codex
-# Full comparison evidence or adapter limitations.
+```
+
+Read the full [installation and upgrade guide](docs/INSTALLATION.md) before distributing TokenPilot to another machine.
+
+## Report skills
+
+Each provider receives a read-only local report skill. Skills never inspect the SQLite database directly and never combine providers.
+
+| Provider | Command |
+| --- | --- |
+| Claude Code | `/tokenpilot` |
+| OpenAI Codex | `$tokenpilot` or select `tokenpilot` after typing `/` |
+| Grok Build | `/tokenpilot` |
+| Kimi Code CLI | `/skill:tokenpilot` |
+
+## Controls
+
+```sh
+tokenpilot mode balanced  # 50/50 provider-local experiment; installation default
+tokenpilot mode observe   # unchanged provider behavior with measurement
+tokenpilot mode deep      # native provider settings with measurement
+tokenpilot mode off       # original CLI with no TokenPilot telemetry
+
+tokenpilot sessions --unclassified
+tokenpilot classify <run-id> --kind research --outcome completed
+
+tokenpilot report --provider claude
 tokenpilot report --view detail
 tokenpilot report --view diagnostics
 ```
 
-### Optional API-equivalent USD
+Authentication and support commands such as login, logout, help, and version pass through without creating telemetry. `TOKENPILOT_BYPASS=1` is the process-level emergency bypass.
 
-TokenPilot never fetches prices, guesses a model, or treats a personal subscription as a bill. If an API-equivalent view is useful, add a price profile manually and select it per provider:
+## Measurement contract
 
-```sh
-tokenpilot pricing add codex codex-model-example \
-  --label "My manually verified Codex API profile" \
-  --version 2026-08-14 \
-  --input-usd-per-million 0 \
-  --cached-input-usd-per-million 0 \
-  --cache-creation-usd-per-million 0 \
-  --output-usd-per-million 0
-tokenpilot pricing set codex codex-model-example
-tokenpilot pricing list
-tokenpilot pricing off codex
-```
+TokenPilot never calls a cache shift a token reduction. It reports these categories separately:
 
-Use rates you have independently verified for the intended provider/model. The selected profile and its full rate snapshot are stored with each new session, so historical reports remain reproducible after a later price change. USD is shown only when the provider published all compatible categories: new input, cached input, cache creation, output, and reasoning when the chosen profile prices reasoning. A provider total alone never receives a USD conversion. Every report labels this as **API-equivalent USD, not a provider bill**.
+- new input;
+- cache reads;
+- cache creation;
+- output;
+- reasoning;
+- token pressure; and
+- a complete cache-aware total.
 
-Provider-published numeric measurement is automatic in these non-interactive commands; their output is forwarded unchanged and TokenPilot persists only the recognized numbers:
+A reduction is validated only for the same provider, known non-benchmark task type, policy, metric basis, and price snapshot, with at least five measured baselines and five measured treatments. If new input moves into cache while the complete total remains effectively flat, the state is `cache-shift` and TokenPilot emits no percentage, avoided tokens, or avoided USD.
 
-```sh
-# Codex final provider-reported session total
-codex exec "implement the requested change"
+See [Measurement methodology](docs/MEASUREMENT.md) for formulas, comparison states, pricing rules, and audit requirements.
 
-# Grok JSON single-turn fallback (normal Grok 1.0.3+ TTY/TUI uses External OTEL)
-grok --output-format json --single "summarize this change"
+## Privacy and security
 
-# Kimi 0.36.x correlated text-print session
-kimi -p "summarize this change"
-```
+Raw data stays on the user's machine:
 
-Normal interactive Codex and Grok sessions retain their original TTY streams. Grok Build 1.0.3+ exports the documented `grok_code.token.usage` metric for `input`, `cache_read`, `output`, and `reasoning`; an unsupported version or a session that publishes no correlated counter remains unavailable rather than estimated.
+- macOS: `~/.local/share/tokenpilot/telemetry.sqlite`
+- Linux: `~/.tokenpilot/data/telemetry.sqlite`
 
-`off` and `TOKENPILOT_BYPASS=1` are immediate no-telemetry bypasses. If TokenPilot cannot initialize its telemetry database, it starts the original CLI normally.
+The database stores only content-free session metadata and numeric counters. TokenPilot does not scan provider histories, transcripts, logs, JSONL files, source repositories, or credential stores. Local receivers bind to `127.0.0.1`, use a per-run secret where supported, and are destroyed after the session.
 
-## Data model and privacy
+Read [Security](SECURITY.md), [Architecture](docs/ARCHITECTURE.md), and [Measurement methodology](docs/MEASUREMENT.md) before changing an adapter.
 
-Raw local telemetry stays in `~/.local/share/tokenpilot/telemetry.sqlite` on macOS and `~/.tokenpilot/data/telemetry.sqlite` on Linux, with user-only directory permissions. The database contains only:
+## Documentation
 
-- provider, mode, CLI version, timestamps, exit status, and collection status;
-- numeric usage counters (new/cached input, cache creation, output, reasoning, model calls, and a provider-reported total when no category breakdown exists);
-- numeric compaction/retry/model-switch events; and
-- optional task category and outcome.
+- [Installation, upgrade, rollback, and uninstall](docs/INSTALLATION.md)
+- [Architecture and data flow](docs/ARCHITECTURE.md)
+- [Measurement methodology](docs/MEASUREMENT.md)
+- [Provider and model compatibility](docs/PROVIDERS.md)
+- [First research round](docs/RESULTS.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Enterprise adoption](docs/ENTERPRISE.md)
+- [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 
-The source code rejects fields named `prompt`, `message`, `content`, `token`, `credential`, `command`, `args`, and similar before storage. `.gitignore` excludes the database, raw JSONL, and personal reports. The launcher never takes the provider executable from config; it resolves only a regular executable outside the TokenPilot shim directory whose containing directory is not group- or world-writable.
+## Project status
 
-Before sharing an aggregate report, review it manually. Do not put company telemetry, account names, internal project names, or raw session files in this repository.
+TokenPilot is active research software. The measured reductions above are promising, but provider CLIs and telemetry surfaces can change. Unsupported or uncorrelated sessions are reported as unavailable rather than estimated. Use the bypass controls whenever a task requires the provider's full native behavior.
 
-## Telemetry quality
+The npm package remains marked `private` to prevent accidental registry publication. This does not restrict source use: the repository is licensed under MIT.
 
-TokenPilot treats provider logs as an evolving local interface. It never scans provider folders, timestamps, JSONL, or Wire output: none of those sources alone proves a log line belongs to the current wrapper session. `tokenpilot collect` consequently marks a finished envelope `unavailable` rather than inventing numbers or mixing activity.
+## License
 
-For a local Claude session, TokenPilot starts a short-lived receiver on `127.0.0.1` and configures Claude's documented OTLP **metrics-only** exporter for that child process. It disables logs, traces, prompt/response logging, tool-detail logging, raw API bodies, account UUIDs, session IDs, and custom resource labels. Each receiver has an unguessable per-run header and accepts only the documented `claude_code.token.usage` metric. It extracts only the numeric `input`, `cacheRead`, `cacheCreation`, and `output` counters; every other field is discarded before storage. It does not change Claude authentication or send telemetry over the network.
-
-For Grok Build 1.0.3+, TokenPilot uses the CLI's documented External OpenTelemetry v1 stream for the wrapped child only. It selects the local HTTP/protobuf metrics exporter, disables logs and content gates, omits session/version attributes, and authenticates an ephemeral `127.0.0.1` receiver with a per-run secret. The bounded parser accepts only `grok_code.token.usage`; resource identity, model, session, prompts, tools, paths, commands, and unknown metrics are discarded. External OTEL v1 has no cache-creation category: non-cached input and cache reads are reported separately, and cache creation is not applicable rather than estimated.
-
-For audited Kimi 0.36.x text print sessions, TokenPilot starts `kimi web` on a random `127.0.0.1` port with a random per-run password and Kimi telemetry disabled. It uses Kimi's local REST/WebSocket session protocol, stores only numeric `inputOther`, `inputCacheRead`, `inputCacheCreation`, and `output` counters, and destroys the local server when the turn ends. Kimi still owns provider authentication. TokenPilot never reads Kimi credentials, persistent server tokens, history, logs, prompts, replies, tool payloads, or paths. A setup failure before prompt submission opens the original CLI exactly once; a failure after submission never retries the task.
-
-Claude's metrics can still contain account identity attributes in the transient provider export. TokenPilot neither logs nor stores them, but this is why the receiver is local, authenticated per session, and destroyed when the CLI exits.
-
-The four adapters are all available for observation:
-
-| Provider | Automatic counter import | Current optimisation |
-| --- | --- | --- |
-| Claude | Metrics-only local OTLP receiver, correlated by the wrapper's unique per-run endpoint header | v7 low effort, latency-first execution, core coding tools, no Chrome startup, and stable cache prefix when the complete probe passes; v6 fallback on older compatible CLIs |
-| Codex | Current CLIs: metrics-only local OTLP for interactive and `exec`; older CLIs: only the published `exec` total | low effort/verbosity, no reasoning summary, concise execution, 32k body compaction when the full policy probe passes |
-| Grok | Build 1.0.3+: metrics-only local External OTEL for TTY/TUI and headless; older versions: explicit JSON single-turn fallback | low effort, verbatim prompt, targeted context and no tool narration when the full v4 policy probe passes |
-| Kimi | Audited 0.36.x `-p` text: authenticated local REST/WS counters; interactive and unsupported modes: unavailable envelope | v4 thinking off and a core coding-tool surface for audited text print sessions only |
-
-Claude handles prompt caching itself, and its cache prefix is sensitive to model, tools, MCP connections, and context changes. [Claude Code documentation](https://code.claude.com/docs/en/prompt-caching) explains these limits. Codex exposes user-level profiles, reasoning effort, automatic compaction, and telemetry configuration; its official configuration reference is the source of truth for any later adapter experiment. [OpenAI Docs](https://learn.chatgpt.com/docs/config-file/config-reference)
-
-## Personal experiment
-
-1. Install once, then use the CLIs normally. Sessions are measured automatically and can be classified only when you are comfortable doing so.
-2. Run `/tokenpilot`, `$tokenpilot`, or `/skill:tokenpilot` at any time for that host's rolling seven-day provider report. Claude, current Codex, Grok Build 1.0.3+, and audited Kimi 0.36.x text print sessions publish correlated counters. Unsupported sessions correctly show unavailable rather than an estimate.
-3. `balanced` is the initial mode; set `tokenpilot mode observe` to establish an unchanged-only baseline or use `deep`/`off` as immediate controls. A verified provider policy is applied only when the CLI advertises the necessary flags.
-4. A reduction is validated only after five measured baseline and five measured treatment sessions for the same provider, known non-benchmark task type, complete cache-aware total basis, policy version, and price-profile snapshot. `unknown` and benchmark work can only be a preliminary signal and never a savings claim.
-5. Use `TOKENPILOT_BYPASS=1 <provider>` or `tokenpilot mode off` for an immediate no-telemetry bypass. `tokenpilot mode deep` preserves the native provider settings while retaining measurement.
-
-There is intentionally no pre-set savings target. Coverage comes first. Each provider then shows new input, cache reads, cache creation, token pressure, a complete cache-aware total, latency, and opaque local evidence IDs. A complete total is the verified provider total when it includes cache reads; otherwise it is `new + cached + cache creation + output + reasoning`. If new input moves into cache reads while that total changes by less than 2%, TokenPilot emits `cache-shift`, never a percentage, tokens avoided, or USD avoided.
-
-The JSON and Markdown reports use the same five states: `limited`, `incomparable`, `cache-shift`, `preliminary-signal`, and `validated-reduction`. The first three never show a percentage, avoided tokens, or avoided USD. A preliminary signal may show a directional number but is never called an economy. **Validated reduction** is the sole reduction claim. A changed policy, metric basis, or price snapshot produces an explicit incomparable state instead of silently dropping the cohort.
-
-## Removing TokenPilot
-
-```sh
-tokenpilot uninstall --dry-run
-tokenpilot uninstall
-```
-
-Uninstall removes the shims, the TokenPilot block it owns in the shell startup file, and its user LaunchAgent. It does not remove the local database; delete that only after reviewing whether the personal experiment is complete.
-
-## Enterprise handoff
-
-See [docs/JOHN.md](docs/JOHN.md). A company pilot needs a company-owned repository, Security approval, company storage for aggregate metrics, an opt-in user-level agent, a global kill switch, and provider-specific correlated telemetry that has passed a privacy review. It must not depend on this personal repository or export company telemetry to it.
+Copyright © 2026 Mycellium Lab. TokenPilot is available under the [MIT License](LICENSE).

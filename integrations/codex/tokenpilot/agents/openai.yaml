@@ -1,5 +1,5 @@
 # tokenpilot-managed-skill:v2 codex
 interface:
   display_name: "TokenPilot"
-  short_description: "Seven-day local Codex token report"
+  short_description: "Mycellium Lab seven-day local Codex token report"
   default_prompt: "Use $tokenpilot to show the audited Codex token reduction report for the last seven days."
