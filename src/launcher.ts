@@ -6,12 +6,13 @@ import { spawn, spawnSync } from "node:child_process";
 import { getAdapter } from "./adapters/index.js";
 import { ensureConfig } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
-import { planForInstalledCli, planFromHelp } from "./optimization.js";
+import { planForInstalledCli, planFromHelp, type OptimizationPlan } from "./optimization.js";
 import { pricingProfile } from "./pricing.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
 import { CodexExecTokenParser, isCodexExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
 import { GrokJsonUsageParser, isGrokJsonSingle, startGrokMetricsReceiver, supportsGrokExternalOtelVersion, type GrokMetricsReceiver } from "./telemetry/grok.js";
+import { kimiHeadlessRequest, runKimiHeadless, supportsKimiWebBridge, type KimiHeadlessRequest, type KimiMeasuredUsage } from "./telemetry/kimi.js";
 import type { Provider, RunMode } from "./types.js";
 
 const PASSTHROUGH_ARGUMENTS = new Set([
@@ -126,7 +127,7 @@ export function findOriginalBinary(
   return undefined;
 }
 
-function binaryVersion(binary: string): string | undefined {
+export function binaryVersion(binary: string): string | undefined {
   const trusted = trustedExecutable(binary);
   if (!trusted) return undefined;
   const result = spawnSync(trusted, ["--version"], {
@@ -230,6 +231,8 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   let claudeMetrics: ClaudeMetricsReceiver | undefined;
   let codexOtelMetrics: CodexMetricsReceiver | undefined;
   let grokOtelMetrics: GrokMetricsReceiver | undefined;
+  let kimiBridge: { request: KimiHeadlessRequest; treatment: boolean } | undefined;
+  let kimiUsage: KimiMeasuredUsage | undefined;
   const codexExecMetrics = provider === "codex" && isCodexExec(args) ? new CodexExecTokenParser() : undefined;
   const grokMetrics = provider === "grok" && isGrokJsonSingle(args) ? new GrokJsonUsageParser() : undefined;
   try {
@@ -242,8 +245,18 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       const trusted = trustedExecutable(binary);
       if (!trusted) throw new Error("Provider executable no longer meets TokenPilot trust checks");
       database = new TelemetryDatabase(paths);
+      const version = binaryVersion(trusted);
+      const kimiRequest = provider === "kimi" ? kimiHeadlessRequest(args) : undefined;
+      const kimiBridgeAvailable = provider === "kimi" && kimiRequest !== undefined
+        && supportsKimiWebBridge(trusted, version, providerEnvironment({}, trusted));
+      const kimiExperiment: OptimizationPlan | undefined = kimiBridgeAvailable ? {
+        args: [],
+        applied: true,
+        profile: "kimi-balanced-v3",
+        summary: "low thinking and core coding tools through Kimi's authenticated local per-session protocol"
+      } : undefined;
       const experiment = config.defaultMode === "balanced"
-        ? planForInstalledCli(provider, "balanced", trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined)
+        ? kimiExperiment ?? planForInstalledCli(provider, "balanced", trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined)
         : undefined;
       if (mode === "balanced") mode = database.allocateBalancedMode(provider);
       const optimization = mode === "balanced" && experiment
@@ -261,7 +274,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
         provider,
         mode,
         startedAt: new Date().toISOString(),
-        cliVersion: binaryVersion(trusted),
+        cliVersion: version,
         optimizationApplied: optimization.applied,
         optimizationProfile: optimization.profile,
         comparisonProfile: experiment?.profile,
@@ -294,6 +307,9 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           grokOtelMetrics = undefined;
         }
       }
+      if (provider === "kimi" && kimiRequest && kimiBridgeAvailable) {
+        kimiBridge = { request: kimiRequest, treatment: mode === "balanced" && optimization.applied };
+      }
       launchArgs = [...(codexOtelMetrics?.args ?? []), ...optimization.args, ...args];
     }
   } catch {
@@ -313,7 +329,22 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
 
   try {
     const observer = codexExecMetrics ?? grokMetrics;
-    const code = await launchChild(binary, launchArgs, launchEnvironment, observer ? { consume: (chunk) => observer.accept(chunk) } : undefined);
+    let code: number | null;
+    if (kimiBridge) {
+      try {
+        const measured = await runKimiHeadless(binary, kimiBridge.request, launchEnvironment, kimiBridge.treatment);
+        code = measured.exitCode;
+        kimiUsage = measured.usage;
+      } catch {
+        // The bridge submits no prompt until its authenticated local receiver
+        // is ready. A setup failure can therefore fall back without running a
+        // task twice or changing the user's provider state.
+        process.stderr.write("TokenPilot: Kimi numeric channel unavailable; starting Kimi normally.\n");
+        code = await launchChild(binary, args, launchEnvironment);
+      }
+    } else {
+      code = await launchChild(binary, launchArgs, launchEnvironment, observer ? { consume: (chunk) => observer.accept(chunk) } : undefined);
+    }
     await claudeMetrics?.close().catch(() => undefined);
     await codexOtelMetrics?.close().catch(() => undefined);
     await grokOtelMetrics?.close().catch(() => undefined);
@@ -351,7 +382,24 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           const reason = grokOtelMetrics ? "otlp-missing" : grokMetrics ? "no-correlated-counters" : "grok-tty";
           database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : reason);
         }
-        if (provider === "kimi") database.markCollection(runId, "unavailable", "kimi-envelope");
+        if (provider === "kimi") {
+          if (kimiUsage) {
+            database.addUsage({
+              runId,
+              observedAt: new Date().toISOString(),
+              source: "kimi-local-session-v1",
+              inputNew: kimiUsage.inputNew,
+              inputCached: kimiUsage.inputCached,
+              cacheCreated: kimiUsage.cacheCreated,
+              output: kimiUsage.output,
+              modelCalls: kimiUsage.modelCalls
+            });
+            if (kimiUsage.retries > 0) database.addEvent({ runId, observedAt: new Date().toISOString(), source: "kimi-local-session-v1", type: "retry", count: kimiUsage.retries });
+            if (kimiUsage.compactions > 0) database.addEvent({ runId, observedAt: new Date().toISOString(), source: "kimi-local-session-v1", type: "compaction", count: kimiUsage.compactions });
+          }
+          const measured = database.hasUsage(runId);
+          database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : "kimi-envelope");
+        }
       } catch {
         process.stderr.write("TokenPilot: telemetry completion unavailable.\n");
       }

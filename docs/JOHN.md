@@ -4,7 +4,7 @@
 
 TokenPilot is a local, provider-neutral measurement layer for developer AI CLIs. A developer still opens the VS Code terminal and types `claude`, `codex`, `grok`, or `kimi`. Authentication remains entirely with that provider; TokenPilot adds no login and never reads credentials.
 
-The tool records a content-free session envelope locally and can report it by provider, task class, and experimental mode. It does not proxy requests or create a provider-independent cache. Provider caches remain server-side. Current Claude and Codex CLIs can publish metrics to a short-lived, authenticated local receiver; older Codex falls back only to its published `exec` total. Grok Build 1.0.3+ publishes documented content-free External OTEL v1 token metrics for normal TTY/TUI and headless sessions, while older versions keep the JSON single-turn fallback. Kimi is envelope-only. No provider folder is scanned and unavailable data is not estimated.
+The tool records a content-free session envelope locally and can report it by provider, task class, and experimental mode. It does not proxy requests or create a provider-independent cache. Provider caches remain server-side. Current Claude and Codex CLIs can publish metrics to a short-lived, authenticated local receiver; older Codex falls back only to its published `exec` total. Grok Build 1.0.3+ publishes documented content-free External OTEL v1 token metrics for normal TTY/TUI and headless sessions, while older versions keep the JSON single-turn fallback. Audited Kimi 0.36.x text print sessions publish correlated counters through Kimi's password-authenticated loopback REST/WS session protocol; interactive Kimi remains envelope-only. No provider folder is scanned and unavailable data is not estimated.
 
 ## Why start personally
 
@@ -16,7 +16,7 @@ No company prompt, code, account identifier, credential, raw session log, or usa
 
 - Same terminal, provider command, authentication, and UI.
 - `balanced` is the installation default and alternates persistently with `observe` per provider, creating a matched baseline while exercising a version-gated treatment. `observe`, `deep`, `off`, and `TOKENPILOT_BYPASS=1` are immediate controls.
-- The treatment applies only documented, session-scoped CLI controls for reasoning, verbosity, tool breadth, and compaction. It never writes a provider config file or changes authentication. Claude's balanced treatment deliberately exposes only its core repository tools; `deep`, `off`, or the process bypass is required for web, MCP, agent, notebook, or other excluded Claude tools.
+- The treatment applies only documented, session-scoped controls for reasoning, verbosity, tool breadth, and compaction. It never writes a provider config file or changes authentication. Claude's balanced treatment deliberately exposes only its core repository tools; `deep`, `off`, or the process bypass is required for web, MCP, agent, notebook, or other excluded Claude tools. Kimi's treatment is limited to audited 0.36.x text print sessions and retains core coding tools while excluding optional agent/web/scheduling surfaces.
 - `TOKENPILOT_BYPASS=1 <provider>` bypasses the layer immediately.
 - If telemetry fails, the original CLI opens normally.
 - A developer may classify a finished task as completed, rework, or abandoned without entering task content.

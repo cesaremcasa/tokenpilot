@@ -52,13 +52,14 @@ describe("doctor", () => {
     const originalBin = path.join(paths.userHome, "original-bin");
     fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
     for (const provider of ["claude", "codex", "grok", "kimi"]) {
-      const version = provider === "grok" ? "1.0.3" : "1.0.0";
+      const version = provider === "grok" ? "1.0.3" : provider === "kimi" ? "0.36.1" : "1.0.0";
       const help = provider === "claude"
         ? "--effort <level> --tools <tools> --append-system-prompt <prompt>"
         : provider === "grok"
           ? "--reasoning-effort <effort> --rules <rules> --verbatim"
           : "--config";
-      fs.writeFileSync(path.join(originalBin, provider), `#!/bin/sh\nif [ "$1" = "--help" ]; then echo '${help}'; fi\nif [ "$1" = "--version" ]; then echo '${provider} ${version}'; fi\nexit 0\n`, { mode: 0o700 });
+      const webHelp = provider === "kimi" ? `if [ "$1" = "web" ] && [ "$2" = "--help" ]; then echo '--port <port> --no-open'; fi\n` : "";
+      fs.writeFileSync(path.join(originalBin, provider), `#!/bin/sh\nif [ "$1" = "--help" ]; then echo '${help}'; fi\n${webHelp}if [ "$1" = "--version" ]; then echo '${provider} ${version}'; fi\nexit 0\n`, { mode: 0o700 });
     }
     const report = doctor(paths, { platform: "linux", nodeVersion: "22.5.0", pathValue: `${paths.shimDir}${path.delimiter}${originalBin}` });
     expect(report).toMatchObject({ installationReady: true, measurementReady: false });
@@ -66,7 +67,7 @@ describe("doctor", () => {
       expect.objectContaining({ provider: "claude", state: "active", fix: undefined }),
       expect.objectContaining({ provider: "codex", state: "active" }),
       expect.objectContaining({ provider: "grok", state: "active", detail: expect.stringContaining("normal TTY/TUI and headless sessions") }),
-      expect.objectContaining({ provider: "kimi", state: "limited", detail: expect.stringContaining("session envelope only") })
+      expect.objectContaining({ provider: "kimi", state: "limited", detail: expect.stringContaining("text print sessions") })
     ]));
     const markdown = doctorMarkdown(report);
     expect(markdown).toContain("Installation: ready");

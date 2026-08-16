@@ -10,6 +10,15 @@ import type { Provider, RunMode } from "./types.js";
 export const TOKEN_EFFICIENCY_INSTRUCTION = "Minimize token use without reducing correctness. Inspect narrowly, batch independent reads, avoid rereading unchanged data or repeating context, keep intermediate explanations concise, and stop after the requested result is verified. Do not skip necessary validation or change requested scope.";
 
 /**
+ * Claude's latency policy is deliberately shorter than the cross-provider
+ * instruction above. It tells Claude to batch independent work and perform a
+ * single sufficient verification pass, while the CLI flags below remove
+ * optional browser startup and keep dynamic machine data out of the reusable
+ * system-prompt prefix. The text is fixed product code and is never persisted.
+ */
+export const CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION = "Finish correctly with minimal latency and tokens: inspect narrowly, batch independent reads, avoid rereading or narrating, verify once, and stop. Do not skip required validation or change scope.";
+
+/**
  * Claude's default tool catalog is useful but expensive to send on every
  * request. Balanced v6 keeps the local coding primitives required to inspect,
  * search, create, and edit a repository while leaving the full native catalog
@@ -54,9 +63,24 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
     if (!supports(help, "--effort") || !supports(help, "--tools") || !supports(help, "--append-system-prompt")) {
       return { ...NONE, unavailableReason: "this Claude CLI does not expose the complete token-reduction policy" };
     }
-    // v2-v5 changed effort and cache placement but left the complete total
-    // flat. v6 instead bounds the repeated tool-schema payload while retaining
-    // the core repository workflow and a concise, scope-preserving instruction.
+    // v7 keeps v6's proven core-tool bound, removes optional Chrome startup,
+    // preserves a more reusable system-prompt prefix, and uses a shorter
+    // latency-first instruction. Older compatible CLIs retain the measured v6
+    // policy rather than receiving flags they did not advertise.
+    if (supports(help, "--no-chrome") && supports(help, "--exclude-dynamic-system-prompt-sections")) {
+      return {
+        args: [
+          "--effort", "low",
+          "--tools", CLAUDE_CORE_TOOLS,
+          "--no-chrome",
+          "--exclude-dynamic-system-prompt-sections",
+          "--append-system-prompt", CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION
+        ],
+        applied: true,
+        profile: "claude-balanced-v7",
+        summary: "low effort, core coding tools, no Chrome startup, stable cache prefix, one verification pass"
+      };
+    }
     return {
       args: [
         "--effort", "low",
@@ -95,17 +119,10 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
       : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete token-reduction policy" };
   }
 
-  // Kimi 0.29.x does not advertise these session-scoped controls. Do not edit
-  // its persistent config or assume API prompt-cache settings work in the CLI.
-  if (supports(help, "--no-thinking") && supports(help, "--max-steps-per-turn") && supports(help, "--max-retries-per-step")) {
-    return {
-      args: ["--no-thinking", "--max-steps-per-turn", "20", "--max-retries-per-step", "2"],
-      applied: true,
-      profile: "kimi-balanced-v1",
-      summary: "thinking off, 20 steps per turn, two retries per step"
-    };
-  }
-  return { ...NONE, unavailableReason: "this Kimi CLI version lacks validated session-scoped optimization flags" };
+  // Kimi is enabled only by the audited, version-gated local session bridge
+  // in launcher.ts. Advertised flags alone do not establish compatible
+  // semantics, so no generic CLI-argument policy is injected here.
+  return { ...NONE, unavailableReason: "this Kimi CLI version lacks the audited local session protocol" };
 }
 
 /**
