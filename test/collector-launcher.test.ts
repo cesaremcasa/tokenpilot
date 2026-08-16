@@ -281,14 +281,12 @@ exit 0
     cleanup(paths);
   });
 
-  it("fails open to Kimi exactly once when the numeric bridge fails before prompt submission", async () => {
+  it("launches Kimi unchanged once without opening a local session bridge", async () => {
     const paths = temporaryPaths();
     const invocations = path.join(paths.userHome, "kimi-task-invocations");
     const originalBin = writeFakeKimi(paths, `#!/bin/sh
 if [ "$1" = "--version" ]; then echo 'kimi 0.36.1'; exit 0; fi
-if [ "$1" = "web" ] && [ "$2" = "--help" ]; then echo '--port <port> --no-open'; exit 0; fi
-if [ "$1" = "web" ]; then exit 12; fi
-printf x >> '${invocations}'
+printf '%s ' "$@" >> '${invocations}'
 exit 0
 `);
     const config = ensureConfig(paths);
@@ -296,7 +294,7 @@ exit 0
     writeConfig(paths, config);
 
     expect(await withProviderPath(originalBin, () => runProvider("kimi", ["-p", "private-kimi-task"], paths))).toBe(0);
-    expect(fs.readFileSync(invocations, "utf8")).toBe("x");
+    expect(fs.readFileSync(invocations, "utf8")).toBe("-p private-kimi-task ");
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())).toEqual([
       expect.objectContaining({ provider: "kimi", collectionState: "unavailable", collectionReason: "kimi-envelope" })

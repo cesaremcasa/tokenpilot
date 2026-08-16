@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 export interface TokenPilotPaths {
   userHome: string;
@@ -60,6 +61,16 @@ function currentUid(): number {
   return process.getuid?.() ?? os.userInfo().uid;
 }
 
+/** macOS ACLs can grant writes even when POSIX mode bits are restrictive. */
+function hasMacAcl(target: string): boolean {
+  if (process.platform !== "darwin") return false;
+  const result = spawnSync("/bin/ls", ["-lde", target], { encoding: "utf8", timeout: 1_000, stdio: ["ignore", "pipe", "ignore"] });
+  if (result.error || result.status !== 0) return true;
+  // Refuse every ACL entry rather than trying to infer named-principal write
+  // access. Managed state must remain private to this account.
+  return result.stdout.trim().split(/\r?\n/).length > 1;
+}
+
 function assertWithinUserHome(paths: TokenPilotPaths, target: string): string {
   const userHome = path.resolve(paths.userHome);
   const resolved = path.resolve(target);
@@ -72,7 +83,7 @@ function assertWithinUserHome(paths: TokenPilotPaths, target: string): string {
 
 function assertSafeDirectory(target: string): void {
   const stat = fs.lstatSync(target);
-  if (stat.isSymbolicLink() || !stat.isDirectory() || stat.uid !== currentUid() || (stat.mode & 0o022) !== 0) {
+  if (stat.isSymbolicLink() || !stat.isDirectory() || stat.uid !== currentUid() || (stat.mode & 0o022) !== 0 || hasMacAcl(target)) {
     throw new Error(`Refusing unsafe TokenPilot directory: ${target}`);
   }
 }
@@ -122,6 +133,7 @@ export function ensurePrivateDirectory(paths: TokenPilotPaths, directory: string
     }
   }
   fs.chmodSync(target, 0o700);
+  assertSafeDirectory(target);
 }
 
 /** Rejects a symlink, special file, or hard-linked file before it is read. */
@@ -129,7 +141,7 @@ export function assertSafeStateFile(paths: TokenPilotPaths, file: string): void 
   assertWithinUserHome(paths, file);
   try {
     const stat = fs.lstatSync(file);
-    if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1 || stat.uid !== currentUid()) {
+    if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1 || stat.uid !== currentUid() || hasMacAcl(file)) {
       throw new Error(`Refusing unsafe TokenPilot state file: ${file}`);
     }
   } catch (error) {

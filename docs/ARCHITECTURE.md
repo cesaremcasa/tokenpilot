@@ -39,7 +39,7 @@ Each policy has a versioned identifier. TokenPilot checks the installed CLI's ve
 - Claude: authenticated, metrics-only local OTLP receiver.
 - Codex: session-scoped metrics-only OTLP; older `exec` can use only the CLI's final published total.
 - Grok: authenticated local External OTEL v1 for supported versions; explicit JSON single-turn fallback for older compatible flows.
-- Kimi: audited text-print sessions use an ephemeral password-authenticated local REST/WebSocket session.
+- Kimi: runs through the original CLI without TokenPilot measurement until a content-free, child-authenticated channel is available.
 
 Receivers bind to loopback and accept only narrowly defined numeric metrics. Unknown metrics, attributes, content, resource identity, paths, and provider session identifiers are discarded.
 
@@ -50,10 +50,6 @@ SQLite stores the content-free session envelope, category counters, optional pri
 ### Reports and skills
 
 Reports read the local database and build comparisons only inside one provider. The installed skills call a fixed local report command and return its Markdown without inspecting provider or project files.
-
-## Kimi at-most-once behavior
-
-For a supported Kimi text-print run, the local bridge starts before prompt submission. A setup failure may open the original CLI because the prompt has not been submitted. Once Kimi acknowledges the local session and TokenPilot begins submission, the run is at-most-once: a later timeout returns a failed/unavailable session and never starts a second provider invocation.
 
 ## Fail-open boundary
 

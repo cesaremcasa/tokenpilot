@@ -262,6 +262,16 @@ describe("installation and fail-open launcher lookup", () => {
     cleanup(paths);
   });
 
+  it("refuses managed state with a macOS ACL", () => {
+    if (process.platform !== "darwin") return;
+    const paths = temporaryPaths();
+    const acl = spawnSync("/bin/chmod", ["+a", "everyone allow write", paths.userHome], { encoding: "utf8" });
+    expect(acl.status).toBe(0);
+
+    expect(() => install(paths, { noShellConfig: true, noAgent: true })).toThrow("Refusing unsafe TokenPilot directory");
+    cleanup(paths);
+  });
+
   it("rejects original binaries from a world-writable directory", () => {
     const paths = temporaryPaths();
     const unsafeBin = path.join(paths.userHome, "unsafe-bin");
@@ -270,6 +280,18 @@ describe("installation and fail-open launcher lookup", () => {
     fs.writeFileSync(path.join(unsafeBin, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
 
     expect(findOriginalBinary("codex", paths, unsafeBin)).toBeUndefined();
+    cleanup(paths);
+  });
+
+  it("rejects original binaries below a writable non-sticky ancestor", () => {
+    const paths = temporaryPaths();
+    const unsafeAncestor = path.join(paths.userHome, "unsafe-ancestor");
+    const providerBin = path.join(unsafeAncestor, "provider-bin");
+    fs.mkdirSync(providerBin, { recursive: true, mode: 0o700 });
+    fs.chmodSync(unsafeAncestor, 0o770);
+    fs.writeFileSync(path.join(providerBin, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+
+    expect(findOriginalBinary("codex", paths, providerBin)).toBeUndefined();
     cleanup(paths);
   });
 

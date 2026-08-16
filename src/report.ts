@@ -512,7 +512,7 @@ export function reportDiagnosticsMarkdown(report: Report): string {
   for (const row of report.coverage) {
     let limitation = "compare only matching task, policy, total basis, and price snapshot";
     if (row.provider === "grok") limitation = "Grok Build 1.0.3+ TTY/TUI uses documented External OTEL v1; sessions without correlated counters remain unavailable; JSON single-turn is a fallback";
-    if (row.provider === "kimi") limitation = "audited Kimi 0.36.x text print sessions use correlated local REST/WS counters; interactive TTY and unsupported print flags remain envelope-only";
+    if (row.provider === "kimi") limitation = "Kimi launches through its original CLI and remains envelope-only until a safe correlated measurement channel is available";
     lines.push(`| ${row.provider} | ${row.measuredSessions} / ${row.unavailableSessions} | ${limitation} |`);
   }
   if (report.coverage.length === 0) lines.push("| — | 0 / 0 | no sessions in this window |");

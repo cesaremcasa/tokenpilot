@@ -19,7 +19,7 @@ TokenPilot preserves the model selected by the user. It does not maintain a priv
 | Claude Code | Metrics-only local OTLP for sessions that publish `claude_code.token.usage`. | `claude-balanced-v7`; v6 fallback on older compatible CLIs. | Provider quota can reject a model before a complete metric arrives. Full web/MCP/agent tool surfaces require `deep`, `off`, or bypass. |
 | OpenAI Codex | Metrics-only local OTLP for current interactive and `exec` sessions; older `exec` may expose only its final published total. | `codex-balanced-v2`. | A provider total and category counters are never mixed. |
 | Grok Build | External OTEL v1 for supported TTY/TUI and headless sessions; explicit JSON single-turn fallback. | `grok-balanced-v4`. | Older or missing counters remain unavailable. API prompt-cache keys are never assumed for the CLI. |
-| Kimi Code CLI | Audited 0.36.x `-p` text sessions through authenticated local REST/WebSocket counters. | `kimi-balanced-v4` with `thinking: off`. | Interactive TTY, stream JSON, resume, and unsupported flags remain envelope-only. Provider timeouts remain unavailable. |
+| Kimi Code CLI | No correlated measurement channel is currently enabled. | No TokenPilot treatment is injected. | Kimi runs through its original CLI and remains envelope-only pending a content-free, child-authenticated channel. |
 
 ## Advertised model/reasoning compatibility check
 
@@ -33,6 +33,8 @@ The first compatibility matrix was executed on August 15, 2026, using the models
 | Kimi 0.36.1 | `kimi-for-coding`, `kimi-for-coding-highspeed`, `k3`, and `k3-256k`, each in provider-default and audited `thinking: off` modes | 8/8 compatibility runs completed and measured. Named effort levels were not advertised. |
 
 Compatibility means the launcher preserved the request and the supported measurement channel behaved correctly. It does not guarantee provider availability, account quota, equal model quality, or the same reduction percentage on every model.
+
+The Kimi compatibility result is historical; the Kimi REST/WebSocket bridge is disabled pending a safe correlated measurement channel.
 
 ## Authentication
 
@@ -56,4 +58,3 @@ A version string alone is insufficient. Adapter support requires:
 - [OpenAI Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
 - [xAI Grok Build CLI reference](https://docs.x.ai/build/cli/reference)
 - [Kimi Code CLI command reference](https://moonshotai.github.io/kimi-cli/en/reference/kimi-command.html)
-- [Kimi Code CLI Web UI protocol](https://moonshotai.github.io/kimi-cli/en/reference/kimi-web.html)

@@ -3,6 +3,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import type { TelemetryDatabase } from "../database.js";
 import type { UsageMetrics } from "../types.js";
+import { configureLoopbackReceiver } from "./server.js";
 
 /**
  * Codex `exec` prints a final, provider-published total as two terminal
@@ -212,9 +213,7 @@ export async function startCodexMetricsReceiver(database: TelemetryDatabase, run
       if (!response.headersSent) response.destroy();
     });
   });
-  server.headersTimeout = 2_000;
-  server.requestTimeout = 5_000;
-  server.keepAliveTimeout = 1_000;
+  configureLoopbackReceiver(server);
   const address = await new Promise<AddressInfo>((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {

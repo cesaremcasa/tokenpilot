@@ -3,9 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { getAdapter } from "./adapters/index.js";
 import { createInstallPlan, runtimeSupport, type SkillPlan } from "./installer.js";
-import { binaryVersion, findOriginalBinary, providerEnvironment, supportsGrokExternalOtel } from "./launcher.js";
+import { findOriginalBinary, supportsGrokExternalOtel } from "./launcher.js";
 import { planForInstalledCli } from "./optimization.js";
-import { supportsKimiWebBridge } from "./telemetry/kimi.js";
 import type { Provider } from "./types.js";
 import { PROVIDERS } from "./types.js";
 import type { TokenPilotPaths } from "./paths.js";
@@ -74,7 +73,6 @@ function providerCapability(provider: Provider, binary: string): { provider: Pro
   const adapter = getAdapter(provider);
   const helpEnvironment = localHelpEnvironment();
   const plan = planForInstalledCli(provider, "balanced", binary, helpEnvironment);
-  const kimiBridge = provider === "kimi" && supportsKimiWebBridge(binary, binaryVersion(binary), providerEnvironment({}, binary));
   let telemetry: string;
   if (provider === "claude") telemetry = "metrics-only local OTLP; a session must publish numeric counters before it is measured";
   else if (provider === "codex") telemetry = plan.applied
@@ -83,11 +81,9 @@ function providerCapability(provider: Provider, binary: string): { provider: Pro
   else if (provider === "grok") telemetry = supportsGrokExternalOtel(binary)
     ? "normal TTY/TUI and headless sessions use the documented content-free External OTEL v1 token metrics; JSON single-turn remains a fallback"
     : "only one-turn JSON mode is measured; update to Grok Build 1.0.3+ for documented TTY/TUI External OTEL metrics";
-  else telemetry = kimiBridge
-    ? "text print sessions use Kimi's authenticated local REST/WS counters; interactive TTY and unsupported print flags remain envelope-only"
-    : "session envelope only; Kimi 0.36.1 local session counters were not confirmed";
-  const optimization = kimiBridge
-    ? "balanced available for text print sessions (kimi-balanced-v4)"
+  else telemetry = "session envelope only; Kimi measurement is disabled until a content-free, child-authenticated channel is available";
+  const optimization = provider === "kimi"
+    ? "balanced not injected (Kimi bridge disabled pending a safe measurement channel)"
     : plan.applied ? `balanced available (${plan.profile})` : `balanced not injected (${plan.unavailableReason ?? "local help probe did not confirm it"})`;
   const state: ProviderDoctorState = provider === "kimi" || (provider === "grok" && !supportsGrokExternalOtel(binary)) || (provider === "codex" && !plan.applied) ? "limited" : "active";
   return {
@@ -95,7 +91,7 @@ function providerCapability(provider: Provider, binary: string): { provider: Pro
     state,
     detail: `${telemetry}; ${optimization}. ${adapter.capabilities.notes}`,
     fix: provider === "kimi"
-      ? kimiBridge ? "Use kimi -p for measured sessions; interactive Kimi remains fail-open and measurement-limited." : "Install audited Kimi 0.36.1, then run tokenpilot doctor again."
+      ? "Kimi launches unchanged and remains measurement-limited until a safe correlated channel is available."
       : plan.applied ? undefined : "Update the provider CLI, then run tokenpilot doctor again. TokenPilot will fail open until a documented flag is confirmed."
   };
 }
