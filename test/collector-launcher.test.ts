@@ -5,7 +5,7 @@ import { collectPendingRuns } from "../src/collector.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
-import { CLAUDE_CORE_TOOLS, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 import { buildReport, reportMarkdown } from "../src/report.js";
 import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
@@ -39,6 +39,14 @@ describe("local launcher and collector", () => {
   function writeFakeGrok(paths: ReturnType<typeof temporaryPaths>, contents: string): string {
     const originalBin = path.join(paths.userHome, "original-grok-bin");
     const original = path.join(originalBin, "grok");
+    fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(original, contents, { mode: 0o700 });
+    return originalBin;
+  }
+
+  function writeFakeKimi(paths: ReturnType<typeof temporaryPaths>, contents: string): string {
+    const originalBin = path.join(paths.userHome, "original-kimi-bin");
+    const original = path.join(originalBin, "kimi");
     fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
     fs.writeFileSync(original, contents, { mode: 0o700 });
     return originalBin;
@@ -141,13 +149,13 @@ exit 0
     cleanup(paths);
   });
 
-  it("injects the complete Claude v6 policy without retaining its fixed instruction", async () => {
+  it("injects the complete Claude v7 latency policy without retaining its fixed instruction", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "claude-arguments");
     const originalBin = writeFakeClaude(paths, `#!/bin/sh
 case " $* " in
   *" --version "*) echo 'claude 2.1.233'; exit 0 ;;
-  *" --help "*) echo '--effort <level> --tools <tools> --append-system-prompt <prompt>'; exit 0 ;;
+  *" --help "*) echo '--effort <level> --tools <tools> --append-system-prompt <prompt> --no-chrome --exclude-dynamic-system-prompt-sections'; exit 0 ;;
 esac
 printf '%s\n' "$@" > '${observedArguments}'
 exit 0
@@ -163,19 +171,21 @@ exit 0
     const argumentsText = fs.readFileSync(observedArguments, "utf8");
     expect(argumentsText).toContain("low");
     expect(argumentsText).toContain(CLAUDE_CORE_TOOLS);
-    expect(argumentsText).toContain(TOKEN_EFFICIENCY_INSTRUCTION);
+    expect(argumentsText).toContain("--no-chrome");
+    expect(argumentsText).toContain("--exclude-dynamic-system-prompt-sections");
+    expect(argumentsText).toContain(CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION);
 
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "claude",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "claude-balanced-v6"
+      optimizationProfile: "claude-balanced-v7"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
     const markdown = reportMarkdown(buildReport(paths, 7));
-    for (const forbidden of ["private-task", TOKEN_EFFICIENCY_INSTRUCTION]) {
+    for (const forbidden of ["private-task", CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION]) {
       expect(rawDatabase).not.toContain(forbidden);
       expect(markdown).not.toContain(forbidden);
     }
@@ -268,6 +278,32 @@ exit 0
 
     expect(await withProviderPath(originalBin, () => runProvider("codex", ["run"], paths))).toBe(0);
     expect(fs.readFileSync(invocations, "utf8")).toBe("x");
+    cleanup(paths);
+  });
+
+  it("fails open to Kimi exactly once when the numeric bridge fails before prompt submission", async () => {
+    const paths = temporaryPaths();
+    const invocations = path.join(paths.userHome, "kimi-task-invocations");
+    const originalBin = writeFakeKimi(paths, `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'kimi 0.36.1'; exit 0; fi
+if [ "$1" = "web" ] && [ "$2" = "--help" ]; then echo '--port <port> --no-open'; exit 0; fi
+if [ "$1" = "web" ]; then exit 12; fi
+printf x >> '${invocations}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "observe";
+    writeConfig(paths, config);
+
+    expect(await withProviderPath(originalBin, () => runProvider("kimi", ["-p", "private-kimi-task"], paths))).toBe(0);
+    expect(fs.readFileSync(invocations, "utf8")).toBe("x");
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())).toEqual([
+      expect.objectContaining({ provider: "kimi", collectionState: "unavailable", collectionReason: "kimi-envelope" })
+    ]);
+    database.close();
+    const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
+    expect(rawDatabase).not.toContain("private-kimi-task");
     cleanup(paths);
   });
 

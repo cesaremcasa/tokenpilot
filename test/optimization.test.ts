@@ -2,12 +2,26 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CORE_TOOLS, GROK_TOKEN_EFFICIENCY_INSTRUCTION, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
-  it("uses a complete session-only Claude core-tool policy", () => {
-    const plan = planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt> --tools <tools>");
+  it("uses the latency-first Claude v7 policy when every flag is advertised", () => {
+    const plan = planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt> --tools <tools> --no-chrome --exclude-dynamic-system-prompt-sections");
     expect(plan).toMatchObject({
+      applied: true,
+      profile: "claude-balanced-v7",
+      args: [
+        "--effort", "low",
+        "--tools", CLAUDE_CORE_TOOLS,
+        "--no-chrome",
+        "--exclude-dynamic-system-prompt-sections",
+        "--append-system-prompt", CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION
+      ]
+    });
+  });
+
+  it("retains the measured Claude v6 policy on older compatible CLIs", () => {
+    expect(planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt> --tools <tools>")).toMatchObject({
       applied: true,
       profile: "claude-balanced-v6",
       args: ["--effort", "low", "--tools", CLAUDE_CORE_TOOLS, "--append-system-prompt", TOKEN_EFFICIENCY_INSTRUCTION]
@@ -53,13 +67,13 @@ describe("version-gated balanced optimization", () => {
     const plan = planFromHelp("kimi", "balanced", "Usage: kimi [--model MODEL] [PROMPT]");
     expect(plan).toMatchObject({ applied: false });
     expect(plan.args).toEqual([]);
-    expect(plan.unavailableReason).toContain("lacks validated");
+    expect(plan.unavailableReason).toContain("audited local session protocol");
   });
 
-  it("activates the Kimi policy only when all required session controls exist", () => {
+  it("never enables Kimi from generic flags without the audited versioned bridge", () => {
     const plan = planFromHelp("kimi", "balanced", "--no-thinking --max-steps-per-turn N --max-retries-per-step N");
-    expect(plan).toMatchObject({ applied: true, profile: "kimi-balanced-v1" });
-    expect(plan.args).toEqual(["--no-thinking", "--max-steps-per-turn", "20", "--max-retries-per-step", "2"]);
+    expect(plan).toMatchObject({ applied: false, unavailableReason: expect.stringContaining("audited local session protocol") });
+    expect(plan.args).toEqual([]);
   });
 
   it("does not alter deep or observe sessions", () => {
