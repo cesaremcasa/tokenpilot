@@ -4,6 +4,8 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 
 ## Unreleased
 
+## 0.4.7 — 2026-08-17
+
 - Disabled the Kimi REST/WebSocket bridge pending a content-free, child-authenticated measurement channel; Kimi now runs through its original CLI and remains envelope-only.
 - Hardened managed-state validation against macOS ACL write grants and provider executable discovery against writable path ancestors.
 - Added aggregate connection limits to the local Claude, Codex, and Grok telemetry receivers.
