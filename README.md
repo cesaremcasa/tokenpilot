@@ -16,6 +16,27 @@ kimi
 
 TokenPilot measures provider-published numeric usage, runs version-gated token-reduction treatments, and produces cache-aware seven-day reports. It does not proxy model traffic, create a shared cache, read credentials, or store prompts, responses, source code, tool output, command arguments, or working directories.
 
+**TokenPilot is not Grok, Claude, Codex, or Kimi.** It only wraps a provider CLI that is already installed and authenticated on the same machine. If `tokenpilot doctor` says `grok CLI unavailable`, Grok Build is missing — TokenPilot cannot invent it. Install the CLI first, then TokenPilot:
+
+```sh
+# Grok Build (required before TokenPilot can measure or reduce Grok)
+curl -fsSL https://x.ai/cli/install.sh | bash
+grok --version
+grok login
+
+# Then TokenPilot
+git clone https://github.com/cesaremcasa/tokenpilot.git
+cd tokenpilot
+npm ci --ignore-scripts
+npm test
+npm run build
+node dist/cli.js install
+exec "$SHELL" -l
+tokenpilot doctor
+```
+
+`doctor` must show `grok CLI | active` (and the same for any other provider you use) before a session is measured. Wrappers on PATH with no original CLI behind them are not a working install.
+
 Developed by **Mycellium Lab** and released under the [MIT License](LICENSE).
 
 ## First research round
@@ -51,7 +72,7 @@ Treatments are enabled only after the installed CLI passes the complete local he
 - macOS or Linux;
 - Node.js 22.5 or newer;
 - zsh or bash; and
-- at least one supported provider CLI already installed and authenticated.
+- **at least one supported provider CLI already installed and authenticated** (Grok Build, Claude Code, Codex, or Kimi). TokenPilot does not ship those binaries.
 
 Windows native support is not yet released. See the current [provider and platform matrix](docs/PROVIDERS.md).
 
