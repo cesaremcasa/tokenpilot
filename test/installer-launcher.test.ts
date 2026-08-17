@@ -313,6 +313,18 @@ describe("installation and fail-open launcher lookup", () => {
     cleanup(paths);
   });
 
+  it("trusts a provider binary below a sticky world-writable ancestor", () => {
+    const paths = temporaryPaths();
+    const stickyAncestor = path.join(paths.userHome, "sticky-tmp");
+    const providerBin = path.join(stickyAncestor, "provider-bin");
+    fs.mkdirSync(providerBin, { recursive: true, mode: 0o700 });
+    fs.chmodSync(stickyAncestor, 0o1777);
+    fs.writeFileSync(path.join(providerBin, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+
+    expect(findOriginalBinary("codex", paths, providerBin)).toBeDefined();
+    cleanup(paths);
+  });
+
   it("rejects original binaries below a writable non-sticky ancestor", () => {
     const paths = temporaryPaths();
     const unsafeAncestor = path.join(paths.userHome, "unsafe-ancestor");

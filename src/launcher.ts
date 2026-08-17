@@ -64,7 +64,11 @@ function trustedDirectoryTree(directory: string, currentUid: number): boolean {
     const groupWritable = (stat.mode & 0o020) !== 0;
     const sticky = (stat.mode & 0o1000) !== 0;
     const homebrewAdminGroup = process.platform === "darwin" && stat.uid === currentUid && stat.gid === MACOS_ADMIN_GID;
-    if (!stat.isDirectory() || !protectedOwner || (worldWritable && !sticky) || (groupWritable && !homebrewAdminGroup) || hasUnsafeMacAcl(current)) return false;
+    // Sticky world-writable directories such as /tmp stay admissible, matching
+    // the previous audit rule. Non-sticky group-writable ancestors remain
+    // rejected except Homebrew's user-owned admin group on macOS.
+    const untrustedWrite = worldWritable ? !sticky : groupWritable && !sticky && !homebrewAdminGroup;
+    if (!stat.isDirectory() || !protectedOwner || untrustedWrite || hasUnsafeMacAcl(current)) return false;
   }
   return true;
 }
