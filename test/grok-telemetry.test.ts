@@ -42,6 +42,8 @@ describe("Grok JSON usage telemetry", () => {
       OTEL_METRICS_EXPORTER: "otlp",
       OTEL_LOGS_EXPORTER: "none",
       OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "delta",
+      OTEL_METRICS_INCLUDE_SESSION_ID: "0",
       OTEL_LOG_USER_PROMPTS: "0",
       OTEL_LOG_TOOL_DETAILS: "0"
     });
@@ -63,6 +65,37 @@ describe("Grok JSON usage telemetry", () => {
     await receiver.close();
     database.close();
     expect(fs.readFileSync(paths.databaseFile).toString("latin1")).not.toContain("person@example.test");
+    cleanup(paths);
+  });
+
+  it("sums growing per-call delta usage without mistaking it for cumulative snapshots", async () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    const now = new Date().toISOString();
+    database.createRun({ id: "grok-growing-context", provider: "grok", mode: "reduce", startedAt: now, collectionState: "pending", taskKind: "unknown", outcome: "unknown" });
+    const receiver = await startGrokMetricsReceiver(database, "grok-growing-context");
+    const calls = [
+      { input: 19_000, cache_read: 1_000, output: 200, reasoning: 80 },
+      { input: 22_000, cache_read: 19_000, output: 120, reasoning: 60 },
+      { input: 25_000, cache_read: 22_000, output: 350, reasoning: 40 }
+    ];
+    for (const call of calls) {
+      const response = await fetch(receiver.endpoint, {
+        method: "POST",
+        headers: { ...receiver.headers, "content-type": "application/x-protobuf" },
+        body: grokOtlpFixture(call)
+      });
+      expect(response.status).toBe(200);
+    }
+    expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({
+      provider: "grok",
+      inputNew: 66_000,
+      inputCached: 42_000,
+      output: 670,
+      reasoning: 180
+    });
+    await receiver.close();
+    database.close();
     cleanup(paths);
   });
 

@@ -351,14 +351,14 @@ describe("aggregate reporting", () => {
     cleanup(paths);
   });
 
-  it("shows preliminary Grok expected and used totals instead of hiding a live pair", () => {
+  it("shows measured Grok use instead of an economy for a preliminary unknown pair", () => {
     const sessions: SessionSummary[] = (["observe", "balanced"] as const).map((mode) => ({
       id: `grok-${mode}`,
       provider: "grok" as const,
       mode,
       optimizationApplied: mode === "balanced",
-      optimizationProfile: mode === "balanced" ? "grok-balanced-v4" : undefined,
-      comparisonProfile: "grok-balanced-v4",
+      optimizationProfile: mode === "balanced" ? "grok-balanced-v5" : undefined,
+      comparisonProfile: "grok-balanced-v5",
       taskKind: "unknown" as const,
       outcome: "unknown" as const,
       durationSeconds: 20,
@@ -374,14 +374,34 @@ describe("aggregate reporting", () => {
     const summary = reportSummaryMarkdown({
       generatedAt: "now",
       since: "then",
-      rows: [],
+      rows: [{
+        provider: "grok" as const,
+        mode: "balanced" as const,
+        optimizationApplied: true,
+        optimizationProfile: "grok-balanced-v5",
+        taskKind: "unknown" as const,
+        sessions: 1,
+        completed: 0,
+        rework: 0,
+        abandoned: 0,
+        durationSeconds: 20,
+        inputNew: 80,
+        inputCached: 20,
+        cacheCreated: 0,
+        output: 10,
+        reasoning: 5,
+        modelCalls: 0,
+        reportedTotal: 0,
+        compactions: 0,
+        retries: 0
+      }],
       coverage: [{ provider: "grok", sessions: 2, measuredSessions: 2, unavailableSessions: 0 }],
       comparisons: treatmentComparisons(sessions)
     });
     expect(summary).toContain("TokenPilot · Grok");
-    expect(summary).toContain("51,1% a menos");
-    expect(summary).toContain("235 → 115 tokens");
-    expect(summary).toMatch(/7 dias\s+51,1% a menos/);
+    expect(summary).toMatch(/7 dias\s+medido/);
+    expect(summary).toContain("115 tokens usados");
+    expect(summary).not.toContain("235 → 115 tokens");
   });
 
   it("prints a rolling 24-hour window before the last 7 days and never invents a 24-hour percentage", () => {

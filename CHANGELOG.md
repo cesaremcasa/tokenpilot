@@ -2,6 +2,12 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.4.13 — 2026-08-17
+
+- Keep the concise scoreboard copy unchanged while showing measured usage instead of an economy claim for preliminary, incomparable, or limited cohorts.
+- Add the versioned `grok-balanced-v5` treatment: low reasoning, verbatim prompting, concise context rules, and session-scoped subagent and cross-session-memory disabling.
+- Preserve Grok's External OTEL delta accounting; growing per-call context is real usage and is never deduplicated as if it were a cumulative snapshot.
+
 ## 0.4.12 — 2026-08-17
 
 - Remove Supervisor SSH deploy from public CI; public-readiness hygiene.

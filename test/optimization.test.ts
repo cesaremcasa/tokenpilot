@@ -49,18 +49,26 @@ describe("version-gated balanced optimization", () => {
   });
 
   it("uses only documented Grok CLI controls rather than API cache headers", () => {
-    expect(planFromHelp("grok", "balanced", "--reasoning-effort <effort> --rules <rules> --verbatim")).toMatchObject({
-      profile: "grok-balanced-v4",
-      args: ["--reasoning-effort", "low", "--verbatim", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION]
+    expect(planFromHelp("grok", "balanced", "--reasoning-effort <effort> --rules <rules> --verbatim --no-subagents --no-memory")).toMatchObject({
+      profile: "grok-balanced-v5",
+      args: ["--reasoning-effort", "low", "--verbatim", "--no-subagents", "--no-memory", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION]
     });
   });
 
-  it("leaves Grok unchanged when verbatim prompting is unavailable", () => {
-    expect(planFromHelp("grok", "balanced", "--reasoning-effort <effort> --rules <rules>")).toMatchObject({
-      applied: false,
-      args: [],
-      unavailableReason: expect.stringContaining("complete token-reduction policy")
-    });
+  it("leaves Grok unchanged when any complete v5 control is unavailable", () => {
+    for (const help of [
+      "--rules <rules> --verbatim --no-subagents --no-memory",
+      "--reasoning-effort <effort> --verbatim --no-subagents --no-memory",
+      "--reasoning-effort <effort> --rules <rules> --no-subagents --no-memory",
+      "--reasoning-effort <effort> --rules <rules> --verbatim --no-memory",
+      "--reasoning-effort <effort> --rules <rules> --verbatim --no-subagents"
+    ]) {
+      expect(planFromHelp("grok", "balanced", help)).toMatchObject({
+        applied: false,
+        args: [],
+        unavailableReason: expect.stringContaining("complete token-reduction policy")
+      });
+    }
   });
 
   it("leaves an older Kimi CLI untouched instead of guessing unsupported flags", () => {
@@ -82,7 +90,7 @@ describe("version-gated balanced optimization", () => {
   });
 
   it("applies the same Grok treatment in reduce mode as in balanced mode", () => {
-    const help = "--reasoning-effort <effort> --rules <rules> --verbatim";
+    const help = "--reasoning-effort <effort> --rules <rules> --verbatim --no-subagents --no-memory";
     expect(planFromHelp("grok", "reduce", help)).toEqual(planFromHelp("grok", "balanced", help));
     expect(planFromHelp("grok", "reduce", help).applied).toBe(true);
   });

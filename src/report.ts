@@ -430,7 +430,7 @@ function windowScore(report: Report, provider: Provider): { headline: string; de
       detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
     };
   }
-  if (comparison && hasTotals && (comparison.tokenResult === "validated-reduction" || comparison.tokenResult === "preliminary-signal")) {
+  if (comparison && hasTotals && comparison.tokenResult === "validated-reduction") {
     return {
       headline: scoreboardPercent(((expected - used) / expected) * 100),
       detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
