@@ -2,13 +2,17 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
-## Unreleased
+## 0.4.12 — 2026-08-17
+
+- Remove Supervisor SSH deploy from public CI; public-readiness hygiene.
+- CI now runs only the `verify` job (test, check, build) on `ubuntu-latest` and `macos-latest`.
+- Local updates stay on `scripts/update.sh` and `scripts/install-auto-update.sh`. `update.sh` refuses to run off `main` and uses `TOKENPILOT_GIT_SSH_KEY` only when set.
 
 ## 0.4.11 — 2026-08-17
 
 - Show measured token totals in the 24-hour scoreboard when a session was recorded but no observe/treatment pair exists yet.
 - Added `scripts/update.sh` so a machine can fast-forward from `origin/main` and reinstall without touching local telemetry.
-- After CI on `main`, GitHub Actions can SSH to a configured Supervisor host and run that update. A local poller (`scripts/install-auto-update.sh`) covers machines that cannot receive a push, including a Mac behind NAT.
+- A local poller (`scripts/install-auto-update.sh`) covers machines that pull `main` on a timer.
 
 ## 0.4.10 — 2026-08-17
 

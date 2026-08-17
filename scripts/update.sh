@@ -60,15 +60,17 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-if [[ -f "${HOME}/.ssh/tokenpilot-github-deploy-ed25519" ]]; then
-  export GIT_SSH_COMMAND="ssh -i ${HOME}/.ssh/tokenpilot-github-deploy-ed25519 -o IdentitiesOnly=yes"
+if [[ -n "${TOKENPILOT_GIT_SSH_KEY:-}" ]]; then
+  export GIT_SSH_COMMAND="ssh -i ${TOKENPILOT_GIT_SSH_KEY} -o IdentitiesOnly=yes"
+fi
+
+current_branch="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "${current_branch}" != "main" ]]; then
+  echo "TokenPilot update: refusing to run on branch ${current_branch} (expected main)." >&2
+  exit 1
 fi
 
 git fetch origin main
-current_branch="$(git rev-parse --abbrev-ref HEAD)"
-if [[ "${current_branch}" != "main" ]]; then
-  git checkout main
-fi
 local_sha="$(git rev-parse HEAD)"
 remote_sha="$(git rev-parse origin/main)"
 if [[ "${local_sha}" == "${remote_sha}" ]]; then

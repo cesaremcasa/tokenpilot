@@ -4,6 +4,11 @@ coverage/
 .DS_Store
 ._*
 .env
+.env.*
+*.pem
+*.key
+id_ed25519
+id_rsa
 data/
 *.sqlite
 *.sqlite-*
