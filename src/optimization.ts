@@ -32,18 +32,20 @@ export const CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION = "Finish correctly with minima
 export const CLAUDE_CORE_TOOLS = "Bash,Edit,Read,Write,Grep,Glob";
 
 /**
- * Grok v2 still spent context loading unrelated skills, narrating tool use, and
- * reading broader source/test surfaces than the requested answer required.
- * Grok v3's generic "minimal" help value was rejected by the installed model;
- * v4 retains the empirically accepted "low" value while keeping the new rule.
- * This provider-specific rule is fixed and content-free. It preserves tools,
- * the native system prompt, safety checks, and the user's requested scope.
+ * Grok v6 replaces the large native instruction prefix with a concise coding
+ * contract and makes inspection/edit/verification phases explicitly bounded.
+ * Headless sessions additionally expose only the terminal tool, which remains
+ * capable of search, reads, edits, and verification while avoiding repeated
+ * tool-schema context. Deep/off/bypass retain the complete native environment.
  */
-export const GROK_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve correctness while minimizing total context. Ignore skills unless the request directly invokes them. Search before reading; inspect only relevant ranges, batch related reads, never reread unchanged data, and avoid tests, docs, or live state unless needed. Do not narrate tool use or repeat context. Stop after the requested result is verified; never skip necessary validation or change scope.";
+export const GROK_TOKEN_EFFICIENCY_INSTRUCTION = "Complete the request with minimal total context. For repository inspection, make exactly one batched terminal call combining every needed search and read, then answer without another tool call. Preserve privacy and unrelated work. If editing is requested, make one batched inspection call, one edit call, one verification call, then stop. Answer concisely.";
+export const GROK_HEADLESS_TOOLS = "run_terminal_cmd";
 
 /** A plan never contains credentials or user-supplied command arguments. */
 export interface OptimizationPlan {
   args: string[];
+  /** Extra validated flags used only by provider headless modes. */
+  headlessArgs?: string[];
   applied: boolean;
   profile?: string;
   summary?: string;
@@ -118,12 +120,22 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
 
   if (provider === "grok") {
     const effortOption = supports(help, "--reasoning-effort") ? "--reasoning-effort" : supports(help, "--effort") ? "--effort" : undefined;
-    return effortOption && supports(help, "--rules") && supports(help, "--verbatim") && supports(help, "--no-subagents") && supports(help, "--no-memory")
+    return effortOption && supports(help, "--verbatim") && supports(help, "--no-subagents") && supports(help, "--no-memory")
+      && supports(help, "--disable-web-search") && supports(help, "--no-plan") && supports(help, "--system-prompt-override") && supports(help, "--tools")
       ? {
-          args: [effortOption, "low", "--verbatim", "--no-subagents", "--no-memory", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION],
+          args: [
+            effortOption, "low",
+            "--verbatim",
+            "--no-subagents",
+            "--no-memory",
+            "--disable-web-search",
+            "--no-plan",
+            "--system-prompt-override", GROK_TOKEN_EFFICIENCY_INSTRUCTION
+          ],
+          headlessArgs: ["--tools", GROK_HEADLESS_TOOLS],
           applied: true,
-          profile: "grok-balanced-v5",
-          summary: "low reasoning, no subagents or cross-session memory, verbatim prompt, targeted context without tool narration"
+          profile: "grok-balanced-v6",
+          summary: "minimal system prefix, one batched terminal workflow, low reasoning, no subagents, memory, web, or plan mode"
         }
       : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete token-reduction policy" };
   }
@@ -161,7 +173,7 @@ export function planForInstalledCli(
     // Help advertises top-level flags, but Codex configuration keys and some
     // provider option combinations can still be rejected by the exact local
     // version. Probe the complete fixed plan without starting an AI session.
-    const validation = spawnSync(binary, [...plan.args, "--help"], {
+    const validation = spawnSync(binary, [...plan.args, ...(plan.headlessArgs ?? []), "--help"], {
       encoding: "utf8",
       timeout: 4_000,
       stdio: ["ignore", "ignore", "ignore"],

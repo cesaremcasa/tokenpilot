@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, GROK_HEADLESS_TOOLS, GROK_TOKEN_EFFICIENCY_INSTRUCTION, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
   it("uses the latency-first Claude v7 policy when every flag is advertised", () => {
@@ -49,20 +49,26 @@ describe("version-gated balanced optimization", () => {
   });
 
   it("uses only documented Grok CLI controls rather than API cache headers", () => {
-    expect(planFromHelp("grok", "balanced", "--reasoning-effort <effort> --rules <rules> --verbatim --no-subagents --no-memory")).toMatchObject({
-      profile: "grok-balanced-v5",
-      args: ["--reasoning-effort", "low", "--verbatim", "--no-subagents", "--no-memory", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION]
+    const help = "--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>";
+    expect(planFromHelp("grok", "balanced", help)).toMatchObject({
+      profile: "grok-balanced-v6",
+      args: [
+        "--reasoning-effort", "low",
+        "--verbatim",
+        "--no-subagents",
+        "--no-memory",
+        "--disable-web-search",
+        "--no-plan",
+        "--system-prompt-override", GROK_TOKEN_EFFICIENCY_INSTRUCTION
+      ],
+      headlessArgs: ["--tools", GROK_HEADLESS_TOOLS]
     });
   });
 
-  it("leaves Grok unchanged when any complete v5 control is unavailable", () => {
-    for (const help of [
-      "--rules <rules> --verbatim --no-subagents --no-memory",
-      "--reasoning-effort <effort> --verbatim --no-subagents --no-memory",
-      "--reasoning-effort <effort> --rules <rules> --no-subagents --no-memory",
-      "--reasoning-effort <effort> --rules <rules> --verbatim --no-memory",
-      "--reasoning-effort <effort> --rules <rules> --verbatim --no-subagents"
-    ]) {
+  it("leaves Grok unchanged when any complete v6 control is unavailable", () => {
+    const required = ["--reasoning-effort", "--verbatim", "--no-subagents", "--no-memory", "--disable-web-search", "--no-plan", "--system-prompt-override", "--tools"];
+    for (const missing of required) {
+      const help = required.filter((flag) => flag !== missing).join(" ");
       expect(planFromHelp("grok", "balanced", help)).toMatchObject({
         applied: false,
         args: [],
@@ -90,7 +96,7 @@ describe("version-gated balanced optimization", () => {
   });
 
   it("applies the same Grok treatment in reduce mode as in balanced mode", () => {
-    const help = "--reasoning-effort <effort> --rules <rules> --verbatim --no-subagents --no-memory";
+    const help = "--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>";
     expect(planFromHelp("grok", "reduce", help)).toEqual(planFromHelp("grok", "balanced", help));
     expect(planFromHelp("grok", "reduce", help).applied).toBe(true);
   });

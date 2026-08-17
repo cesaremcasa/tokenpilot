@@ -592,6 +592,14 @@ describe("aggregate reporting", () => {
     }
   });
 
+  it("validates a matched real-work cohort at three sessions per arm but not two", () => {
+    const sessions = pricedSessions("research");
+    const twoPerArm = sessions.filter((session) => Number(session.id.split("-").at(-1)) < 2);
+    const threePerArm = sessions.filter((session) => Number(session.id.split("-").at(-1)) < 3);
+    expect(treatmentComparisons(twoPerArm)).toMatchObject([{ readiness: "preliminary", tokenResult: "preliminary-signal" }]);
+    expect(treatmentComparisons(threePerArm)).toMatchObject([{ readiness: "ready", tokenResult: "validated-reduction", baselineSessions: 3, treatmentSessions: 3 }]);
+  });
+
   it("never converts a provider-reported total to USD without category metrics", () => {
     const sessions: SessionSummary[] = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
       id: `total-${mode}-${index}`,

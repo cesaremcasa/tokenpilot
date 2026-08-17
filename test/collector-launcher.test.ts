@@ -114,7 +114,7 @@ describe("local launcher and collector", () => {
     const originalBin = writeFakeGrok(paths, `#!/bin/sh
 case " $* " in
   *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
-  *" --help "*) echo '--reasoning-effort <effort> --rules <rules> --verbatim --no-subagents --no-memory'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
 esac
 printf '%s\n' "$@" > '${observedArguments}'
 exit 0
@@ -126,28 +126,33 @@ exit 0
     expect(allocator.allocateBalancedMode("grok", () => 0.9)).toBe("observe");
     allocator.close();
 
-    expect(await withProviderPath(originalBin, () => runProvider("grok", ["--single", "private-task"], paths))).toBe(0);
-    expect(fs.readFileSync(observedArguments, "utf8")).toContain("--verbatim");
-    expect(fs.readFileSync(observedArguments, "utf8")).toContain("--no-subagents");
-    expect(fs.readFileSync(observedArguments, "utf8")).toContain("--no-memory");
+    expect(await withProviderPath(originalBin, () => runProvider("grok", [], paths))).toBe(0);
+    const tuiArguments = fs.readFileSync(observedArguments, "utf8");
+    expect(tuiArguments).toContain("--verbatim");
+    expect(tuiArguments).toContain("--no-subagents");
+    expect(tuiArguments).toContain("--no-memory");
+    expect(tuiArguments).toContain("--disable-web-search");
+    expect(tuiArguments).toContain("--no-plan");
+    expect(tuiArguments).toContain("--system-prompt-override");
+    expect(tuiArguments).not.toContain("--tools");
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "grok",
       mode: "reduce",
       optimizationApplied: true,
-      optimizationProfile: "grok-balanced-v5"
+      optimizationProfile: "grok-balanced-v6"
     });
     database.close();
     cleanup(paths);
   });
 
-  it("injects the complete Grok v5 policy without retaining its fixed rule", async () => {
+  it("injects the complete Grok v6 policy without retaining its fixed rule", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-arguments");
     const originalBin = writeFakeGrok(paths, `#!/bin/sh
 case " $* " in
   *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
-  *" --help "*) echo '--reasoning-effort <effort> --rules <rules> --verbatim --no-subagents --no-memory'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
 esac
 printf '%s\n' "$@" > '${observedArguments}'
 exit 0
@@ -165,6 +170,11 @@ exit 0
     expect(argumentsText).toContain("--verbatim");
     expect(argumentsText).toContain("--no-subagents");
     expect(argumentsText).toContain("--no-memory");
+    expect(argumentsText).toContain("--disable-web-search");
+    expect(argumentsText).toContain("--no-plan");
+    expect(argumentsText).toContain("--system-prompt-override");
+    expect(argumentsText).toContain("--tools");
+    expect(argumentsText).toContain("run_terminal_cmd");
     expect(argumentsText).toContain(GROK_TOKEN_EFFICIENCY_INSTRUCTION);
 
     const database = new TelemetryDatabase(paths);
@@ -172,7 +182,7 @@ exit 0
       provider: "grok",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "grok-balanced-v5"
+      optimizationProfile: "grok-balanced-v6"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");

@@ -34,7 +34,7 @@ If an organization builds aggregation, it should be a company-owned component an
 
 ## Evidence gate
 
-An enterprise result is valid only inside the same provider, known task type, policy, metric basis, and price snapshot, with at least five measured baseline and five measured treatment sessions. Providers must never be combined into one token total or one savings percentage.
+An enterprise result is valid only inside the same provider, known task type, policy, metric basis, and price snapshot, with at least three measured baseline and three measured treatment sessions. Providers must never be combined into one token total or one savings percentage.
 
 Cache reads, new input, cache creation, output, reasoning, pressure, and complete total remain distinct. A cache shift cannot be presented as reduction. Unsupported sessions remain unavailable rather than estimated.
 

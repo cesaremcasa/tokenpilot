@@ -2,6 +2,14 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.4.15 — 2026-08-17
+
+- Add `grok-balanced-v6`, replacing the large native instruction prefix with a concise bounded coding contract.
+- Disable subagents, cross-session memory, web search, and plan mode in Grok reduction sessions; headless runs expose only the general-purpose terminal tool.
+- Keep TTY/TUI launches free of headless-only tool flags while applying the same minimal system prefix and bounded workflow.
+- Validate the complete base and headless flag set before enabling the policy; unsupported Grok versions still fail open unchanged.
+- Validate matched real-work cohorts at 3+3 sessions so a cache-aware result can be established without spending ten provider runs; all provider, task, policy, metric, price, and cache-shift guards remain required.
+
 ## 0.4.14 — 2026-08-17
 
 - Correct Grok External OTEL cache accounting: the provider's `input` counter includes `cache_read`, so TokenPilot now subtracts cache reads before storing new input.
