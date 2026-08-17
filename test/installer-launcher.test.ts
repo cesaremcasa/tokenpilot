@@ -272,6 +272,18 @@ describe("installation and fail-open launcher lookup", () => {
     cleanup(paths);
   });
 
+  it("accepts the standard macOS home deny-delete ACL", () => {
+    if (process.platform !== "darwin") return;
+    const paths = temporaryPaths();
+    const acl = spawnSync("/bin/chmod", ["+a", "everyone deny delete", paths.userHome], { encoding: "utf8" });
+    expect(acl.status).toBe(0);
+
+    expect(() => install(paths, { noShellConfig: true, noAgent: true, noSkills: true })).not.toThrow();
+    uninstall(paths);
+    spawnSync("/bin/chmod", ["-N", paths.userHome], { encoding: "utf8" });
+    cleanup(paths);
+  });
+
   it("rejects original binaries from a world-writable directory", () => {
     const paths = temporaryPaths();
     const unsafeBin = path.join(paths.userHome, "unsafe-bin");
@@ -280,6 +292,36 @@ describe("installation and fail-open launcher lookup", () => {
     fs.writeFileSync(path.join(unsafeBin, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
 
     expect(findOriginalBinary("codex", paths, unsafeBin)).toBeUndefined();
+    cleanup(paths);
+  });
+
+  it("still trusts a user-owned Homebrew admin-group directory", () => {
+    if (process.platform !== "darwin") return;
+    const paths = temporaryPaths();
+    const homebrewLib = path.join(paths.userHome, "opt-homebrew-lib");
+    fs.mkdirSync(homebrewLib, { recursive: true, mode: 0o775 });
+    fs.chmodSync(homebrewLib, 0o775);
+    const adminGid = 80;
+    const ownedByAdminGroup = fs.statSync(homebrewLib).gid === adminGid;
+    fs.writeFileSync(path.join(homebrewLib, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+
+    if (ownedByAdminGroup) {
+      expect(findOriginalBinary("codex", paths, homebrewLib)).toBeDefined();
+    } else {
+      expect(findOriginalBinary("codex", paths, homebrewLib)).toBeUndefined();
+    }
+    cleanup(paths);
+  });
+
+  it("trusts a provider binary below a sticky world-writable ancestor", () => {
+    const paths = temporaryPaths();
+    const stickyAncestor = path.join(paths.userHome, "sticky-tmp");
+    const providerBin = path.join(stickyAncestor, "provider-bin");
+    fs.mkdirSync(providerBin, { recursive: true, mode: 0o700 });
+    fs.chmodSync(stickyAncestor, 0o1777);
+    fs.writeFileSync(path.join(providerBin, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+
+    expect(findOriginalBinary("codex", paths, providerBin)).toBeDefined();
     cleanup(paths);
   });
 

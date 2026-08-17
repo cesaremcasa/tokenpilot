@@ -8,11 +8,15 @@ import { ensureConfig } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
 import { planForInstalledCli, planFromHelp } from "./optimization.js";
 import { pricingProfile } from "./pricing.js";
+import { hasUnsafeMacAcl } from "./acl.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
 import { CodexExecTokenParser, isCodexExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
 import { GrokJsonUsageParser, isGrokJsonSingle, startGrokMetricsReceiver, supportsGrokExternalOtelVersion, type GrokMetricsReceiver } from "./telemetry/grok.js";
 import type { Provider, RunMode } from "./types.js";
+
+/** Homebrew on Apple Silicon uses user:admin 0775 for lib/bin, not a world-writable prefix. */
+const MACOS_ADMIN_GID = 80;
 
 const PASSTHROUGH_ARGUMENTS = new Set([
   "login", "logout", "auth", "--help", "-h", "--version", "-V", "version",
@@ -38,7 +42,7 @@ function trustedExecutable(candidate: string): string | undefined {
     if (!trustedDirectoryTree(path.dirname(resolved), currentUid)) return undefined;
     const protectedOwner = binary.uid === currentUid || binary.uid === 0;
     const binaryWritableByOthers = (binary.mode & 0o022) !== 0;
-    return binary.isFile() && protectedOwner && !binaryWritableByOthers && !hasMacAcl(resolved) ? resolved : undefined;
+    return binary.isFile() && protectedOwner && !binaryWritableByOthers && !hasUnsafeMacAcl(resolved) ? resolved : undefined;
   } catch {
     return undefined;
   }
@@ -56,21 +60,17 @@ function trustedDirectoryTree(directory: string, currentUid: number): boolean {
     if (segment) current = path.join(current, segment);
     const stat = fs.statSync(current);
     const protectedOwner = stat.uid === currentUid || stat.uid === 0;
-    const writableByOthers = (stat.mode & 0o022) !== 0;
+    const worldWritable = (stat.mode & 0o002) !== 0;
+    const groupWritable = (stat.mode & 0o020) !== 0;
     const sticky = (stat.mode & 0o1000) !== 0;
-    if (!stat.isDirectory() || !protectedOwner || (writableByOthers && !sticky) || hasMacAcl(current)) return false;
+    const homebrewAdminGroup = process.platform === "darwin" && stat.uid === currentUid && stat.gid === MACOS_ADMIN_GID;
+    // Sticky world-writable directories such as /tmp stay admissible, matching
+    // the previous audit rule. Non-sticky group-writable ancestors remain
+    // rejected except Homebrew's user-owned admin group on macOS.
+    const untrustedWrite = worldWritable ? !sticky : groupWritable && !sticky && !homebrewAdminGroup;
+    if (!stat.isDirectory() || !protectedOwner || untrustedWrite || hasUnsafeMacAcl(current)) return false;
   }
   return true;
-}
-
-/** macOS ACLs can grant writes even when POSIX mode bits are restrictive. */
-function hasMacAcl(target: string): boolean {
-  if (process.platform !== "darwin") return false;
-  const result = spawnSync("/bin/ls", ["-lde", target], { encoding: "utf8", timeout: 1_000, stdio: ["ignore", "pipe", "ignore"] });
-  if (result.error || result.status !== 0) return true;
-  // `ls -e` prints one extra line for every ACL entry. Refuse all ACLs rather
-  // than attempting to infer whether a named principal can modify the file.
-  return result.stdout.trim().split(/\r?\n/).length > 1;
 }
 
 /**
