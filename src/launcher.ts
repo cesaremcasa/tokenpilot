@@ -12,7 +12,7 @@ import { hasUnsafeMacAcl } from "./acl.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
 import { CodexExecTokenParser, isCodexExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
-import { GrokJsonUsageParser, isGrokJsonSingle, startGrokMetricsReceiver, supportsGrokExternalOtelVersion, type GrokMetricsReceiver } from "./telemetry/grok.js";
+import { GrokJsonUsageParser, isGrokHeadless, isGrokJsonSingle, startGrokMetricsReceiver, supportsGrokExternalOtelVersion, type GrokMetricsReceiver } from "./telemetry/grok.js";
 import type { Provider, RunMode } from "./types.js";
 
 /** Homebrew on Apple Silicon uses user:admin 0775 for lib/bin, not a world-writable prefix. */
@@ -310,7 +310,10 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           grokOtelMetrics = undefined;
         }
       }
-      launchArgs = [...(codexOtelMetrics?.args ?? []), ...optimization.args, ...args];
+      const providerOptimizationArgs = provider === "grok" && isGrokHeadless(args)
+        ? [...optimization.args, ...(optimization.headlessArgs ?? [])]
+        : optimization.args;
+      launchArgs = [...(codexOtelMetrics?.args ?? []), ...providerOptimizationArgs, ...args];
     }
   } catch {
     // All optional state, telemetry, and optimization failures fail open.

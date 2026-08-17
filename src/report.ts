@@ -32,6 +32,7 @@ export function filterReportByProvider(report: Report, provider: Provider): Repo
 
 const CACHE_SHIFT_TOTAL_FLAT_PERCENT = 0.02;
 const CACHE_SHIFT_MIN_CACHE_RECOVERY = 0.5;
+const MIN_VALIDATED_SESSIONS_PER_ARM = 3;
 
 function emptyReport(since: string): Report {
   return { generatedAt: new Date().toISOString(), since, rows: [], coverage: [], comparisons: [], sessions: [] };
@@ -159,7 +160,8 @@ function cacheShift(baseline: SessionSummary[], treatment: SessionSummary[], bas
 /**
  * Build only within-provider, cache-aware matched comparisons. A total is
  * provider-published only when cache semantics are verified; otherwise a
- * complete category total is used, which keeps Claude eligible for 5+5.
+ * complete category total is used, which keeps every provider eligible for a
+ * matched 3+3 validation without estimating unavailable counters.
  */
 export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComparison[] {
   const treatments = new Map<string, SessionSummary[]>();
@@ -213,7 +215,7 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const tokenReductionPercent = baselineMedianTotal === 0 ? 0 : ((baselineMedianTotal - treatmentMedianTotal) / baselineMedianTotal) * 100;
     const isCacheShift = cacheShift(baseline, treatment, baselineMedianTotal, treatmentMedianTotal);
     const classifiedWork = taskKind !== "unknown" && taskKind !== "benchmark";
-    const readiness = classifiedWork && baseline.length >= 5 && treatment.length >= 5 ? "ready" as const : "preliminary" as const;
+    const readiness = classifiedWork && baseline.length >= MIN_VALIDATED_SESSIONS_PER_ARM && treatment.length >= MIN_VALIDATED_SESSIONS_PER_ARM ? "ready" as const : "preliminary" as const;
     const tokenResult: TreatmentComparison["tokenResult"] = isCacheShift
       ? "cache-shift"
       : readiness === "ready" && estimatedTokensAvoided > 0 && tokenReductionPercent > 0 ? "validated-reduction" : "preliminary-signal";

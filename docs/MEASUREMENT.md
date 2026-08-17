@@ -58,7 +58,7 @@ A reduction is validated only when all of the following are true:
 - same versioned treatment policy;
 - same complete-total basis;
 - same price snapshot, including no-price as a distinct snapshot;
-- at least five measured baselines and five measured treatments;
+- at least three measured baselines and three measured treatments;
 - positive avoided tokens and positive median reduction; and
 - cache-shift detector is false.
 

@@ -62,7 +62,7 @@ A new installation defaults to `reduce`. Every Claude, Codex, and Grok session g
 | --- | --- | --- |
 | Claude | Low effort, stable cache prefix, latency-first instruction, core repository tools, and no Chrome startup. | Session flags only. Use `deep`, `off`, or the bypass for web, MCP, agents, notebooks, or other excluded tools. |
 | Codex | Low reasoning, no reasoning summary, low verbosity, concise execution, and compaction at 32k tokens. | Session-scoped `--config`; prompt telemetry remains disabled. |
-| Grok | Low reasoning, verbatim user prompt, no subagents or cross-session memory, and a fixed rule against irrelevant context and tool narration. | Session flags only. Tools and web remain available; use `deep`, `off`, or bypass when subagents or memory are required. No API-only cache key is assumed. |
+| Grok | Minimal system prefix, a bounded inspect/edit/verify workflow, low reasoning, and no subagents, memory, web, or plan mode. Headless sessions use the terminal as their single general-purpose tool. | Session flags only. Use `deep`, `off`, or bypass for the complete native prompt, tools, web, agents, memory, or plan mode. No API-only cache key is assumed. |
 | Kimi | No TokenPilot treatment is injected. | Runs through the original CLI and remains measurement-limited until a safe correlated channel exists. |
 
 Treatments are enabled only after the installed CLI passes the complete local help/version probe. If a probe, collector, or database operation fails, TokenPilot opens the original provider CLI without the treatment.
@@ -152,7 +152,7 @@ TokenPilot never calls a cache shift a token reduction. It reports these categor
 - token pressure; and
 - a complete cache-aware total.
 
-A reduction is validated only for the same provider, known non-benchmark task type, policy, metric basis, and price snapshot, with at least five measured baselines and five measured treatments. If new input moves into cache while the complete total remains effectively flat, the state is `cache-shift` and TokenPilot emits no percentage, avoided tokens, or avoided USD.
+A reduction is validated only for the same provider, known non-benchmark task type, policy, metric basis, and price snapshot, with at least three measured baselines and three measured treatments. If new input moves into cache while the complete total remains effectively flat, the state is `cache-shift` and TokenPilot emits no percentage, avoided tokens, or avoided USD.
 
 See [Measurement methodology](docs/MEASUREMENT.md) for formulas, comparison states, pricing rules, and audit requirements.
 

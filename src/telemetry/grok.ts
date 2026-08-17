@@ -384,9 +384,15 @@ export class GrokJsonUsageParser {
   }
 }
 
+/** Grok's tool allowlist is documented for headless sessions only. */
+export function isGrokHeadless(args: string[]): boolean {
+  return args.some((argument) => argument === "--single" || argument === "-p" || argument === "--prompt-file" || argument === "--prompt-json"
+    || argument.startsWith("--single=") || argument.startsWith("--prompt-file=") || argument.startsWith("--prompt-json="));
+}
+
 /** A JSON single turn is non-interactive, so observing its output preserves TTY behavior. */
 export function isGrokJsonSingle(args: string[]): boolean {
   const outputIndex = args.findIndex((argument) => argument === "--output-format");
   const jsonOutput = (outputIndex >= 0 && args[outputIndex + 1] === "json") || args.includes("--output-format=json");
-  return jsonOutput && (args.includes("--single") || args.includes("-p"));
+  return jsonOutput && isGrokHeadless(args);
 }

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
-import { GrokJsonUsageParser, isGrokJsonSingle, parseGrokOtlpMetricSamples, parseGrokOtlpMetrics, startGrokMetricsReceiver, supportsGrokExternalOtelVersion } from "../src/telemetry/grok.js";
+import { GrokJsonUsageParser, isGrokHeadless, isGrokJsonSingle, parseGrokOtlpMetricSamples, parseGrokOtlpMetrics, startGrokMetricsReceiver, supportsGrokExternalOtelVersion } from "../src/telemetry/grok.js";
 import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
 describe("Grok JSON usage telemetry", () => {
@@ -17,6 +17,9 @@ describe("Grok JSON usage telemetry", () => {
     expect(isGrokJsonSingle(["--output-format=json", "-p", "test"])).toBe(true);
     expect(isGrokJsonSingle(["--single", "test"])).toBe(false);
     expect(isGrokJsonSingle(["--output-format", "json", "test"])).toBe(false);
+    expect(isGrokHeadless(["--prompt-file", "prompt.md"])).toBe(true);
+    expect(isGrokHeadless(["--prompt-json={}"])).toBe(true);
+    expect(isGrokHeadless([])).toBe(false);
   });
 
   it("parses documented content-free External OTEL v1 token counters", () => {

@@ -67,7 +67,7 @@ Cache-shift means new input moved toward cache reads while the complete cache-aw
 
 ## Report says preliminary
 
-The cohort is directionally comparable but lacks a validation requirement, commonly 5+5 measured sessions or a known non-benchmark task type. The detailed report preserves that diagnostic, while the concise scoreboard prints only measured use and makes no economy claim. Continue normal use and classify only sessions you can categorize without entering task content.
+The cohort is directionally comparable but lacks a validation requirement, commonly 3+3 measured sessions or a known non-benchmark task type. The detailed report preserves that diagnostic, while the concise scoreboard prints only measured use and makes no economy claim. Continue normal use and classify only sessions you can categorize without entering task content.
 
 ## Kimi
 
