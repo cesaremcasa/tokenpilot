@@ -4,6 +4,13 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 
 ## Unreleased
 
+## 0.4.8 — 2026-08-17
+
+- Replaced the skill summary with a short scoreboard: rolling last 24 hours, then last 7 days.
+- The 24-hour window always counts backward from now. It is not a calendar day.
+- The scoreboard shows expected tokens, used tokens, and the savings percentage. It omits USD, latency, and policy jargon.
+- Cache-shift, preliminary, and unmatched windows print `sem medição ainda` or `0% a menos` instead of an invented reduction.
+
 ## 0.4.7 — 2026-08-17
 
 - Disabled the Kimi REST/WebSocket bridge pending a content-free, child-authenticated measurement channel; Kimi now runs through its original CLI and remains envelope-only.

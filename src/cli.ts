@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { getPaths } from "./paths.js";
 import { install, uninstall } from "./installer.js";
 import { collectPendingRuns } from "./collector.js";
-import { buildReport, filterReportByProvider, renderReportMarkdown, type ReportView } from "./report.js";
+import { buildReport, buildRollingSummaryReports, filterReportByProvider, renderReportMarkdown, reportSummaryMarkdown, type ReportView } from "./report.js";
 import { runProvider } from "./launcher.js";
 import { addPricing, disablePricing, ensureConfig, listPricing, setMode, setPricing } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
@@ -30,7 +30,7 @@ Usage:
   tokenpilot collect
   tokenpilot sessions [--days <1-365>] [--unclassified]
   tokenpilot classify <run-id> --kind <feature|bugfix|research|operations|benchmark|other> --outcome <completed|rework|abandoned>
-  tokenpilot report [--days <1-365>] [--provider <claude|codex|grok|kimi>] [--view <summary|detail|diagnostics>] [--format <md|json>]
+  tokenpilot report [--provider <claude|codex|grok|kimi>] [--view <summary|detail|diagnostics>] [--days <1-365>] [--format <md|json>]
   tokenpilot status
 
 Daily usage after install is unchanged: claude, codex, grok, or kimi.
@@ -260,21 +260,30 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     return 0;
   }
   if (command === "report") {
-    const days = daysArgument(args);
     const requestedProvider = flag(args, "--provider");
     if (requestedProvider !== undefined && !isProvider(requestedProvider)) {
       throw new Error("--provider must be claude, codex, grok, or kimi");
     }
-    const completeReport = buildReport(paths, days);
-    const report = requestedProvider === undefined ? completeReport : filterReportByProvider(completeReport, requestedProvider);
     const format = flag(args, "--format") ?? "md";
     const view = flag(args, "--view") ?? "summary";
     if (!(["summary", "detail", "diagnostics"] as const).includes(view as ReportView)) {
       throw new Error("--view must be summary, detail, or diagnostics");
     }
+    if (format !== "md" && format !== "json") throw new Error("--format must be md or json");
+    if (view === "summary") {
+      // Summary is always a rolling last-24-hours window plus the last 7 days.
+      // --days does not change those two clocks.
+      const rolling = buildRollingSummaryReports(paths);
+      const last24Hours = requestedProvider === undefined ? rolling.last24Hours : filterReportByProvider(rolling.last24Hours, requestedProvider);
+      const last7Days = requestedProvider === undefined ? rolling.last7Days : filterReportByProvider(rolling.last7Days, requestedProvider);
+      if (format === "json") process.stdout.write(`${JSON.stringify({ last24Hours, last7Days }, null, 2)}\n`);
+      else process.stdout.write(reportSummaryMarkdown(last7Days, last24Hours));
+      return 0;
+    }
+    const completeReport = buildReport(paths, daysArgument(args));
+    const report = requestedProvider === undefined ? completeReport : filterReportByProvider(completeReport, requestedProvider);
     if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    else if (format === "md") process.stdout.write(renderReportMarkdown(report, view as ReportView));
-    else throw new Error("--format must be md or json");
+    else process.stdout.write(renderReportMarkdown(report, view as ReportView));
     return 0;
   }
   if (command === "status") {

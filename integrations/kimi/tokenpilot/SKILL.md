@@ -1,9 +1,9 @@
 ---
 name: tokenpilot
-description: Show the privacy-preserving local Kimi TokenPilot report for the last seven days. Use when the user asks about Kimi token use, measured reduction, latency, coverage, or experiment quality.
+description: Show the privacy-preserving local Kimi TokenPilot scoreboard for the rolling last 24 hours and last seven days. Use when the user asks about Kimi token use, measured reduction, coverage, or how many tokens were expected versus used.
 ---
 
-<!-- tokenpilot-managed-skill:v2 kimi -->
+<!-- tokenpilot-managed-skill:v3 kimi -->
 
 # TokenPilot report
 
@@ -17,10 +17,10 @@ Return the command's Markdown verbatim. Do not add another heading, table, summa
 
 ## Reporting rules
 
-- State measurement coverage first.
-- Kimi currently runs through its original CLI without a TokenPilot REST/WebSocket bridge. It remains envelope-only until a safe correlated measurement channel is available; never estimate unavailable sessions.
+- The summary already uses a rolling last-24-hours window (from now backward, not a calendar day) and the last 7 days.
+- Repeat the printed percentage and token counts. Never invent a missing 24-hour or 7-day figure.
+- Treat `sem medição ainda` and `0% a menos` as no savings claim.
 - The command is already limited to Kimi. Never add another provider or combine provider totals.
-- Call a reduction only when the summary says `validated reduction`.
-- Treat limited measurement, a missing comparable base, cache-shift, and preliminary signals as not validated.
-- Keep new input, cache reads, cache creation, pressure, and complete total distinct.
+- Do not mention USD, bills, or prices.
+- Kimi currently runs through its original CLI without a TokenPilot REST/WebSocket bridge. It remains envelope-only until a safe correlated measurement channel is available; never estimate unavailable sessions.
 - If the command is missing or fails, say so plainly and give no substitute token estimate.

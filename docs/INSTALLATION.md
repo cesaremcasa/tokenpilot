@@ -1,6 +1,6 @@
 # Installation and lifecycle
 
-TokenPilot 0.4.7 supports macOS and Linux with Node.js 22.5 or newer. It runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
+TokenPilot 0.4.8 supports macOS and Linux with Node.js 22.5 or newer. It runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
 
 ## Before installation
 
