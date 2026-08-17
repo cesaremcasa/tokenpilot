@@ -8,7 +8,7 @@ describe("macOS ACL admission", () => {
   });
 
   it("accepts other deny-only entries", () => {
-    expect(isUnsafeMacAclEntry(" 1: user:cesaravieira deny write,delete")).toBe(false);
+    expect(isUnsafeMacAclEntry(" 1: user:nobody deny write,delete")).toBe(false);
   });
 
   it("refuses write-granting and unknown allow entries", () => {

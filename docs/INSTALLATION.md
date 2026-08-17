@@ -1,6 +1,6 @@
 # Installation and lifecycle
 
-TokenPilot 0.4.11 supports macOS and Linux with Node.js 22.5 or newer. It runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
+TokenPilot 0.4.12 supports macOS and Linux with Node.js 22.5 or newer. It runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
 
 If you opened this repository to use Grok: install **Grok Build** first. TokenPilot only wraps it.
 
@@ -100,24 +100,14 @@ For automation, run the build and install under the same login shell that owns t
 
 Each machine keeps its own SQLite database. An update never copies measurements between hosts.
 
-### After every push to `main`
-
-1. **Supervisor (push-triggered).** When CI on `main` is green, the `Update Supervisor` job SSHes to the host and runs `scripts/update.sh`. It only runs when these repository secrets exist:
-
-   - `TOKENPILOT_SUPERVISOR_HOST`
-   - `TOKENPILOT_SUPERVISOR_USER`
-   - `TOKENPILOT_SUPERVISOR_SSH_KEY`
-   - `TOKENPILOT_SUPERVISOR_KNOWN_HOSTS` (optional but recommended)
-
-   If the secrets are absent, the job skips. The Action never uploads telemetry.
-
-2. **This machine (poller).** Hosts that GitHub cannot reach, including a Mac behind NAT, pull on a timer:
+Install a local poller that pulls `origin/main` on a timer:
 
 ```sh
+./scripts/update.sh
 ./scripts/install-auto-update.sh
 ```
 
-On macOS this writes `~/Library/LaunchAgents/com.tokenpilot.update.plist`. On Linux it adds one marked user crontab line and leaves every other cron job untouched. The default checkout is `~/.tokenpilot/src`, so a dirty development clone is never rewritten. Override with `TOKENPILOT_REPO`. The poller only rebuilds when `origin/main` moved.
+On macOS this writes `~/Library/LaunchAgents/com.tokenpilot.update.plist`. On Linux it adds one marked user crontab line and leaves every other cron job untouched. The default checkout is `~/.tokenpilot/src` cloned over HTTPS (`https://github.com/cesaremcasa/tokenpilot.git`; override with `TOKENPILOT_GIT_URL`), so a dirty development clone is never rewritten. Override the checkout path with `TOKENPILOT_REPO`. If git fetch needs a deploy key, set `TOKENPILOT_GIT_SSH_KEY` to that private-key path. The poller only rebuilds when `origin/main` moved. `update.sh` refuses to run unless the checkout is already on `main`.
 
 ## Immediate rollback and bypass
 

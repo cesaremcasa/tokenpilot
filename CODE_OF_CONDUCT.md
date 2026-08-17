@@ -16,6 +16,6 @@ Harassment, discrimination, threats, doxxing, publication of private telemetry o
 
 ## Reporting
 
-For community conduct concerns, contact the maintainers through a private repository channel. For vulnerabilities or accidental disclosure of sensitive data, follow [SECURITY.md](SECURITY.md). Do not place sensitive evidence in a public issue.
+For community conduct concerns, open an issue without sensitive evidence, or follow [SECURITY.md](SECURITY.md). For vulnerabilities or accidental disclosure of sensitive data, follow [SECURITY.md](SECURITY.md). Do not place sensitive evidence in a public issue.
 
 Maintainers may edit or remove content and restrict participation when necessary to protect contributors and users.

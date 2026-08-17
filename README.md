@@ -37,7 +37,7 @@ tokenpilot doctor
 
 `doctor` must show `grok CLI | active` (and the same for any other provider you use) before a session is measured. Wrappers on PATH with no original CLI behind them are not a working install.
 
-Developed by **Mycellium Lab** and released under the [MIT License](LICENSE).
+Published by **Mycellium Lab** from [@cesaremcasa](https://github.com/cesaremcasa) and released under the [MIT License](LICENSE). Claude, Codex, Grok, and Kimi are trademarks of their respective owners; TokenPilot is not affiliated with them.
 
 ## First research round
 
@@ -48,7 +48,7 @@ The first controlled round was completed on August 15, 2026, on a Linux test hos
 | Claude | 45/46 measured | **66.0%** | 66.3% | 35.3% faster |
 | Codex | 49/51 measured | **54.8%** | 55.5% | 69.0% faster |
 | Grok | 39/40 measured | **42.6%** | 50.8% | 68.4% faster |
-| Kimi | 42/46 measured | **51.6%** | 51.5% | 4.2% faster |
+| Kimi (historical / envelope-only) | 42/46 measured | **51.6%** (historical) | 51.5% (historical) | 4.2% faster |
 
 These are early, task-specific research cohorts, not universal performance promises. Every validated row met TokenPilot's 5+5 minimum and cache-aware comparison rules. Provider/model coverage, session counts, medians, totals, unavailable sessions, and limitations are documented in [First research round](docs/RESULTS.md). The second weekly snapshot is planned for August 22, 2026.
 
@@ -106,7 +106,7 @@ tokenpilot doctor
 tokenpilot report
 ```
 
-Read the full [installation and upgrade guide](docs/INSTALLATION.md) before distributing TokenPilot to another machine. `scripts/update.sh` fast-forwards from `origin/main` and reinstalls without touching local telemetry. Optional automatic updates — push-triggered on a Supervisor host, or a local poller on a Mac — are documented there.
+Read the full [installation and upgrade guide](docs/INSTALLATION.md) before distributing TokenPilot to another machine. `scripts/update.sh` fast-forwards from `origin/main` and reinstalls without touching local telemetry. Optional automatic updates use the local poller (`scripts/install-auto-update.sh`).
 
 ## Report skills
 
@@ -136,7 +136,7 @@ tokenpilot report --view detail
 tokenpilot report --view diagnostics
 ```
 
-`tokenpilot report` prints a short scoreboard: rolling last 24 hours (from now backward, not a calendar day), then the last 7 days. It shows expected tokens, used tokens, and the savings percentage. USD stays out of the summary.
+`tokenpilot report` prints a short scoreboard: rolling last 24 hours (from now backward, not a calendar day), then the last 7 days. It shows expected tokens, used tokens, and the savings percentage. USD stays out of the summary. The scoreboard itself is in Portuguese (`últimas 24 horas`, `sem medição ainda`).
 
 Authentication and support commands such as login, logout, help, and version pass through without creating telemetry. `TOKENPILOT_BYPASS=1` is the process-level emergency bypass.
 

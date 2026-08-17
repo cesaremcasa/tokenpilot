@@ -4,13 +4,13 @@
 set -euo pipefail
 
 REPO="${TOKENPILOT_REPO:-${HOME}/.tokenpilot/src}"
-SOURCE_URL="${TOKENPILOT_GIT_URL:-git@github.com:cesaremcasa/tokenpilot.git}"
+SOURCE_URL="${TOKENPILOT_GIT_URL:-https://github.com/cesaremcasa/tokenpilot.git}"
 INTERVAL="${TOKENPILOT_UPDATE_INTERVAL:-900}"
 LOG_DIR="${HOME}/.tokenpilot/logs"
 MARKER="tokenpilot-managed-auto-update"
 
-if [[ -f "${HOME}/.ssh/tokenpilot-github-deploy-ed25519" ]]; then
-  export GIT_SSH_COMMAND="ssh -i ${HOME}/.ssh/tokenpilot-github-deploy-ed25519 -o IdentitiesOnly=yes"
+if [[ -n "${TOKENPILOT_GIT_SSH_KEY:-}" ]]; then
+  export GIT_SSH_COMMAND="ssh -i ${TOKENPILOT_GIT_SSH_KEY} -o IdentitiesOnly=yes"
 fi
 
 if [[ ! -d "${REPO}/.git" ]]; then
@@ -19,7 +19,7 @@ if [[ ! -d "${REPO}/.git" ]]; then
 fi
 
 if [[ ! -x "${REPO}/scripts/update.sh" ]]; then
-  echo "scripts/update.sh is missing in ${REPO}. Pull TokenPilot 0.4.11 or newer first." >&2
+  echo "scripts/update.sh is missing in ${REPO}. Pull TokenPilot 0.4.12 or newer first." >&2
   exit 1
 fi
 
