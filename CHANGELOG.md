@@ -2,6 +2,13 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.4.14 — 2026-08-17
+
+- Correct Grok External OTEL cache accounting: the provider's `input` counter includes `cache_read`, so TokenPilot now subtracts cache reads before storing new input.
+- Version corrected Grok OTLP rows as `grok-otlp-metrics-v2` and normalize historical v1 rows at report time without rewriting the telemetry database.
+- Add live-correlated and legacy-report regressions for cache-aware Grok totals.
+- Pin TypeScript's ambient type discovery to Node so duplicate cloud-synced `@types` directories cannot break local verification.
+
 ## 0.4.13 — 2026-08-17
 
 - Keep the concise scoreboard copy unchanged while showing measured usage instead of an economy claim for preliminary, incomparable, or limited cohorts.

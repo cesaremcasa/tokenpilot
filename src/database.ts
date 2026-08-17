@@ -4,6 +4,11 @@ import { safeEvent, safeRun, safeUsage } from "./privacy.js";
 import { assertSafeStateFile, ensurePrivateDirectory, hasSafePrivateDirectory, type TokenPilotPaths } from "./paths.js";
 import { isPricingProfile } from "./pricing.js";
 
+// Grok OTLP v1 stored the provider's full input counter in input_new even
+// though cache_read was its included component. New v2 rows are normalized at
+// collection time; reports normalize legacy rows without rewriting history.
+const NORMALIZED_INPUT_NEW_SQL = "CASE WHEN source = 'grok-otlp-metrics-v1' THEN MAX(0, COALESCE(input_new, 0) - COALESCE(input_cached, 0)) ELSE COALESCE(input_new, 0) END";
+
 export interface TelemetryDatabaseOptions {
   /** A report must never create, migrate, or journal a database. */
   readOnly?: boolean;
@@ -257,7 +262,7 @@ export class TelemetryDatabase {
     const reportedTotal = this.hasReportedTotalColumn ? "SUM(COALESCE(u.reported_total, 0))" : "0";
     return this.db.prepare(`
       WITH usage AS (
-        SELECT run_id, SUM(COALESCE(input_new, 0)) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
+        SELECT run_id, SUM(${NORMALIZED_INPUT_NEW_SQL}) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
           SUM(COALESCE(cache_created, 0)) AS cache_created, SUM(COALESCE(output, 0)) AS output,
           SUM(COALESCE(reasoning, 0)) AS reasoning, SUM(COALESCE(model_calls, 0)) AS model_calls${this.hasReportedTotalColumn ? ", SUM(COALESCE(reported_total, 0)) AS reported_total" : ""}
         FROM usage_records GROUP BY run_id
@@ -364,7 +369,7 @@ export class TelemetryDatabase {
     const reportedTotalSemantics = this.hasReportedTotalSemanticsColumn ? "u.reported_total_includes_cached_input" : "0";
     return (this.db.prepare(`
       WITH usage AS (
-        SELECT run_id, SUM(COALESCE(input_new, 0)) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
+        SELECT run_id, SUM(${NORMALIZED_INPUT_NEW_SQL}) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
           SUM(COALESCE(cache_created, 0)) AS cache_created, SUM(COALESCE(output, 0)) AS output,
           SUM(COALESCE(reasoning, 0)) AS reasoning,
           MAX(CASE WHEN input_new IS NOT NULL OR input_cached IS NOT NULL OR cache_created IS NOT NULL OR output IS NOT NULL OR reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_detailed_usage,
