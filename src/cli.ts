@@ -21,7 +21,7 @@ Usage:
   tokenpilot install [--dry-run] [--no-shell-config] [--no-agent] [--no-skills]
   tokenpilot uninstall [--dry-run]
   tokenpilot doctor [--format <md|json>]
-  tokenpilot mode <observe|balanced|deep|off>
+  tokenpilot mode <reduce|observe|balanced|deep|off>
   tokenpilot pricing list
   tokenpilot pricing add <provider> <profile> --label <label> --version <version> --input-usd-per-million <rate> --cached-input-usd-per-million <rate> --cache-creation-usd-per-million <rate> --output-usd-per-million <rate> [--reasoning-usd-per-million <rate>]
   tokenpilot pricing set <provider> <profile>
@@ -228,8 +228,8 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   }
   if (command === "mode") {
     const mode = args[1];
-    if (!["observe", "balanced", "deep", "off"].includes(mode ?? "")) throw new Error("Mode must be observe, balanced, deep, or off");
-    setMode(paths, mode as "observe" | "balanced" | "deep" | "off");
+    if (!["observe", "reduce", "balanced", "deep", "off"].includes(mode ?? "")) throw new Error("Mode must be reduce, observe, balanced, deep, or off");
+    setMode(paths, mode as "observe" | "reduce" | "balanced" | "deep" | "off");
     process.stdout.write(`TokenPilot mode: ${mode}\n`);
     return 0;
   }

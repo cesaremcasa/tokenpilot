@@ -108,6 +108,37 @@ describe("local launcher and collector", () => {
     cleanup(paths);
   });
 
+  it("always injects the Grok reduction policy in reduce mode", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "grok-reduce-arguments");
+    const originalBin = writeFakeGrok(paths, `#!/bin/sh
+case " $* " in
+  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --rules <rules> --verbatim'; exit 0 ;;
+esac
+printf '%s\n' "$@" > '${observedArguments}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+    const allocator = new TelemetryDatabase(paths);
+    expect(allocator.allocateBalancedMode("grok", () => 0.9)).toBe("observe");
+    allocator.close();
+
+    expect(await withProviderPath(originalBin, () => runProvider("grok", ["--single", "private-task"], paths))).toBe(0);
+    expect(fs.readFileSync(observedArguments, "utf8")).toContain("--verbatim");
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
+      provider: "grok",
+      mode: "reduce",
+      optimizationApplied: true,
+      optimizationProfile: "grok-balanced-v4"
+    });
+    database.close();
+    cleanup(paths);
+  });
+
   it("injects the complete Grok v4 policy without retaining its fixed rule", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-arguments");

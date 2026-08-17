@@ -7,7 +7,7 @@ import { assertSafeStateFile, ensurePrivateDirectory, type TokenPilotPaths } fro
 
 export const DEFAULT_CONFIG: TokenPilotConfig = {
   version: 2,
-  defaultMode: "balanced",
+  defaultMode: "reduce",
   pricingProfiles: [],
   activePricing: {}
 };
@@ -22,7 +22,7 @@ export function ensureConfig(paths: TokenPilotPaths): TokenPilotConfig {
 
   const parsed = JSON.parse(fs.readFileSync(paths.configFile, "utf8")) as Partial<TokenPilotConfig> & { version?: number };
   if (![1, 2].includes(parsed.version ?? 0)
-    || !["observe", "balanced", "deep", "off"].includes(parsed.defaultMode ?? "")) {
+    || !["observe", "reduce", "balanced", "deep", "off"].includes(parsed.defaultMode ?? "")) {
     throw new Error(`Unsupported TokenPilot configuration: ${paths.configFile}`);
   }
   // Older local configs may contain provider paths. Never use or preserve

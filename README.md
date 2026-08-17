@@ -35,7 +35,7 @@ The Kimi result is historical: Kimi currently runs unchanged and is envelope-onl
 
 ## What TokenPilot changes
 
-A new installation defaults to `balanced`. For each provider, TokenPilot persistently alternates between an unchanged `observe` session and a versioned `balanced` treatment. This preserves a provider-local baseline while testing a real reduction policy.
+A new installation defaults to `reduce`. Every Claude, Codex, and Grok session gets the versioned token-reduction treatment plus measurement. There is no observe-only turn unless you opt back into the `balanced` 50/50 experiment.
 
 | Provider | Current `balanced` treatment | Boundary |
 | --- | --- | --- |
@@ -101,7 +101,8 @@ Each provider receives a read-only local report skill. Skills never inspect the 
 ## Controls
 
 ```sh
-tokenpilot mode balanced  # 50/50 provider-local experiment; installation default
+tokenpilot mode reduce    # reduction on every session; installation default
+tokenpilot mode balanced  # 50/50 observe vs treatment experiment
 tokenpilot mode observe   # unchanged provider behavior with measurement
 tokenpilot mode deep      # native provider settings with measurement
 tokenpilot mode off       # original CLI with no TokenPilot telemetry

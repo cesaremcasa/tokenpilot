@@ -4,6 +4,11 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 
 ## Unreleased
 
+## 0.4.10 — 2026-08-17
+
+- New default mode `reduce`: apply the token-reduction treatment on every Claude, Codex, and Grok session.
+- Keep `balanced` as an opt-in 50/50 experiment. `observe` is no longer part of the default path.
+
 ## 0.4.9 — 2026-08-17
 
 - Count in-progress Grok TTY/TUI sessions that already published External OTEL counters, instead of waiting for the process to exit.

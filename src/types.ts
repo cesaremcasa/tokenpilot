@@ -1,7 +1,8 @@
 export const PROVIDERS = ["claude", "codex", "grok", "kimi"] as const;
 
 export type Provider = (typeof PROVIDERS)[number];
-export type RunMode = "observe" | "balanced" | "deep" | "off";
+export const RUN_MODES = ["observe", "reduce", "balanced", "deep", "off"] as const;
+export type RunMode = (typeof RUN_MODES)[number];
 export type TaskKind = "feature" | "bugfix" | "research" | "operations" | "benchmark" | "other" | "unknown";
 export type TaskOutcome = "completed" | "rework" | "abandoned" | "unknown";
 export type CollectionState = "pending" | "collected" | "unavailable";

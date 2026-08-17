@@ -6,7 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { getAdapter } from "./adapters/index.js";
 import { ensureConfig } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
-import { planForInstalledCli, planFromHelp } from "./optimization.js";
+import { appliesReductionPolicy, planForInstalledCli, planFromHelp } from "./optimization.js";
 import { pricingProfile } from "./pricing.js";
 import { hasUnsafeMacAcl } from "./acl.js";
 import type { TokenPilotPaths } from "./paths.js";
@@ -258,16 +258,16 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       if (!trusted) throw new Error("Provider executable no longer meets TokenPilot trust checks");
       database = new TelemetryDatabase(paths);
       const version = binaryVersion(trusted);
-      const experiment = config.defaultMode === "balanced"
-        ? planForInstalledCli(provider, "balanced", trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined)
+      const reductionPlan = appliesReductionPolicy(config.defaultMode)
+        ? planForInstalledCli(provider, config.defaultMode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined)
         : undefined;
       if (mode === "balanced") mode = database.allocateBalancedMode(provider);
-      const optimization = mode === "balanced" && experiment
-        ? experiment
+      const optimization = appliesReductionPolicy(mode) && reductionPlan
+        ? reductionPlan
         : planForInstalledCli(provider, mode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined);
-      if (mode === "balanced" && optimization.applied) {
-        process.stderr.write(`TokenPilot: balanced optimization active for ${provider} (${optimization.summary}).\n`);
-      } else if (mode === "balanced") {
+      if (appliesReductionPolicy(mode) && optimization.applied) {
+        process.stderr.write(`TokenPilot: ${mode} optimization active for ${provider} (${optimization.summary}).\n`);
+      } else if (appliesReductionPolicy(mode)) {
         process.stderr.write(`TokenPilot: ${optimization.unavailableReason}; starting ${provider} without injected settings.\n`);
       }
 
@@ -280,7 +280,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
         cliVersion: version,
         optimizationApplied: optimization.applied,
         optimizationProfile: optimization.profile,
-        comparisonProfile: experiment?.profile,
+        comparisonProfile: reductionPlan?.profile,
         pricingProfile: pricingProfile(config, provider),
         collectionState: "pending",
         taskKind: "unknown",

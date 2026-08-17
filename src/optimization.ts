@@ -1,6 +1,10 @@
 import { spawnSync } from "node:child_process";
 import type { Provider, RunMode } from "./types.js";
 
+export function appliesReductionPolicy(mode: RunMode): boolean {
+  return mode === "reduce" || mode === "balanced";
+}
+
 /**
  * This fixed instruction is TokenPilot product code, not user or provider
  * content. Keeping it short and byte-stable makes its own cache cost bounded
@@ -57,7 +61,7 @@ function supports(help: string, option: string): boolean {
  * Kept pure so every provider policy has a direct unit test.
  */
 export function planFromHelp(provider: Provider, mode: RunMode, help: string): OptimizationPlan {
-  if (mode !== "balanced") return NONE;
+  if (!appliesReductionPolicy(mode)) return NONE;
 
   if (provider === "claude") {
     if (!supports(help, "--effort") || !supports(help, "--tools") || !supports(help, "--append-system-prompt")) {
@@ -135,7 +139,7 @@ export function planForInstalledCli(
   environment: NodeJS.ProcessEnv = process.env,
   verifyBinary: (candidate: string) => boolean = () => true
 ): OptimizationPlan {
-  if (mode !== "balanced") return NONE;
+  if (!appliesReductionPolicy(mode)) return NONE;
   try {
     if (!verifyBinary(binary)) return { ...NONE, unavailableReason: "could not verify this CLI executable before applying a policy" };
     const result = spawnSync(binary, ["--help"], {
