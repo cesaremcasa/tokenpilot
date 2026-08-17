@@ -4,6 +4,12 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 
 ## Unreleased
 
+## 0.4.9 — 2026-08-17
+
+- Count in-progress Grok TTY/TUI sessions that already published External OTEL counters, instead of waiting for the process to exit.
+- Show preliminary expected/used token totals on the scoreboard so a live Grok pair is not hidden behind `sem medição ainda`.
+- Keep the Grok loopback receiver open for a short flush window when a session exits before the first metric arrives.
+
 ## 0.4.8 — 2026-08-17
 
 - Replaced the skill summary with a short scoreboard: rolling last 24 hours, then last 7 days.

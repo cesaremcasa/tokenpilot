@@ -332,6 +332,11 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     const code = await launchChild(binary, launchArgs, launchEnvironment, observer ? { consume: (chunk) => observer.accept(chunk) } : undefined);
     await claudeMetrics?.close().catch(() => undefined);
     await codexOtelMetrics?.close().catch(() => undefined);
+    if (provider === "grok" && grokOtelMetrics && database && runId && !database.hasUsage(runId)) {
+      // Grok's External OTEL export is interval-based. Give a short-lived TTY
+      // session one more flush window before the loopback receiver disappears.
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+    }
     await grokOtelMetrics?.close().catch(() => undefined);
     if (database && runId) {
       try {
