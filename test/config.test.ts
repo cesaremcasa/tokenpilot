@@ -8,10 +8,10 @@ import { getPaths } from "../src/paths.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 describe("configuration and balanced allocation", () => {
-  it("defaults new installations to balanced while retaining a safe v1 migration", () => {
+  it("defaults new installations to reduce while retaining a safe v1 migration", () => {
     const paths = temporaryPaths();
     expect(ensureConfig(paths)).toEqual(DEFAULT_CONFIG);
-    expect(DEFAULT_CONFIG).toMatchObject({ version: 2, defaultMode: "balanced", pricingProfiles: [], activePricing: {} });
+    expect(DEFAULT_CONFIG).toMatchObject({ version: 2, defaultMode: "reduce", pricingProfiles: [], activePricing: {} });
     fs.writeFileSync(paths.configFile, JSON.stringify({ version: 1, defaultMode: "observe" }), { mode: 0o600 });
     expect(ensureConfig(paths)).toMatchObject({ version: 2, defaultMode: "observe", pricingProfiles: [], activePricing: {} });
     cleanup(paths);

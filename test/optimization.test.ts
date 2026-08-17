@@ -81,6 +81,12 @@ describe("version-gated balanced optimization", () => {
     expect(planFromHelp("codex", "deep", "--config")).toMatchObject({ applied: false, args: [] });
   });
 
+  it("applies the same Grok treatment in reduce mode as in balanced mode", () => {
+    const help = "--reasoning-effort <effort> --rules <rules> --verbatim";
+    expect(planFromHelp("grok", "reduce", help)).toEqual(planFromHelp("grok", "balanced", help));
+    expect(planFromHelp("grok", "reduce", help).applied).toBe(true);
+  });
+
   it("fails open when the exact CLI rejects the complete fixed policy", () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "tokenpilot-policy-"));
     const binary = path.join(directory, "codex");

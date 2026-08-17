@@ -164,9 +164,9 @@ function cacheShift(baseline: SessionSummary[], treatment: SessionSummary[], bas
 export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComparison[] {
   const treatments = new Map<string, SessionSummary[]>();
   for (const session of summaries) {
-    const profile = session.comparisonProfile ?? (session.mode === "balanced" ? session.optimizationProfile : undefined);
+    const profile = session.comparisonProfile ?? (session.mode === "balanced" || session.mode === "reduce" ? session.optimizationProfile : undefined);
     if (!profile) continue;
-    if (session.mode === "balanced" && session.optimizationApplied && session.optimizationProfile) {
+    if ((session.mode === "balanced" || session.mode === "reduce") && session.optimizationApplied && session.optimizationProfile) {
       const scope = `${session.provider}\u0000${session.taskKind}\u0000${profile}\u0000${pricingSignature(session)}`;
       treatments.set(scope, [...(treatments.get(scope) ?? []), session]);
     }
