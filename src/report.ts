@@ -405,23 +405,42 @@ function emptySummaryWindow(report: Report): Report {
   };
 }
 
+function measuredTokensUsed(report: Report, provider: Provider): number | undefined {
+  const coverage = report.coverage.find((row) => row.provider === provider);
+  if (!coverage || coverage.measuredSessions <= 0) return undefined;
+  const rows = report.rows.filter((row) => row.provider === provider);
+  if (rows.length === 0) return undefined;
+  const categoryTotal = rows.reduce((sum, row) => (
+    sum + row.inputNew + row.inputCached + row.cacheCreated + row.output + row.reasoning
+  ), 0);
+  if (categoryTotal > 0) return categoryTotal;
+  const reported = rows.reduce((sum, row) => sum + row.reportedTotal, 0);
+  return reported > 0 ? reported : undefined;
+}
+
 function windowScore(report: Report, provider: Provider): { headline: string; detail?: string } {
   const scoped = filterReportByProvider(report, provider);
   const comparison = summaryComparison(scoped.comparisons);
   const expected = comparison?.baselineExpectedTreatmentTokens;
   const used = comparison?.treatmentRecordedTokens;
   const hasTotals = expected !== undefined && used !== undefined && expected > 0;
-  if (!comparison || !hasTotals) return { headline: SCOREBOARD_MISSING };
-  if (comparison.tokenResult === "cache-shift") {
+  if (comparison && hasTotals && comparison.tokenResult === "cache-shift") {
     return {
       headline: scoreboardPercent(0),
       detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
     };
   }
-  if (comparison.tokenResult === "validated-reduction" || comparison.tokenResult === "preliminary-signal") {
+  if (comparison && hasTotals && (comparison.tokenResult === "validated-reduction" || comparison.tokenResult === "preliminary-signal")) {
     return {
       headline: scoreboardPercent(((expected - used) / expected) * 100),
       detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
+    };
+  }
+  const measuredUsed = measuredTokensUsed(scoped, provider);
+  if (measuredUsed !== undefined) {
+    return {
+      headline: "medido",
+      detail: `${scoreboardInteger(measuredUsed)} tokens usados`
     };
   }
   return { headline: SCOREBOARD_MISSING };

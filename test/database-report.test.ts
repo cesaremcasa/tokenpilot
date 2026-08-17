@@ -412,6 +412,62 @@ describe("aggregate reporting", () => {
     expect(summary).not.toContain("Latency");
   });
 
+  it("shows measured 24-hour token totals when a session exists without a treatment pair", () => {
+    const last7Days = {
+      generatedAt: "now",
+      since: "seven-days-ago",
+      rows: [],
+      coverage: [{ provider: "grok" as const, sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
+      comparisons: treatmentComparisons(pricedSessions("research").map((session) => ({ ...session, provider: "grok" as const })))
+    };
+    const last24Hours = {
+      generatedAt: "now",
+      since: "twenty-four-hours-ago",
+      rows: [{
+        provider: "grok" as const,
+        mode: "observe" as const,
+        optimizationApplied: false,
+        taskKind: "unknown" as const,
+        sessions: 1,
+        completed: 0,
+        rework: 0,
+        abandoned: 0,
+        durationSeconds: 12,
+        inputNew: 80,
+        inputCached: 20,
+        cacheCreated: 0,
+        output: 10,
+        reasoning: 5,
+        modelCalls: 1,
+        reportedTotal: 115,
+        compactions: 0,
+        retries: 0
+      }],
+      coverage: [{ provider: "grok" as const, sessions: 1, measuredSessions: 1, unavailableSessions: 0 }],
+      comparisons: [{
+        provider: "grok" as const,
+        taskKind: "unknown" as const,
+        optimizationProfile: "none",
+        metricLabel: "none" as const,
+        totalSource: "none" as const,
+        baselineSessions: 1,
+        treatmentSessions: 0,
+        readiness: "unavailable" as const,
+        tokenResult: "incomparable" as const,
+        reason: "measured sessions exist, but no matched baseline and treatment cohort exists",
+        baselineSessionIds: ["cd67060e"],
+        treatmentSessionIds: []
+      }]
+    };
+    const summary = reportSummaryMarkdown(last7Days, last24Hours);
+    expect(summary).toMatch(/últimas 24 horas\s+medido/);
+    expect(summary).toContain("115 tokens usados");
+    expect(summary).toContain("50% a menos");
+    expect(summary).toContain("20.000.000 → 10.000.000 tokens");
+    expect(summary).not.toMatch(/últimas 24 horas\s+sem medição ainda/);
+    expect(summary).not.toContain("USD");
+  });
+
   it("does not call increased complete totals a reduction", () => {
     const sessions = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
       id: `${mode}-${index}`,

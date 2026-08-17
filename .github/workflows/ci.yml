@@ -28,3 +28,57 @@ jobs:
       - run: npm run build
       - name: Verify generated checks leave the checkout clean
         run: git diff --exit-code
+
+  deploy-supervisor:
+    name: Update Supervisor
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fast-forward Supervisor from origin/main
+        env:
+          HOST: ${{ secrets.TOKENPILOT_SUPERVISOR_HOST }}
+          USER: ${{ secrets.TOKENPILOT_SUPERVISOR_USER }}
+          SSH_KEY: ${{ secrets.TOKENPILOT_SUPERVISOR_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.TOKENPILOT_SUPERVISOR_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HOST:-}" ] || [ -z "${USER:-}" ] || [ -z "${SSH_KEY:-}" ]; then
+            echo "Supervisor deploy secrets are not configured; skipping."
+            exit 0
+          fi
+          key="$(mktemp)"
+          known="$(mktemp)"
+          trap 'rm -f "$key" "$known"' EXIT
+          printf '%s\n' "$SSH_KEY" > "$key"
+          chmod 600 "$key"
+          if [ -n "${KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > "$known"
+            host_check=yes
+          else
+            : > "$known"
+            host_check=accept-new
+          fi
+          ssh -i "$key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking="$host_check" \
+            -o UserKnownHostsFile="$known" \
+            "${USER}@${HOST}" \
+            'set -euo pipefail
+             export TOKENPILOT_REPO=/home/ubuntu/tokenpilot
+             export TOKENPILOT_UPDATE_SKIP_TESTS=1
+             if [ -x /home/ubuntu/tokenpilot/scripts/update.sh ]; then
+               /home/ubuntu/tokenpilot/scripts/update.sh
+             else
+               cd /home/ubuntu/tokenpilot
+               if [ -f "$HOME/.ssh/tokenpilot-github-deploy-ed25519" ]; then
+                 export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/tokenpilot-github-deploy-ed25519 -o IdentitiesOnly=yes"
+               fi
+               export PATH="$HOME/.nvm/versions/node/v22.23.1/bin:$HOME/.local/opt/node-v22.23.2-linux-x64/bin:/usr/bin:/bin"
+               git fetch origin main
+               git pull --ff-only origin main
+               npm ci --ignore-scripts
+               npm run build
+               node dist/cli.js install
+             fi'

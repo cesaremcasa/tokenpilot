@@ -1,6 +1,6 @@
 # Installation and lifecycle
 
-TokenPilot 0.4.10 supports macOS and Linux with Node.js 22.5 or newer. It runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
+TokenPilot 0.4.11 supports macOS and Linux with Node.js 22.5 or newer. It runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
 
 If you opened this repository to use Grok: install **Grok Build** first. TokenPilot only wraps it.
 
@@ -89,6 +89,35 @@ tokenpilot doctor
 Reinstalling replaces only TokenPilot-owned launchers, runtime files, managed shell blocks, and managed skills. It preserves the local SQLite database and experimental allocator.
 
 For automation, run the build and install under the same login shell that owns the provider CLIs. A non-login SSH shell may resolve an older system Node.js even when the user normally runs Node 22.
+
+```sh
+./scripts/update.sh
+```
+
+`scripts/update.sh` is the same sequence: fast-forward `main`, install dependencies, test (unless `TOKENPILOT_UPDATE_SKIP_TESTS=1`), build, and reinstall. It refuses a dirty checkout and never reads or writes telemetry or provider credentials.
+
+## Automatic updates
+
+Each machine keeps its own SQLite database. An update never copies measurements between hosts.
+
+### After every push to `main`
+
+1. **Supervisor (push-triggered).** When CI on `main` is green, the `Update Supervisor` job SSHes to the host and runs `scripts/update.sh`. It only runs when these repository secrets exist:
+
+   - `TOKENPILOT_SUPERVISOR_HOST`
+   - `TOKENPILOT_SUPERVISOR_USER`
+   - `TOKENPILOT_SUPERVISOR_SSH_KEY`
+   - `TOKENPILOT_SUPERVISOR_KNOWN_HOSTS` (optional but recommended)
+
+   If the secrets are absent, the job skips. The Action never uploads telemetry.
+
+2. **This machine (poller).** Hosts that GitHub cannot reach, including a Mac behind NAT, pull on a timer:
+
+```sh
+./scripts/install-auto-update.sh
+```
+
+On macOS this writes `~/Library/LaunchAgents/com.tokenpilot.update.plist`. On Linux it adds one marked user crontab line and leaves every other cron job untouched. The default checkout is `~/.tokenpilot/src`, so a dirty development clone is never rewritten. Override with `TOKENPILOT_REPO`. The poller only rebuilds when `origin/main` moved.
 
 ## Immediate rollback and bypass
 

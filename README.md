@@ -106,7 +106,7 @@ tokenpilot doctor
 tokenpilot report
 ```
 
-Read the full [installation and upgrade guide](docs/INSTALLATION.md) before distributing TokenPilot to another machine.
+Read the full [installation and upgrade guide](docs/INSTALLATION.md) before distributing TokenPilot to another machine. `scripts/update.sh` fast-forwards from `origin/main` and reinstalls without touching local telemetry. Optional automatic updates — push-triggered on a Supervisor host, or a local poller on a Mac — are documented there.
 
 ## Report skills
 
