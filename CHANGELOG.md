@@ -8,6 +8,8 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 
 - Disabled the Kimi REST/WebSocket bridge pending a content-free, child-authenticated measurement channel; Kimi now runs through its original CLI and remains envelope-only.
 - Hardened managed-state validation against macOS ACL write grants and provider executable discovery against writable path ancestors.
+- Accepted Apple's default `group:everyone deny delete` home ACL so a normal macOS install is not blocked.
+- Continued to trust user-owned Homebrew `admin` group directories (`/opt/homebrew/lib`, `/opt/homebrew/bin`) while still refusing world-writable or foreign group-writable ancestors.
 - Added aggregate connection limits to the local Claude, Codex, and Grok telemetry receivers.
 - Audited by Codex Security on 2026-08-15.
 
