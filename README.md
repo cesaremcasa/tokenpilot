@@ -114,6 +114,8 @@ tokenpilot report --view detail
 tokenpilot report --view diagnostics
 ```
 
+`tokenpilot report` prints a short scoreboard: rolling last 24 hours (from now backward, not a calendar day), then the last 7 days. It shows expected tokens, used tokens, and the savings percentage. USD stays out of the summary.
+
 Authentication and support commands such as login, logout, help, and version pass through without creating telemetry. `TOKENPILOT_BYPASS=1` is the process-level emergency bypass.
 
 ## Measurement contract

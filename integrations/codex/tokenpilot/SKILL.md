@@ -1,9 +1,9 @@
 ---
 name: tokenpilot
-description: Show the privacy-preserving local Codex TokenPilot report for the last seven days. Use when the user asks about Codex token use, measured reduction, latency, cache effectiveness, coverage, or experiment quality.
+description: Show the privacy-preserving local Codex TokenPilot scoreboard for the rolling last 24 hours and last seven days. Use when the user asks about Codex token use, measured reduction, coverage, or how many tokens were expected versus used.
 ---
 
-<!-- tokenpilot-managed-skill:v2 codex -->
+<!-- tokenpilot-managed-skill:v3 codex -->
 
 # TokenPilot report
 
@@ -17,10 +17,9 @@ Return the command's Markdown verbatim. Do not add another heading, table, summa
 
 ## Reporting rules
 
-- State the measurement coverage before interpreting an optimization result.
-- Treat a provider with no measured sessions as unavailable; do not estimate tokens.
+- The summary already uses a rolling last-24-hours window (from now backward, not a calendar day) and the last 7 days.
+- Repeat the printed percentage and token counts. Never invent a missing 24-hour or 7-day figure.
+- Treat `sem medição ainda` and `0% a menos` as no savings claim.
 - The command is already limited to Codex. Never add another provider or combine provider totals.
-- Call a reduction only when the summary says `validated reduction`.
-- Treat `cache-shift`, limited measurement, and a missing comparable base as no estimate: never infer savings from them.
-- Keep new input, cache reads, cache creation, pressure, and provider total distinct.
+- Do not mention USD, bills, or prices.
 - If the command is missing or fails, say so plainly and give no substitute token estimate.

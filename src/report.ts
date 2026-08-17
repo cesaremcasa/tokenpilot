@@ -375,103 +375,92 @@ function summaryComparison(comparisons: TreatmentComparison[]): TreatmentCompari
   return [...current].sort((left, right) => taskRank(left) - taskRank(right) || conservativeRank(left) - conservativeRank(right)).at(-1);
 }
 
-function conciseResult(comparison: TreatmentComparison): string {
-  const group = `${comparison.taskKind}, ${comparison.optimizationProfile}, ${comparison.totalSource}`;
-  const expected = comparison.baselineExpectedTreatmentTokens;
-  const used = comparison.treatmentRecordedTokens;
-  const avoided = comparison.estimatedTokensAvoided;
-  const aggregatePercent = expected && avoided !== undefined ? avoided / expected * 100 : undefined;
-  const treatmentLabel = `treatment session${comparison.treatmentSessions === 1 ? "" : "s"}`;
-  const cohort = expected === undefined || used === undefined || avoided === undefined || aggregatePercent === undefined
-    ? "cohort totals unavailable"
-    : `cohort expected ${integer(expected)}, used ${integer(used)}, avoided ${integer(avoided)} (${aggregatePercent.toFixed(1)}% aggregate across ${comparison.treatmentSessions} ${treatmentLabel})`;
-  if (comparison.tokenResult === "validated-reduction") {
-    return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated median reduction; ${cohort} (${group})`;
-  }
-  if (comparison.tokenResult === "preliminary-signal") {
-    return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% preliminary median signal; ${cohort} — not an economy (${group})`;
-  }
-  return `${comparisonResult(comparison)} (${group})`;
-}
-
 function providerName(provider: Provider): string {
   return provider === "codex" ? "Codex" : provider === "claude" ? "Claude" : provider === "grok" ? "Grok" : "Kimi";
 }
 
-function singleProviderSummary(report: Report, coverage: MeasurementCoverage): string {
-  const comparison = summaryComparison(report.comparisons);
-  const lines = [
-    `# TokenPilot — ${providerName(coverage.provider)} — last seven days`,
-    "",
-    `Window starts: ${report.since}`,
-    `Coverage: ${coverage.measuredSessions}/${coverage.sessions} measured; ${coverage.unavailableSessions} unavailable.`
-  ];
-  if (!comparison) {
-    const result = coverage.sessions === 0
-      ? "No sessions in this seven-day window; no comparison yet."
-      : coverage.measuredSessions === 0
-        ? "Limited measurement; no comparable numeric session."
-        : "No comparable baseline; no percentage or avoided tokens.";
-    lines.push(`Result: ${result}`, "");
-    return lines.join("\n");
-  }
+const SCOREBOARD_MISSING = "sem medição ainda";
+const SCOREBOARD_LABEL_WIDTH = 20;
 
-  const group = `${comparison.taskKind}; ${comparison.optimizationProfile}; ${comparison.totalSource}`;
-  if (comparison.tokenResult === "validated-reduction" || comparison.tokenResult === "preliminary-signal") {
-    const label = comparison.tokenResult === "validated-reduction" ? "validated median reduction" : "preliminary median signal — not an economy";
-    lines.push(`Result: ${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% ${label}.`);
-    const expected = comparison.baselineExpectedTreatmentTokens;
-    const used = comparison.treatmentRecordedTokens;
-    const avoided = comparison.estimatedTokensAvoided;
-    if (expected !== undefined && used !== undefined && avoided !== undefined) {
-      const percent = expected === 0 ? 0 : avoided / expected * 100;
-      lines.push(`Cohort tokens: expected ${integer(expected)}; used ${integer(used)}; avoided ${integer(avoided)} (${percent.toFixed(1)}% across ${comparison.treatmentSessions} treatment session${comparison.treatmentSessions === 1 ? "" : "s"}).`);
-    }
-  } else {
-    lines.push(`Result: ${comparisonResult(comparison)}.`);
+function scoreboardInteger(value: number): string {
+  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(value);
+}
+
+function scoreboardPercent(value: number): string {
+  const bounded = Math.max(0, value);
+  const rounded = Math.round(bounded * 10) / 10;
+  const text = Number.isInteger(rounded) ? `${rounded.toFixed(0)}` : `${rounded.toFixed(1).replace(".", ",")}`;
+  return `${text}% a menos`;
+}
+
+function emptySummaryWindow(report: Report): Report {
+  const providers = [...new Set(report.coverage.map((row) => row.provider))];
+  return {
+    generatedAt: report.generatedAt,
+    since: report.since,
+    rows: [],
+    coverage: providers.map((provider) => ({ provider, sessions: 0, measuredSessions: 0, unavailableSessions: 0 })),
+    comparisons: [],
+    sessions: []
+  };
+}
+
+function windowScore(report: Report, provider: Provider): { headline: string; detail?: string } {
+  const scoped = filterReportByProvider(report, provider);
+  const comparison = summaryComparison(scoped.comparisons);
+  const expected = comparison?.baselineExpectedTreatmentTokens;
+  const used = comparison?.treatmentRecordedTokens;
+  const hasTotals = expected !== undefined && used !== undefined && expected > 0;
+  if (!comparison || !hasTotals) return { headline: SCOREBOARD_MISSING };
+  if (comparison.tokenResult === "validated-reduction") {
+    return {
+      headline: scoreboardPercent(((expected - used) / expected) * 100),
+      detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
+    };
   }
-  const metrics = categoryLine(comparison);
-  if (metrics !== "—") lines.push(`Medians: ${metrics}.`);
-  lines.push(`Latency: ${latency(comparison)}.`);
-  lines.push(comparison.estimatedUsdAvoided === undefined
-    ? "USD: API-equivalent unavailable."
-    : `USD: ${usd(comparison.estimatedUsdAvoided)} API-equivalent ${comparison.tokenResult === "validated-reduction" ? "validated" : "preliminary"}; not a bill.`);
-  lines.push(`Basis: ${group}.`);
-  if (coverage.provider === "grok" && coverage.unavailableSessions > 0) lines.push("Grok sessions without correlated External OTEL counters remain unavailable and receive no estimate.");
+  if (comparison.tokenResult === "cache-shift") {
+    return {
+      headline: scoreboardPercent(0),
+      detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
+    };
+  }
+  return { headline: SCOREBOARD_MISSING };
+}
+
+function scoreboardBlock(provider: Provider | undefined, last24Hours: Report, last7Days: Report): string {
+  const title = provider ? `TokenPilot · ${providerName(provider)}` : "TokenPilot";
+  const hours = provider ? windowScore(last24Hours, provider) : { headline: SCOREBOARD_MISSING };
+  const days = provider ? windowScore(last7Days, provider) : { headline: SCOREBOARD_MISSING };
+  const lines = [title, "", `últimas 24 horas`.padEnd(SCOREBOARD_LABEL_WIDTH) + hours.headline];
+  if (hours.detail) lines.push("".padEnd(SCOREBOARD_LABEL_WIDTH) + hours.detail);
+  lines.push("", `7 dias`.padEnd(SCOREBOARD_LABEL_WIDTH) + days.headline);
+  if (days.detail) lines.push("".padEnd(SCOREBOARD_LABEL_WIDTH) + days.detail);
   lines.push("");
   return lines.join("\n");
 }
 
-/** Short skill-facing view: coverage first, and no provider totals are combined. */
-export function reportSummaryMarkdown(report: Report): string {
-  if (report.coverage.length === 1 && report.rows.every((row) => row.provider === report.coverage[0].provider)) {
-    return singleProviderSummary(report, report.coverage[0]);
-  }
-  const lines = ["# TokenPilot — last seven days", "", `Generated: ${report.generatedAt}`, `Window starts: ${report.since}`, "", "Coverage and result:", ""];
-  for (const coverage of report.coverage) {
-    const comparisons = report.comparisons.filter((comparison) => comparison.provider === coverage.provider);
-    const comparison = summaryComparison(comparisons);
-    const coverageText = `${coverage.measuredSessions}/${coverage.sessions} measured; ${coverage.unavailableSessions} unavailable`;
-    if (!comparison) {
-      const state = coverage.sessions === 0
-        ? "no sessions in this seven-day window — no comparison yet"
-        : coverage.measuredSessions === 0
-          ? "limited measurement — no comparable numeric session"
-          : "no comparable baseline — no percentage or avoided tokens";
-      lines.push(`- ${coverage.provider}: ${coverageText}. ${state}.`);
-      continue;
-    }
-    const metrics = categoryLine(comparison);
-    const timing = latency(comparison);
-    const price = comparison.estimatedUsdAvoided === undefined
-      ? "USD equivalent unavailable"
-      : `${usd(comparison.estimatedUsdAvoided)} API-equivalent ${comparison.tokenResult === "validated-reduction" ? "validated" : "preliminary, not a bill"}`;
-    lines.push(`- ${coverage.provider}: ${coverageText}. ${conciseResult(comparison)}. ${metrics}. Latency ${timing}. ${price}.`);
-  }
-  if (report.coverage.length === 0) lines.push("- No sessions: 0/0 measured; limited measurement.");
-  const validated = report.comparisons.filter((comparison) => comparison.tokenResult === "validated-reduction");
-  lines.push("", `Validated reduction: ${validated.length === 0 ? "none in this window" : validated.map((comparison) => `${comparison.provider} ${comparison.tokenReductionPercent?.toFixed(1)}% median`).join(", ")}.`, "Cache-shift, limited measurement, and missing comparable bases never emit savings. Preliminary signals are not economies. Unsupported Grok sessions remain unavailable and receive no estimate.", "");
-  return lines.join("\n");
+function summaryProviders(last24Hours: Report, last7Days: Report): Provider[] {
+  const seen = new Set<Provider>();
+  for (const row of [...last24Hours.coverage, ...last7Days.coverage]) seen.add(row.provider);
+  return (["claude", "codex", "grok", "kimi"] as const).filter((provider) => seen.has(provider));
+}
+
+/**
+ * Skill-facing scoreboard: rolling last 24 hours, then last 7 days.
+ * Providers stay separate. USD, latency, and policy jargon stay out.
+ */
+export function reportSummaryMarkdown(last7Days: Report, last24Hours: Report = emptySummaryWindow(last7Days)): string {
+  const providers = summaryProviders(last24Hours, last7Days);
+  if (providers.length === 0) return scoreboardBlock(undefined, last24Hours, last7Days);
+  return providers.map((provider) => scoreboardBlock(provider, last24Hours, last7Days)).join("\n");
+}
+
+/** Summary windows are always rolling from now: the last 24 hours, then 7 days. */
+export function buildRollingSummaryReports(paths: TokenPilotPaths): { last24Hours: Report; last7Days: Report } {
+  return {
+    last24Hours: buildReport(paths, 1),
+    last7Days: buildReport(paths, 7)
+  };
 }
 
 /** Detailed audit view. All session identifiers are opaque local UUIDs. */

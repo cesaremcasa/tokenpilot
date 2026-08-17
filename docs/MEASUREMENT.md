@@ -80,7 +80,7 @@ All currency output is labeled **API-equivalent USD, not a provider bill**. Subs
 
 `tokenpilot sessions` and the detailed report expose opaque run IDs, timestamps, provider, mode, policy, task category/outcome, measurement state, total basis, price snapshot, and closed unavailability reason. They do not expose content or provider account identity.
 
-The concise report always shows coverage before interpreting a result. Use:
+The concise report is a rolling last-24-hours window plus the last 7 days. It shows expected tokens, used tokens, and the savings percentage. Use:
 
 ```sh
 tokenpilot report

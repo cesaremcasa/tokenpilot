@@ -30,7 +30,9 @@ describe("aggregate reporting", () => {
 
     const grok = filterReportByProvider(complete, "grok");
     expect(grok.coverage).toEqual([{ provider: "grok", sessions: 0, measuredSessions: 0, unavailableSessions: 0 }]);
-    expect(reportSummaryMarkdown(grok)).toContain("No sessions in this seven-day window; no comparison yet");
+    expect(reportSummaryMarkdown(grok)).toContain("TokenPilot · Grok");
+    expect(reportSummaryMarkdown(grok)).toContain("sem medição ainda");
+    expect(reportSummaryMarkdown(grok)).not.toContain("USD");
   });
   const pricedCodex: PricingProfile = {
     id: "codex-local-example",
@@ -202,9 +204,11 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
       comparisons: [comparison]
     });
-    expect(summary).toContain("cache-shift — no reduction emitted");
+    expect(summary).toContain("0% a menos");
+    expect(summary).toContain("95.635 → 95.560 tokens");
     expect(summary).not.toContain("97.4%");
-    expect(summary).not.toContain("feature/claude-balanced-v2: 97.4% validated reduction");
+    expect(summary).not.toContain("97,4%");
+    expect(summary).not.toContain("USD");
     const serialized = JSON.stringify(comparison);
     expect(serialized).not.toContain("estimatedTokensAvoided");
     expect(serialized).not.toContain("tokenReductionPercent");
@@ -246,7 +250,7 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "claude", sessions: 2, measuredSessions: 2, unavailableSessions: 0 }],
       comparisons: [comparison]
     }))
-      .toContain("cache-shift — no reduction emitted");
+      .toContain("0% a menos");
   });
 
   it("allows Claude category totals to produce a validated reduction when cache is stable", () => {
@@ -275,15 +279,15 @@ describe("aggregate reporting", () => {
   });
 
   it("keeps the provider skill summary to the latest policy and one concise block", () => {
-    const sessions: SessionSummary[] = ["v1", "v2"].flatMap((version) => (["observe", "balanced"] as const).map((mode) => ({
-      id: `${version}-${mode}`,
-      provider: "codex",
+    const sessions: SessionSummary[] = ["v1", "v2"].flatMap((version) => (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
+      id: `${version}-${mode}-${index}`,
+      provider: "codex" as const,
       mode,
       optimizationApplied: mode === "balanced",
       optimizationProfile: mode === "balanced" ? `codex-balanced-${version}` : undefined,
       comparisonProfile: `codex-balanced-${version}`,
-      taskKind: "benchmark",
-      outcome: "completed",
+      taskKind: "research" as const,
+      outcome: "completed" as const,
       durationSeconds: mode === "observe" ? 10 : 9,
       inputNew: mode === "observe" ? 100 : version === "v1" ? 90 : 80,
       inputCached: 10,
@@ -293,18 +297,19 @@ describe("aggregate reporting", () => {
       categoryMetricsComplete: true,
       compactions: 0,
       retries: 0
-    })));
+    }))));
     const summary = reportSummaryMarkdown({
       generatedAt: "now",
       since: "then",
       rows: [],
-      coverage: [{ provider: "codex", sessions: 4, measuredSessions: 4, unavailableSessions: 0 }],
+      coverage: [{ provider: "codex", sessions: 20, measuredSessions: 20, unavailableSessions: 0 }],
       comparisons: treatmentComparisons(sessions)
     });
-    expect(summary).toContain("codex-balanced-v2");
-    expect(summary).not.toContain("codex-balanced-v1");
-    expect(summary).toContain("# TokenPilot — Codex — last seven days");
-    expect(summary).toContain("Cohort tokens: expected 120; used 100; avoided 20 (16.7% across 1 treatment session)");
+    expect(summary).toContain("TokenPilot · Codex");
+    expect(summary).toContain("16,7% a menos");
+    expect(summary).toContain("600 → 500 tokens");
+    expect(summary).not.toContain("550 tokens");
+    expect(summary).not.toContain("USD");
     expect(summary).not.toContain("per comparable session");
   });
 
@@ -316,9 +321,38 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "grok", sessions: 3, measuredSessions: 0, unavailableSessions: 3 }],
       comparisons: []
     });
-    expect(summary).toContain("Limited measurement");
-    expect(summary).toContain("no comparable numeric session");
+    expect(summary).toContain("TokenPilot · Grok");
+    expect(summary).toContain("sem medição ainda");
     expect(summary).not.toContain("0.0% reduction");
+    expect(summary).not.toContain("0% a menos");
+  });
+
+  it("prints a rolling 24-hour window before the last 7 days and never invents a 24-hour percentage", () => {
+    const sevenDaySessions = pricedSessions("research");
+    const last7Days = {
+      generatedAt: "now",
+      since: "seven-days-ago",
+      rows: [],
+      coverage: [{ provider: "codex" as const, sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
+      comparisons: treatmentComparisons(sevenDaySessions)
+    };
+    const last24Hours = {
+      generatedAt: "now",
+      since: "twenty-four-hours-ago",
+      rows: [],
+      coverage: [{ provider: "codex" as const, sessions: 1, measuredSessions: 1, unavailableSessions: 0 }],
+      comparisons: []
+    };
+    const summary = reportSummaryMarkdown(last7Days, last24Hours);
+    const hoursIndex = summary.indexOf("últimas 24 horas");
+    const daysIndex = summary.indexOf("7 dias");
+    expect(hoursIndex).toBeGreaterThan(-1);
+    expect(daysIndex).toBeGreaterThan(hoursIndex);
+    expect(summary).toMatch(/últimas 24 horas\s+sem medição ainda/);
+    expect(summary).toContain("50% a menos");
+    expect(summary).toContain("20.000.000 → 10.000.000 tokens");
+    expect(summary).not.toContain("USD");
+    expect(summary).not.toContain("Latency");
   });
 
   it("does not call increased complete totals a reduction", () => {
