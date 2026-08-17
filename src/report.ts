@@ -412,15 +412,15 @@ function windowScore(report: Report, provider: Provider): { headline: string; de
   const used = comparison?.treatmentRecordedTokens;
   const hasTotals = expected !== undefined && used !== undefined && expected > 0;
   if (!comparison || !hasTotals) return { headline: SCOREBOARD_MISSING };
-  if (comparison.tokenResult === "validated-reduction") {
-    return {
-      headline: scoreboardPercent(((expected - used) / expected) * 100),
-      detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
-    };
-  }
   if (comparison.tokenResult === "cache-shift") {
     return {
       headline: scoreboardPercent(0),
+      detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
+    };
+  }
+  if (comparison.tokenResult === "validated-reduction" || comparison.tokenResult === "preliminary-signal") {
+    return {
+      headline: scoreboardPercent(((expected - used) / expected) * 100),
       detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
     };
   }

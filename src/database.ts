@@ -383,7 +383,7 @@ export class TelemetryDatabase {
       SELECT r.id, r.provider, r.mode, r.optimization_applied AS optimizationApplied,
         r.optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "r.comparison_profile" : "NULL"} AS comparisonProfile,
         ${this.hasPricingProfileColumn ? "r.pricing_profile" : "NULL"} AS pricingProfile, r.task_kind AS taskKind, r.outcome,
-        MAX(0, strftime('%s', r.ended_at) - strftime('%s', r.started_at)) AS durationSeconds,
+        MAX(0, strftime('%s', COALESCE(r.ended_at, datetime('now'))) - strftime('%s', r.started_at)) AS durationSeconds,
         u.input_new AS inputNew, u.input_cached AS inputCached, u.cache_created AS cacheCreated,
         u.output AS output, u.reasoning AS reasoning,
         ${reportedTotal} AS reportedTotal, COALESCE(u.has_reported_total, 0) AS hasReportedTotal, COALESCE(${reportedTotalSemantics}, 0) AS reportedTotalIncludesCachedInput, COALESCE(u.has_detailed_usage, 0) AS hasDetailedUsage,
@@ -392,7 +392,7 @@ export class TelemetryDatabase {
         COALESCE(u.has_reasoning, 0) AS hasReasoning,
         COALESCE(e.compactions, 0) AS compactions, COALESCE(e.retries, 0) AS retries
       FROM runs r JOIN usage u ON u.run_id = r.id LEFT JOIN events e ON e.run_id = r.id
-      WHERE r.started_at >= ? AND r.ended_at IS NOT NULL
+      WHERE r.started_at >= ?
       ORDER BY r.provider, r.task_kind, r.started_at
     `).all(since) as unknown as Array<Omit<SessionSummary, "optimizationApplied" | "measurementBasis" | "pricingProfile" | "pricingCompatible" | "reportedTotalIncludesCachedInput" | "categoryMetricsComplete"> & {
       optimizationApplied: number;

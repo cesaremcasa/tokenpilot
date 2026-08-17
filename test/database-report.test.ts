@@ -327,6 +327,63 @@ describe("aggregate reporting", () => {
     expect(summary).not.toContain("0% a menos");
   });
 
+  it("includes an in-progress Grok TTY session that already published counters", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    const now = new Date().toISOString();
+    database.createRun({
+      id: "grok-live",
+      provider: "grok",
+      mode: "observe",
+      startedAt: now,
+      comparisonProfile: "grok-balanced-v4",
+      collectionState: "pending",
+      taskKind: "unknown",
+      outcome: "unknown"
+    });
+    database.addUsage({ runId: "grok-live", observedAt: now, source: "grok-otlp-metrics-v1", inputNew: 80, inputCached: 20, cacheCreated: 0, output: 10, reasoning: 5 });
+    database.close();
+
+    const reader = new TelemetryDatabase(paths, { readOnly: true });
+    const summaries = reader.sessionSummariesSince(new Date(Date.now() - 60_000).toISOString());
+    reader.close();
+    expect(summaries).toMatchObject([{ id: "grok-live", inputNew: 80, output: 10 }]);
+    cleanup(paths);
+  });
+
+  it("shows preliminary Grok expected and used totals instead of hiding a live pair", () => {
+    const sessions: SessionSummary[] = (["observe", "balanced"] as const).map((mode) => ({
+      id: `grok-${mode}`,
+      provider: "grok" as const,
+      mode,
+      optimizationApplied: mode === "balanced",
+      optimizationProfile: mode === "balanced" ? "grok-balanced-v4" : undefined,
+      comparisonProfile: "grok-balanced-v4",
+      taskKind: "unknown" as const,
+      outcome: "unknown" as const,
+      durationSeconds: 20,
+      inputNew: mode === "observe" ? 200 : 80,
+      inputCached: 20,
+      cacheCreated: 0,
+      output: 10,
+      reasoning: 5,
+      categoryMetricsComplete: true,
+      compactions: 0,
+      retries: 0
+    }));
+    const summary = reportSummaryMarkdown({
+      generatedAt: "now",
+      since: "then",
+      rows: [],
+      coverage: [{ provider: "grok", sessions: 2, measuredSessions: 2, unavailableSessions: 0 }],
+      comparisons: treatmentComparisons(sessions)
+    });
+    expect(summary).toContain("TokenPilot · Grok");
+    expect(summary).toContain("51,1% a menos");
+    expect(summary).toContain("235 → 115 tokens");
+    expect(summary).toMatch(/7 dias\s+51,1% a menos/);
+  });
+
   it("prints a rolling 24-hour window before the last 7 days and never invents a 24-hour percentage", () => {
     const sevenDaySessions = pricedSessions("research");
     const last7Days = {
