@@ -4,8 +4,11 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 
 ## Unreleased
 
-- Documented on the README that TokenPilot does not ship Grok Build, Claude Code, Codex, or Kimi, and that `doctor` must report the provider CLI as active before measurement works.
-- Hardened provider skills so they paste live scoreboard stdout and never substitute the first-research-round table.
+## 0.4.11 — 2026-08-17
+
+- Show measured token totals in the 24-hour scoreboard when a session was recorded but no observe/treatment pair exists yet.
+- Added `scripts/update.sh` so a machine can fast-forward from `origin/main` and reinstall without touching local telemetry.
+- After CI on `main`, GitHub Actions can SSH to a configured Supervisor host and run that update. A local poller (`scripts/install-auto-update.sh`) covers machines that cannot receive a push, including a Mac behind NAT.
 
 ## 0.4.10 — 2026-08-17
 
