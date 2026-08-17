@@ -2,6 +2,16 @@
 
 TokenPilot 0.4.10 supports macOS and Linux with Node.js 22.5 or newer. It runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
 
+If you opened this repository to use Grok: install **Grok Build** first. TokenPilot only wraps it.
+
+```sh
+curl -fsSL https://x.ai/cli/install.sh | bash
+grok --version
+grok login
+```
+
+`tokenpilot doctor` prints `grok CLI unavailable` until that original binary exists outside TokenPilot's shim directory. That warning means Grok is missing, not that TokenPilot is broken.
+
 ## Before installation
 
 Confirm the provider CLIs you intend to use already work normally:
