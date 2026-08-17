@@ -62,7 +62,7 @@ A new installation defaults to `reduce`. Every Claude, Codex, and Grok session g
 | --- | --- | --- |
 | Claude | Low effort, stable cache prefix, latency-first instruction, core repository tools, and no Chrome startup. | Session flags only. Use `deep`, `off`, or the bypass for web, MCP, agents, notebooks, or other excluded tools. |
 | Codex | Low reasoning, no reasoning summary, low verbosity, concise execution, and compaction at 32k tokens. | Session-scoped `--config`; prompt telemetry remains disabled. |
-| Grok | Low reasoning, verbatim user prompt, and a fixed rule against irrelevant context and tool narration. | No system-prompt override, tool restriction, or API-only cache key. |
+| Grok | Low reasoning, verbatim user prompt, no subagents or cross-session memory, and a fixed rule against irrelevant context and tool narration. | Session flags only. Tools and web remain available; use `deep`, `off`, or bypass when subagents or memory are required. No API-only cache key is assumed. |
 | Kimi | No TokenPilot treatment is injected. | Runs through the original CLI and remains measurement-limited until a safe correlated channel exists. |
 
 Treatments are enabled only after the installed CLI passes the complete local help/version probe. If a probe, collector, or database operation fails, TokenPilot opens the original provider CLI without the treatment.

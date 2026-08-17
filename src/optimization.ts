@@ -118,8 +118,13 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
 
   if (provider === "grok") {
     const effortOption = supports(help, "--reasoning-effort") ? "--reasoning-effort" : supports(help, "--effort") ? "--effort" : undefined;
-    return effortOption && supports(help, "--rules") && supports(help, "--verbatim")
-      ? { args: [effortOption, "low", "--verbatim", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION], applied: true, profile: "grok-balanced-v4", summary: "low reasoning, verbatim prompt, targeted context without tool narration" }
+    return effortOption && supports(help, "--rules") && supports(help, "--verbatim") && supports(help, "--no-subagents") && supports(help, "--no-memory")
+      ? {
+          args: [effortOption, "low", "--verbatim", "--no-subagents", "--no-memory", "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION],
+          applied: true,
+          profile: "grok-balanced-v5",
+          summary: "low reasoning, no subagents or cross-session memory, verbatim prompt, targeted context without tool narration"
+        }
       : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete token-reduction policy" };
   }
 

@@ -18,7 +18,7 @@ TokenPilot preserves the model selected by the user. It does not maintain a priv
 | --- | --- | --- | --- |
 | Claude Code | Metrics-only local OTLP for sessions that publish `claude_code.token.usage`. | `claude-balanced-v7`; v6 fallback on older compatible CLIs. | Provider quota can reject a model before a complete metric arrives. Full web/MCP/agent tool surfaces require `deep`, `off`, or bypass. |
 | OpenAI Codex | Metrics-only local OTLP for current interactive and `exec` sessions; older `exec` may expose only its final published total. | `codex-balanced-v2`. | A provider total and category counters are never mixed. |
-| Grok Build | External OTEL v1 for supported TTY/TUI and headless sessions; explicit JSON single-turn fallback. | `grok-balanced-v4`. | Older or missing counters remain unavailable. API prompt-cache keys are never assumed for the CLI. |
+| Grok Build | External OTEL v1 for supported TTY/TUI and headless sessions; explicit JSON single-turn fallback. | `grok-balanced-v5`; low reasoning with subagents and cross-session memory disabled. | Older or missing counters remain unavailable. API prompt-cache keys are never assumed for the CLI. Use `deep`, `off`, or bypass when subagents or memory are required. |
 | Kimi Code CLI | No correlated measurement channel is currently enabled. | No TokenPilot treatment is injected. | Kimi runs through its original CLI and remains envelope-only pending a content-free, child-authenticated channel. |
 
 ## Advertised model/reasoning compatibility check
