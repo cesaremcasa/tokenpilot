@@ -5,6 +5,7 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 ## Unreleased
 
 - Documented on the README that TokenPilot does not ship Grok Build, Claude Code, Codex, or Kimi, and that `doctor` must report the provider CLI as active before measurement works.
+- Hardened provider skills so they paste live scoreboard stdout and never substitute the first-research-round table.
 
 ## 0.4.10 — 2026-08-17
 
