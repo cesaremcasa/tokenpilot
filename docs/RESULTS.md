@@ -1,5 +1,7 @@
 # First research round — August 15, 2026
 
+This document is a **historical snapshot**. It is not live TokenPilot output. A `/tokenpilot` or `tokenpilot report` on any machine must print that machine's current scoreboard, never this table.
+
 This document is the first manually reviewed TokenPilot research snapshot published by Mycellium Lab. It records what the local reports said at the end of the round; it is not a promise of future performance.
 
 The Kimi figures below are historical only. The Kimi REST/WebSocket bridge was disabled during the subsequent Codex Security hardening audit, so current Kimi sessions run unchanged and remain envelope-only.
