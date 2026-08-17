@@ -261,7 +261,7 @@ exit 0
 
   it("measures a normal Grok TTY/TUI run through its session-scoped External OTEL stream", async () => {
     const paths = temporaryPaths();
-    const payload = grokOtlpFixture({ input: 21, cache_read: 55, output: 8, reasoning: 13 }).toString("base64");
+    const payload = grokOtlpFixture({ input: 76, cache_read: 55, output: 8, reasoning: 13 }).toString("base64");
     const originalBin = writeFakeGrok(paths, `#!/usr/bin/env node
 if (process.argv.includes("--version")) { console.log("grok 1.0.3"); process.exit(0); }
 const endpoint = process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT;

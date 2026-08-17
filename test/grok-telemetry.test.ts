@@ -20,15 +20,16 @@ describe("Grok JSON usage telemetry", () => {
   });
 
   it("parses documented content-free External OTEL v1 token counters", () => {
-    const payload = grokOtlpFixture({ input: 12, cache_read: 34, output: 5, reasoning: 6 });
+    const payload = grokOtlpFixture({ input: 46, cache_read: 34, output: 5, reasoning: 6 });
     expect(parseGrokOtlpMetrics(payload)).toEqual({ inputNew: 12, inputCached: 34, cacheCreated: 0, output: 5, reasoning: 6 });
     expect(parseGrokOtlpMetrics(grokOtlpFixture({ unknown: 999 }))).toBeUndefined();
+    expect(parseGrokOtlpMetrics(grokOtlpFixture({ input: 12, cache_read: 34 }))).toBeUndefined();
   });
 
   it("separates cumulative samples so repeated exports cannot overstate usage", () => {
-    const cumulative = grokOtlpFixture({ input: 12, cache_read: 34, output: 5, reasoning: 6 }, 2);
+    const cumulative = grokOtlpFixture({ input: 46, cache_read: 34, output: 5, reasoning: 6 }, 2);
     expect(parseGrokOtlpMetrics(cumulative)).toBeUndefined();
-    expect(parseGrokOtlpMetricSamples(cumulative)?.cumulative).toEqual({ inputNew: 12, inputCached: 34, output: 5, reasoning: 6 });
+    expect(parseGrokOtlpMetricSamples(cumulative)?.cumulative).toEqual({ inputTotal: 46, inputCached: 34, output: 5, reasoning: 6 });
   });
 
   it("accepts only authenticated protobuf metrics and stores no payload attributes", async () => {
@@ -50,7 +51,7 @@ describe("Grok JSON usage telemetry", () => {
     const response = await fetch(receiver.endpoint, {
       method: "POST",
       headers: { ...receiver.headers, "content-type": "application/x-protobuf" },
-      body: grokOtlpFixture({ input: 12, cache_read: 34, output: 5, reasoning: 6 })
+      body: grokOtlpFixture({ input: 46, cache_read: 34, output: 5, reasoning: 6 })
     });
     expect(response.status).toBe(200);
     expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({
@@ -75,9 +76,9 @@ describe("Grok JSON usage telemetry", () => {
     database.createRun({ id: "grok-growing-context", provider: "grok", mode: "reduce", startedAt: now, collectionState: "pending", taskKind: "unknown", outcome: "unknown" });
     const receiver = await startGrokMetricsReceiver(database, "grok-growing-context");
     const calls = [
-      { input: 19_000, cache_read: 1_000, output: 200, reasoning: 80 },
-      { input: 22_000, cache_read: 19_000, output: 120, reasoning: 60 },
-      { input: 25_000, cache_read: 22_000, output: 350, reasoning: 40 }
+      { input: 20_000, cache_read: 1_000, output: 200, reasoning: 80 },
+      { input: 41_000, cache_read: 19_000, output: 120, reasoning: 60 },
+      { input: 47_000, cache_read: 22_000, output: 350, reasoning: 40 }
     ];
     for (const call of calls) {
       const response = await fetch(receiver.endpoint, {

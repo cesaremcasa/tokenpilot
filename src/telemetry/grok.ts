@@ -13,7 +13,7 @@ const MAX_SCOPE_METRICS = 16;
 const MAX_METRICS = 64;
 const MAX_DATA_POINTS = 512;
 const OTLP_METRIC_NAME = "grok_code.token.usage";
-const OTLP_SOURCE = "grok-otlp-metrics-v1";
+const OTLP_SOURCE = "grok-otlp-metrics-v2";
 const USAGE_START = /^"usage"\s*:\s*\{$/;
 const USAGE_VALUE = /^"(input_tokens|cache_read_input_tokens|cache_creation_input_tokens|output_tokens|reasoning_tokens|total_tokens)"\s*:\s*(\d+),?$/;
 
@@ -26,8 +26,8 @@ const METRIC_KEYS: Record<string, Exclude<keyof UsageMetrics, "reportedTotalIncl
   total_tokens: "reportedTotal"
 };
 
-type GrokUsageKey = "inputNew" | "inputCached" | "output" | "reasoning";
-type GrokRawUsage = Partial<Pick<UsageMetrics, GrokUsageKey>>;
+type GrokUsageKey = "inputTotal" | "inputCached" | "output" | "reasoning";
+type GrokRawUsage = Partial<Record<GrokUsageKey, number>>;
 
 interface ProtoField {
   number: number;
@@ -123,7 +123,7 @@ function pointType(point: Buffer): GrokUsageKey | undefined {
     const encodedValue = childMessages(keyValue, 2, 1)?.[0];
     const anyValue = encodedValue ? protoFields(encodedValue) : undefined;
     const value = anyValue ? stringField(anyValue, 1, 32) : undefined;
-    if (value === "input") return "inputNew";
+    if (value === "input") return "inputTotal";
     if (value === "cache_read") return "inputCached";
     if (value === "output") return "output";
     if (value === "reasoning") return "reasoning";
@@ -146,7 +146,7 @@ function pointValue(point: Buffer): number | undefined {
 }
 
 function addRaw(target: GrokRawUsage, addition: GrokRawUsage): void {
-  for (const key of ["inputNew", "inputCached", "output", "reasoning"] as const) {
+  for (const key of ["inputTotal", "inputCached", "output", "reasoning"] as const) {
     const value = addition[key];
     if (value === undefined) continue;
     const next = (target[key] ?? 0) + value;
@@ -157,7 +157,7 @@ function addRaw(target: GrokRawUsage, addition: GrokRawUsage): void {
 
 function deltaFromCumulative(snapshot: GrokRawUsage, current: GrokRawUsage): GrokRawUsage {
   const delta: GrokRawUsage = {};
-  for (const key of ["inputNew", "inputCached", "output", "reasoning"] as const) {
+  for (const key of ["inputTotal", "inputCached", "output", "reasoning"] as const) {
     const value = current[key];
     if (value === undefined) continue;
     const previous = snapshot[key];
@@ -171,12 +171,17 @@ function deltaFromCumulative(snapshot: GrokRawUsage, current: GrokRawUsage): Gro
 
 function completeUsage(raw: GrokRawUsage): UsageMetrics | undefined {
   if (Object.keys(raw).length === 0) return undefined;
+  const inputTotal = raw.inputTotal ?? 0;
+  const inputCached = raw.inputCached ?? 0;
+  if (inputCached > inputTotal) return undefined;
   // External OTEL v1 defines input, cache_read, output, and reasoning as the
-  // complete Grok token categories. Grok has no separately billed cache-write
+  // complete Grok token categories. Its input counter includes cache reads,
+  // unlike the headless JSON input_tokens field, so subtract that component
+  // before storing new input. Grok has no separately billed cache-write
   // category, so cacheCreated is explicitly not applicable (zero), not guessed.
   return {
-    inputNew: raw.inputNew ?? 0,
-    inputCached: raw.inputCached ?? 0,
+    inputNew: inputTotal - inputCached,
+    inputCached,
     cacheCreated: 0,
     output: raw.output ?? 0,
     reasoning: raw.reasoning ?? 0

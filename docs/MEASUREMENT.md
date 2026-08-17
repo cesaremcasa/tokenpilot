@@ -31,6 +31,8 @@ The comparison total is chosen in this order:
 
 A provider total is never mixed with category totals inside one comparison.
 
+Grok External OTEL publishes `input` as full input including its `cache_read` component. TokenPilot subtracts cache reads before storing new input. Reports apply the same normalization to legacy `grok-otlp-metrics-v1` rows without rewriting the local audit history.
+
 ## Cache-shift detector
 
 A decrease in new input is not automatically a reduction. If cache reads rise in the opposite direction by at least half the magnitude of the new-input decrease and the complete total changes by less than 2%, TokenPilot labels the result `cache-shift`.

@@ -110,6 +110,18 @@ describe("aggregate reporting", () => {
     cleanup(paths);
   });
 
+  it("normalizes legacy Grok OTLP full input without rewriting stored history", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    const now = new Date().toISOString();
+    database.createRun({ id: "grok-otel-v1", provider: "grok", mode: "observe", startedAt: now, endedAt: now, collectionState: "collected", taskKind: "research", outcome: "completed" });
+    database.addUsage({ runId: "grok-otel-v1", observedAt: now, source: "grok-otlp-metrics-v1", inputNew: 46, inputCached: 34, cacheCreated: 0, output: 5, reasoning: 6 });
+    expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ inputNew: 12, inputCached: 34, output: 5, reasoning: 6 });
+    expect(database.sessionSummariesSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ inputNew: 12, inputCached: 34, output: 5, reasoning: 6 });
+    database.close();
+    cleanup(paths);
+  });
+
   it("compares matched treatment sessions by median and variation without crossing providers", () => {
     const comparisons = treatmentComparisons([
       { id: "observe-1", provider: "codex", mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v1", taskKind: "bugfix", outcome: "completed", durationSeconds: 20, inputNew: 100, inputCached: 500, cacheCreated: 0, output: 20, reasoning: 80, compactions: 0, retries: 0 },
@@ -341,7 +353,7 @@ describe("aggregate reporting", () => {
       taskKind: "unknown",
       outcome: "unknown"
     });
-    database.addUsage({ runId: "grok-live", observedAt: now, source: "grok-otlp-metrics-v1", inputNew: 80, inputCached: 20, cacheCreated: 0, output: 10, reasoning: 5 });
+    database.addUsage({ runId: "grok-live", observedAt: now, source: "grok-otlp-metrics-v2", inputNew: 80, inputCached: 20, cacheCreated: 0, output: 10, reasoning: 5 });
     database.close();
 
     const reader = new TelemetryDatabase(paths, { readOnly: true });
