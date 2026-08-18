@@ -31,5 +31,6 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: npm run test:install
+      - run: npm run test:release
       - name: Verify generated checks leave the checkout clean
         run: git diff --exit-code
