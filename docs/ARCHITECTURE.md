@@ -55,6 +55,8 @@ Reports read the local database and build comparisons only inside one provider. 
 
 Optional optimization and measurement must not prevent work. If TokenPilot cannot prove a safe executable, initialize local state, start a receiver, or validate a policy, it prints a concise diagnostic and starts the original CLI unchanged whenever doing so cannot duplicate an already submitted task.
 
+Report validation is fail-open as well: missing or degraded content-free outcome evidence keeps a comparison directional and suppresses reduction/economy claims instead of inferring quality from token counters.
+
 ## Trust boundaries
 
 1. The developer trusts the installed provider CLI and its authentication.

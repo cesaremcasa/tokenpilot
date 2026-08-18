@@ -64,6 +64,10 @@ A reduction is validated only when all of the following are true:
 
 Providers are never summed. Benchmarks are retained as compatibility evidence but excluded from real-work validation.
 
+## Quality-equivalence gate
+
+A validated reduction also requires content-free outcome evidence for every matched session. Outcomes use only the local enum `completed`, `rework`, or `abandoned`; `unknown` outcomes keep the comparison directional and never prove equivalence. Treatment is quality-equivalent only when its completion rate is at least the matched baseline rate and its rework and abandonment rates are no higher. A degraded or unavailable quality comparison fails open to a preliminary signal, so the concise scoreboard emits no reduction or economy claim.
+
 ## Median and cohort totals
 
 The headline percentage compares the median complete total per session. Cohort avoided tokens use the baseline median multiplied by the number of treatment sessions, minus the recorded treatment total. These percentages can differ and are both labeled.
