@@ -65,6 +65,8 @@ A reduction is validated only when all of the following are true:
 
 Providers are never summed. Benchmarks are retained as compatibility evidence but excluded from real-work validation.
 
+The concise scoreboard labels a `cache-shift` directly and may show only its neutral expected → used totals; it never prints a percentage or reduction headline for that state.
+
 ## Observed quality safeguard
 
 The report records a conservative, content-free observation over the closed outcome enum `completed`, `rework`, or `abandoned`. `observed-not-degraded` means only that treatment completion was no lower and treatment rework/abandonment were no higher in this sample; it is not statistical equivalence, non-inferiority, or formal quality evidence. `unknown` outcomes or degraded observations fail open to a preliminary signal. This PR has no formal quality test, confidence interval, margin, or power analysis, so no observed outcome gate can authorize `validated-reduction`; economy fields remain suppressed until formal evidence exists.

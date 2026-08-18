@@ -216,8 +216,9 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
       comparisons: [comparison]
     });
-    expect(summary).toContain("0% a menos");
+    expect(summary).toContain("cache-shift");
     expect(summary).toContain("95.635 → 95.560 tokens");
+    expect(summary).not.toContain("% a menos");
     expect(summary).not.toContain("97.4%");
     expect(summary).not.toContain("97,4%");
     expect(summary).not.toContain("USD");
@@ -255,14 +256,15 @@ describe("aggregate reporting", () => {
       estimatedTokensAvoided: undefined,
       tokenReductionPercent: undefined
     });
-    expect(reportSummaryMarkdown({
+    const summary = reportSummaryMarkdown({
       generatedAt: "now",
       since: "then",
       rows: [],
       coverage: [{ provider: "claude", sessions: 2, measuredSessions: 2, unavailableSessions: 0 }],
       comparisons: [comparison]
-    }))
-      .toContain("0% a menos");
+    });
+    expect(summary).toContain("cache-shift");
+    expect(summary).not.toContain("% a menos");
   });
 
   it("keeps observed non-degraded outcomes preliminary without formal quality evidence", () => {

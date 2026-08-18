@@ -506,7 +506,7 @@ function windowScore(report: Report, provider: Provider): { headline: string; de
   const hasTotals = expected !== undefined && used !== undefined && expected > 0;
   if (comparison && hasTotals && comparison.tokenResult === "cache-shift") {
     return {
-      headline: scoreboardPercent(0),
+      headline: "cache-shift",
       detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
     };
   }
