@@ -117,11 +117,11 @@ describe("version-gated balanced optimization", () => {
 
   it("lets explicit value flags win across aliases and --flag=value forms", () => {
     const merged = mergeTreatmentArguments("codex",
-      ["--effort=high", "--config=developer_instructions=--no-memory", "-c", "model_verbosity=high", "task --no-subagents"],
+      ["--config=developer_instructions=--no-memory", "-c", "model_verbosity=high", "task --no-subagents"],
       ["--reasoning-effort", "low", "--config", "developer_instructions=low", "--config", "model_verbosity=low", "--no-memory"]
     );
     expect(merged).toMatchObject({ applied: false, conflicts: ["config:developer_instructions", "config:model_verbosity"] });
-    expect(merged.args).toEqual(["--effort=high", "--config=developer_instructions=--no-memory", "-c", "model_verbosity=high", "task --no-subagents"]);
+    expect(merged.args).toEqual(["--config=developer_instructions=--no-memory", "-c", "model_verbosity=high", "task --no-subagents"]);
     expect(mergeTreatmentArguments("grok", ["--effort=high"], ["--reasoning-effort", "low"])).toMatchObject({ applied: false, conflicts: ["effort"] });
   });
 
@@ -144,6 +144,21 @@ describe("version-gated balanced optimization", () => {
 
   it("fails closed to the launcher when an explicit value-taking flag is incomplete", () => {
     expect(mergeTreatmentArguments("codex", ["--config"], ["--config", "model_verbosity=low"])).toMatchObject({ applied: false, conflicts: ["--config"], reason: "ambiguous explicit treatment argument" });
+  });
+
+  it("fails open when unknown options may consume a treatment flag as their value", () => {
+    for (const option of ["--agent", "--agents", "--allow", "--deny"]) {
+      expect(mergeTreatmentArguments("grok", [option, "--no-subagents"], ["--no-subagents"])).toMatchObject({ applied: false });
+    }
+    expect(mergeTreatmentArguments("claude", ["--provider-extension", "--no-chrome"], ["--no-chrome"])).toMatchObject({ applied: false });
+    expect(mergeTreatmentArguments("codex", ["--provider-extension", "--config"], ["--config", "model_verbosity=low"])).toMatchObject({ applied: false });
+  });
+
+  it("keeps known booleans and post-delimiter positional values unambiguous", () => {
+    expect(mergeTreatmentArguments("grok", ["--no-memory", "--no-subagents"], ["--no-memory", "--no-subagents"])).toMatchObject({ applied: true, deduplicated: true });
+    const delimited = mergeTreatmentArguments("grok", ["--", "--no-subagents"], ["--no-subagents"]);
+    expect(delimited).toMatchObject({ applied: true, conflicts: [] });
+    expect(delimited.args).toEqual(["--no-subagents", "--", "--no-subagents"]);
   });
 
   it("fails open when the exact CLI rejects the complete fixed policy", () => {

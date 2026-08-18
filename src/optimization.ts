@@ -132,6 +132,17 @@ function argumentMatch(token: string, schemas: TreatmentArgumentSchema[]): { sch
   return undefined;
 }
 
+function looksLikeTreatmentFlag(token: string, schemas: TreatmentArgumentSchema[]): boolean {
+  return argumentMatch(token, schemas) !== undefined || schemas.some((schema) => schema.flags.some((flag) => token.startsWith(`${flag}=`)));
+}
+
+function unknownOptionMayConsumeTreatmentFlag(token: string, next: string | undefined, schemas: TreatmentArgumentSchema[]): boolean {
+  if (!token.startsWith("-")) return false;
+  const separator = token.indexOf("=");
+  if (separator > 0 && looksLikeTreatmentFlag(token.slice(separator + 1), schemas)) return true;
+  return next !== undefined && next !== "--" && looksLikeTreatmentFlag(next, schemas);
+}
+
 function parseTreatmentArguments(args: string[], schemas: TreatmentArgumentSchema[], strict: boolean): ParsedTreatmentArgument[] {
   const parsed: ParsedTreatmentArgument[] = [];
   for (let index = 0; index < args.length;) {
@@ -139,6 +150,12 @@ function parseTreatmentArguments(args: string[], schemas: TreatmentArgumentSchem
     if (token === "--") break;
     const match = argumentMatch(token, schemas);
     if (!match) {
+      if (unknownOptionMayConsumeTreatmentFlag(token, args[index + 1], schemas)) {
+        if (strict) throw new Error(`Ambiguous unknown option arity: ${token}`);
+        parsed.push({ schema: schemas[0] ?? { provider: "grok", key: "ambiguous", flags: [], takesValue: false }, tokens: args[index + 1] ? [token, args[index + 1]] : [token], ambiguous: true });
+        index += args[index + 1] ? 2 : 1;
+        continue;
+      }
       index += 1;
       continue;
     }
