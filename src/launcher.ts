@@ -6,7 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { getAdapter } from "./adapters/index.js";
 import { ensureConfig } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
-import { appliesReductionPolicy, planForInstalledCli, planFromHelp } from "./optimization.js";
+import { appliesReductionPolicy, mergeTreatmentArguments, planForInstalledCli, planFromHelp } from "./optimization.js";
 import { pricingProfile } from "./pricing.js";
 import { hasUnsafeMacAcl } from "./acl.js";
 import type { TokenPilotPaths } from "./paths.js";
@@ -313,7 +313,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       const providerOptimizationArgs = provider === "grok" && isGrokHeadless(args)
         ? [...optimization.args, ...(optimization.headlessArgs ?? [])]
         : optimization.args;
-      launchArgs = [...(codexOtelMetrics?.args ?? []), ...providerOptimizationArgs, ...args];
+      launchArgs = mergeTreatmentArguments(args, [...(codexOtelMetrics?.args ?? []), ...providerOptimizationArgs]);
     }
   } catch {
     // All optional state, telemetry, and optimization failures fail open.

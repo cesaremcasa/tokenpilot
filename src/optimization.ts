@@ -52,6 +52,122 @@ export interface OptimizationPlan {
   unavailableReason?: string;
 }
 
+interface TreatmentArgumentSchema {
+  key: string;
+  flags: string[];
+  takesValue: boolean;
+}
+
+interface ParsedTreatmentArgument {
+  schema: TreatmentArgumentSchema;
+  value?: string;
+  tokens: string[];
+  ambiguous: boolean;
+}
+
+const TREATMENT_ARGUMENT_SCHEMAS: TreatmentArgumentSchema[] = [
+  { key: "effort", flags: ["--effort", "--reasoning-effort"], takesValue: true },
+  { key: "tools", flags: ["--tools"], takesValue: true },
+  { key: "config", flags: ["--config", "-c"], takesValue: true },
+  { key: "append-system-prompt", flags: ["--append-system-prompt"], takesValue: true },
+  { key: "system-prompt-override", flags: ["--system-prompt-override"], takesValue: true },
+  { key: "no-chrome", flags: ["--no-chrome"], takesValue: false },
+  { key: "exclude-dynamic-system-prompt-sections", flags: ["--exclude-dynamic-system-prompt-sections"], takesValue: false },
+  { key: "verbatim", flags: ["--verbatim"], takesValue: false },
+  { key: "no-subagents", flags: ["--no-subagents"], takesValue: false },
+  { key: "no-memory", flags: ["--no-memory"], takesValue: false },
+  { key: "disable-web-search", flags: ["--disable-web-search"], takesValue: false },
+  { key: "no-plan", flags: ["--no-plan"], takesValue: false }
+];
+
+function argumentMatch(token: string): { schema: TreatmentArgumentSchema; inlineValue?: string } | undefined {
+  for (const schema of TREATMENT_ARGUMENT_SCHEMAS) {
+    for (const flag of schema.flags) {
+      if (token === flag) return { schema };
+      if (token.startsWith(`${flag}=`)) return { schema, inlineValue: token.slice(flag.length + 1) };
+    }
+  }
+  return undefined;
+}
+
+function parseTreatmentArguments(args: string[], strict: boolean): ParsedTreatmentArgument[] {
+  const parsed: ParsedTreatmentArgument[] = [];
+  for (let index = 0; index < args.length;) {
+    const token = args[index];
+    if (token === "--") break;
+    const match = argumentMatch(token);
+    if (!match) {
+      index += 1;
+      continue;
+    }
+    if (!match.schema.takesValue) {
+      parsed.push({ schema: match.schema, value: match.inlineValue, tokens: [token], ambiguous: match.inlineValue !== undefined });
+      index += 1;
+      continue;
+    }
+    if (match.inlineValue !== undefined) {
+      parsed.push({ schema: match.schema, value: match.inlineValue, tokens: [token], ambiguous: false });
+      index += 1;
+      continue;
+    }
+    const value = args[index + 1];
+    if (value === undefined || value === "--") {
+      if (strict) throw new Error(`Incomplete treatment argument: ${token}`);
+      parsed.push({ schema: match.schema, tokens: [token], ambiguous: true });
+      index += 1;
+      continue;
+    }
+    parsed.push({ schema: match.schema, value, tokens: [token, value], ambiguous: false });
+    index += 2;
+  }
+  return parsed;
+}
+
+function argumentIdentity(argument: ParsedTreatmentArgument): string {
+  if (argument.schema.key !== "config") return argument.schema.key;
+  const value = argument.value ?? "";
+  const separator = value.indexOf("=");
+  if (separator <= 0) {
+    if (argument.ambiguous) throw new Error("Ambiguous Codex config argument");
+    throw new Error("Codex config argument must include a key and value");
+  }
+  return `${argument.schema.key}:${value.slice(0, separator)}`;
+}
+
+/**
+ * Merge explicit provider arguments with a validated treatment. Explicit
+ * flags and their values always win. Only known treatment flags are parsed;
+ * arbitrary prompt/positional values are left untouched, including values
+ * that happen to resemble flags. An incomplete or ambiguous known argument
+ * throws so the launcher can fail open to the original invocation.
+ */
+export function mergeTreatmentArguments(explicitArgs: string[], injectedArgs: string[]): string[] {
+  if (injectedArgs.length === 0) return [...explicitArgs];
+  const injected = parseTreatmentArguments(injectedArgs, true);
+  const explicit = parseTreatmentArguments(explicitArgs, false);
+  const explicitByIdentity = new Map<string, ParsedTreatmentArgument[]>();
+  for (const argument of explicit) {
+    if (argument.ambiguous) throw new Error("Ambiguous explicit treatment argument");
+    const identity = argumentIdentity(argument);
+    explicitByIdentity.set(identity, [...(explicitByIdentity.get(identity) ?? []), argument]);
+  }
+  const selected: string[] = [];
+  const injectedByIdentity = new Map<string, ParsedTreatmentArgument>();
+  for (const argument of injected) {
+    const identity = argumentIdentity(argument);
+    const prior = injectedByIdentity.get(identity);
+    if (prior) {
+      if (prior.tokens.join("\0") !== argument.tokens.join("\0")) throw new Error(`Conflicting injected treatment argument: ${identity}`);
+      continue;
+    }
+    injectedByIdentity.set(identity, argument);
+    // Any explicit occurrence owns this component, whether it matches or
+    // intentionally overrides the treatment value. Preserve it in place.
+    if (!explicitByIdentity.has(identity)) selected.push(...argument.tokens);
+  }
+  return [...selected, ...explicitArgs];
+}
+
 const NONE: OptimizationPlan = { args: [], applied: false };
 
 function supports(help: string, option: string): boolean {

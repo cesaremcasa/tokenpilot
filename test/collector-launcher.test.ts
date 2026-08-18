@@ -194,6 +194,34 @@ exit 0
     cleanup(paths);
   });
 
+  it("deduplicates explicit Grok treatment flags in the real v0.4.16 reproduction", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "grok-deduplicated-arguments.json");
+    const originalBin = writeFakeGrok(paths, `#!/usr/bin/env node
+import fs from "node:fs";
+const args = process.argv.slice(2);
+const flags = ["--no-subagents", "--disable-web-search", "--no-memory"];
+if (args.includes("--version")) { console.log("grok 1.0.4"); process.exit(0); }
+if (args.includes("--help")) { console.log("--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>"); process.exit(0); }
+const duplicate = flags.find((flag) => args.filter((argument) => argument === flag).length > 1);
+if (duplicate) { console.error("argument cannot be used multiple times: " + duplicate); process.exit(64); }
+fs.writeFileSync("${observedArguments}", JSON.stringify(args));
+process.exit(0);
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+    const explicit = ["--single", "Return exactly TOKENPILOT_CANARY_OK.", "--max-turns", "1", "--no-subagents", "--disable-web-search", "--no-memory", "--output-format", "json"];
+
+    expect(await withProviderPath(originalBin, () => runProvider("grok", explicit, paths))).toBe(0);
+    const observed = JSON.parse(fs.readFileSync(observedArguments, "utf8"));
+    expect(observed.slice(-explicit.length)).toEqual(explicit);
+    for (const flag of ["--no-subagents", "--disable-web-search", "--no-memory"]) {
+      expect(observed.filter((argument) => argument === flag)).toHaveLength(1);
+    }
+    cleanup(paths);
+  });
+
   it("injects the complete Claude v7 latency policy without retaining its fixed instruction", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "claude-arguments");
