@@ -5,12 +5,15 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createSanitizedNpmEnvironment } from "./npm-environment.mjs";
+import { expectedPackageFiles, validateTarball } from "./release-manifest.mjs";
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageMetadata = JSON.parse(fs.readFileSync(path.join(repository, "package.json"), "utf8"));
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tokenpilot-release-smoke-"));
 const artifactDirectory = path.join(temporaryRoot, "artifacts");
 const consumerDirectory = path.join(temporaryRoot, "consumer");
+const npmEnvironment = createSanitizedNpmEnvironment(temporaryRoot);
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { ...options, encoding: "utf8" });
@@ -21,7 +24,11 @@ function run(command, args, options = {}) {
 
 let installed;
 try {
-  const artifact = JSON.parse(execFileSync(process.execPath, [path.join(repository, "scripts", "release-artifact.mjs"), "--output", artifactDirectory], { encoding: "utf8" }));
+  assert.equal(npmEnvironment.NPM_TOKEN, undefined);
+  assert(npmEnvironment.HOME.startsWith(temporaryRoot));
+  assert(npmEnvironment.NPM_CONFIG_CACHE.startsWith(temporaryRoot));
+  assert(npmEnvironment.NPM_CONFIG_USERCONFIG.startsWith(temporaryRoot));
+  const artifact = JSON.parse(execFileSync(process.execPath, [path.join(repository, "scripts", "release-artifact.mjs"), "--output", artifactDirectory], { encoding: "utf8", env: npmEnvironment }));
   const tarball = artifact.tarball;
   const checksumLine = fs.readFileSync(artifact.checksum, "utf8");
   const expectedHash = createHash("sha256").update(fs.readFileSync(tarball)).digest("hex");
@@ -34,11 +41,44 @@ try {
   assert.equal(bom.metadata.properties.find((property) => property.name === "npm:runtimeDependencyCount")?.value, "0");
   assert.deepEqual(bom.components.map((component) => component["bom-ref"]), [...bom.components].map((component) => component["bom-ref"]).sort((left, right) => left < right ? -1 : left > right ? 1 : 0));
   assert(!JSON.stringify(bom).includes(temporaryRoot), "SBOM must not contain host-specific temp paths");
+  assert(!JSON.stringify(bom).includes(repository), "SBOM must not contain checkout paths");
   assert(!Object.hasOwn(bom.metadata, "timestamp"), "SBOM must not contain a generated timestamp");
+  validateTarball(tarball, expectedPackageFiles(repository), path.join(temporaryRoot, "independent-tarball-scan"));
+
+  function expectReleaseFailure(fixture, expectedMessage) {
+    try {
+      execFileSync(process.execPath, [path.join(repository, "scripts", "release-artifact.mjs"), "--repository", fixture, "--output", path.join(fixture, "output")], {
+        encoding: "utf8",
+        env: npmEnvironment,
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      assert.fail(`Expected release artifact generation to fail for ${fixture}`);
+    } catch (error) {
+      if (error?.code === "ERR_ASSERTION") throw error;
+      const output = `${error?.stdout ?? ""}\n${error?.stderr ?? ""}`;
+      assert.match(output, expectedMessage);
+    }
+  }
+
+  function fixture(extraPath) {
+    const directory = fs.mkdtempSync(path.join(temporaryRoot, "fixture-"));
+    for (const file of ["package.json", "package-lock.json", "tsconfig.json", "CHANGELOG.md", "LICENSE", "README.md", "SECURITY.md"]) {
+      fs.copyFileSync(path.join(repository, file), path.join(directory, file));
+    }
+    fs.cpSync(path.join(repository, "src"), path.join(directory, "src"), { recursive: true });
+    fs.cpSync(path.join(repository, "integrations"), path.join(directory, "integrations"), { recursive: true });
+    fs.cpSync(path.join(repository, "dist"), path.join(directory, "dist"), { recursive: true });
+    const stale = path.join(directory, extraPath);
+    fs.mkdirSync(path.dirname(stale), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(stale, "stale fixture content\n", { mode: 0o600 });
+    return directory;
+  }
+  expectReleaseFailure(fixture("dist/stale-output.js"), /repository dist.*file manifest differs/);
+  expectReleaseFailure(fixture("integrations/codex/tokenpilot/STALE.md"), /repository integrations.*file manifest differs/);
 
   fs.mkdirSync(consumerDirectory, { recursive: true, mode: 0o700 });
-  run("npm", ["init", "--yes"], { cwd: consumerDirectory, env: { ...process.env, NPM_CONFIG_UPDATE_NOTIFIER: "false" } });
-  run("npm", ["install", "--ignore-scripts", "--no-save", tarball], { cwd: consumerDirectory, env: { ...process.env, NPM_CONFIG_UPDATE_NOTIFIER: "false" } });
+  run("npm", ["init", "--yes"], { cwd: consumerDirectory, env: npmEnvironment });
+  run("npm", ["install", "--offline", "--ignore-scripts", "--no-save", tarball], { cwd: consumerDirectory, env: npmEnvironment });
   const installedRoot = path.join(consumerDirectory, "node_modules", packageMetadata.name);
   const installedPackage = JSON.parse(fs.readFileSync(path.join(installedRoot, "package.json"), "utf8"));
   assert.equal(installedPackage.version, packageMetadata.version);

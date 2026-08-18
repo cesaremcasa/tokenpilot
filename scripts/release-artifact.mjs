@@ -5,18 +5,25 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createSanitizedNpmEnvironment } from "./npm-environment.mjs";
+import { assertDirectoryManifest, expectedDistFiles, expectedPackageFiles, INTEGRATION_FILES, STATIC_PACKAGE_FILES, validateTarball } from "./release-manifest.mjs";
 
-const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const scriptRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const args = process.argv.slice(2);
+function option(name) {
+  const index = args.indexOf(name);
+  if (index < 0) return undefined;
+  if (!args[index + 1] || args[index + 1].startsWith("--")) throw new Error(`${name} requires a value`);
+  return args[index + 1];
+}
+const outputValue = option("--output");
+const repositoryValue = option("--repository");
+const allowedArgs = new Set(["--output", "--repository", outputValue, repositoryValue]);
+if (args.some((arg) => !allowedArgs.has(arg))) throw new Error("Usage: npm run release:artifact -- [--output <directory>] [--repository <checkout>]");
+const repository = path.resolve(repositoryValue ?? scriptRoot);
 const packageMetadata = JSON.parse(fs.readFileSync(path.join(repository, "package.json"), "utf8"));
 const packageLock = JSON.parse(fs.readFileSync(path.join(repository, "package-lock.json"), "utf8"));
-const args = process.argv.slice(2);
-const outputIndex = args.indexOf("--output");
-if (args.some((arg, index) => !["--output", outputIndex >= 0 && index === outputIndex + 1 ? arg : ""].includes(arg))) {
-  throw new Error("Usage: npm run release:artifact -- [--output <directory>]");
-}
-if (outputIndex >= 0 && !args[outputIndex + 1]) throw new Error("--output requires a directory");
-
-const outputDirectory = path.resolve(repository, outputIndex >= 0 ? args[outputIndex + 1] : "release-artifacts");
+const outputDirectory = path.resolve(repository, outputValue ?? "release-artifacts");
 const packageRoot = packageLock.packages?.[""];
 assert.equal(packageMetadata.name, "tokenpilot");
 assert.equal(packageLock.name, packageMetadata.name);
@@ -28,18 +35,58 @@ assert.deepEqual(packageMetadata.dependencies ?? {}, {});
 assert.deepEqual(packageMetadata.optionalDependencies ?? {}, {});
 assert.deepEqual(packageMetadata.peerDependencies ?? {}, {});
 
+let stagingCheckout;
+let npmEnvironment;
+
+function copySafe(source, destination) {
+  const stat = fs.lstatSync(source);
+  if (stat.isSymbolicLink()) throw new Error(`Release input contains a symlink: ${source}`);
+  if (stat.isDirectory()) {
+    fs.mkdirSync(destination, { recursive: true, mode: 0o700 });
+    for (const name of fs.readdirSync(source)) copySafe(path.join(source, name), path.join(destination, name));
+    return;
+  }
+  if (!stat.isFile() || stat.nlink !== 1) throw new Error(`Release input contains a special or hard-linked file: ${source}`);
+  fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+  fs.copyFileSync(source, destination);
+}
+
+function stageCheckout(temporaryRoot) {
+  const sourceDist = path.join(repository, "dist");
+  if (fs.existsSync(sourceDist)) {
+    assertDirectoryManifest(sourceDist, expectedDistFiles(repository).map((file) => file.slice("dist/".length)), "repository dist");
+  }
+  assertDirectoryManifest(path.join(repository, "integrations"), INTEGRATION_FILES.map((file) => file.slice("integrations/".length)), "repository integrations");
+  const staging = path.join(temporaryRoot, "checkout");
+  fs.mkdirSync(staging, { recursive: true, mode: 0o700 });
+  for (const file of ["package.json", "package-lock.json", "tsconfig.json", ...STATIC_PACKAGE_FILES]) {
+    copySafe(path.join(repository, file), path.join(staging, file));
+  }
+  copySafe(path.join(repository, "src"), path.join(staging, "src"));
+  for (const file of INTEGRATION_FILES) {
+    copySafe(path.join(repository, file), path.join(staging, file));
+  }
+  return staging;
+}
+
+function runNpm(argumentsList, cwd) {
+  execFileSync("npm", argumentsList, { cwd, encoding: "utf8", env: npmEnvironment });
+}
+
 function runPack(destination) {
   fs.mkdirSync(destination, { recursive: true, mode: 0o700 });
   const stdout = execFileSync("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", destination], {
-    cwd: repository,
+    cwd: stagingCheckout,
     encoding: "utf8",
-    env: { ...process.env, NPM_CONFIG_UPDATE_NOTIFIER: "false" }
+    env: npmEnvironment
   });
   const records = JSON.parse(stdout.trim());
   const record = Array.isArray(records) ? records.at(-1) : records;
   assert.equal(record?.name, packageMetadata.name);
   assert.equal(record?.version, packageMetadata.version);
   assert.equal(record?.filename, `${packageMetadata.name}-${packageMetadata.version}.tgz`);
+  const expectedFiles = expectedPackageFiles(stagingCheckout);
+  assert.deepEqual(record?.files?.map((file) => file.path).sort(), expectedFiles, "npm pack file manifest differs");
   const tarball = path.join(destination, record.filename);
   assert(fs.existsSync(tarball), `npm pack did not create ${record.filename}`);
   return { tarball, record };
@@ -113,11 +160,19 @@ function buildBom() {
 
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tokenpilot-release-artifact-"));
 try {
+  npmEnvironment = createSanitizedNpmEnvironment(temporaryRoot);
+  stagingCheckout = stageCheckout(temporaryRoot);
+  runNpm(["ci", "--ignore-scripts"], stagingCheckout);
+  runNpm(["run", "build"], stagingCheckout);
+  assertDirectoryManifest(path.join(stagingCheckout, "dist"), expectedDistFiles(stagingCheckout).map((file) => file.slice("dist/".length)), "staging dist");
+  const expectedFiles = expectedPackageFiles(stagingCheckout);
   const first = runPack(path.join(temporaryRoot, "first"));
   const second = runPack(path.join(temporaryRoot, "second"));
   const firstHash = sha256(first.tarball);
   const secondHash = sha256(second.tarball);
   assert.equal(firstHash, secondHash, "npm pack output is not deterministic");
+  validateTarball(first.tarball, expectedFiles, path.join(temporaryRoot, "first-validation"));
+  validateTarball(second.tarball, expectedFiles, path.join(temporaryRoot, "second-validation"));
 
   fs.mkdirSync(outputDirectory, { recursive: true, mode: 0o700 });
   if (fs.readdirSync(outputDirectory).length > 0) {
