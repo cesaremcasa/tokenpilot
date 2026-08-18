@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, GROK_HEADLESS_TOOLS, GROK_TOKEN_EFFICIENCY_INSTRUCTION, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, GROK_HEADLESS_TOOLS, GROK_TOKEN_EFFICIENCY_INSTRUCTION, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
   it("uses the latency-first Claude v7 policy when every flag is advertised", () => {
@@ -36,15 +36,18 @@ describe("version-gated balanced optimization", () => {
     });
   });
 
-  it("uses session-only Codex overrides and does not enable prompt telemetry", () => {
+  it("preserves every Codex capability while bounding repeated execution", () => {
     const plan = planFromHelp("codex", "balanced", "-c, --config <key=value> --profile <profile>");
-    expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v2" });
+    expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v3" });
     expect(plan.args.join(" ")).toContain("model_reasoning_effort");
     expect(plan.args.join(" ")).toContain("model_reasoning_effort=\"low\"");
     expect(plan.args.join(" ")).toContain("model_reasoning_summary=\"none\"");
     expect(plan.args.join(" ")).toContain("model_auto_compact_token_limit=32000");
     expect(plan.args.join(" ")).toContain("model_auto_compact_token_limit_scope=\"body_after_prefix\"");
-    expect(plan.args.join(" ")).toContain("developer_instructions=");
+    expect(plan.args.join(" ")).toContain(CODEX_TOKEN_EFFICIENCY_INSTRUCTION);
+    for (const forbidden of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false"]) {
+      expect(plan.args.join(" ")).not.toContain(forbidden);
+    }
     expect(plan.args.join(" ")).not.toContain("otel.log_user_prompt");
   });
 

@@ -34,8 +34,10 @@ describe("installation and fail-open launcher lookup", () => {
     expect(plan.skills.map((skill) => skill.provider)).toEqual(["codex", "claude", "grok", "kimi"]);
     for (const skill of plan.skills) {
       const contents = fs.readFileSync(skill.target, "utf8");
-      expect(contents).toContain(`tokenpilot-managed-skill:v4 ${skill.provider}`);
+      expect(contents).toContain(`tokenpilot-managed-skill:v5 ${skill.provider}`);
       expect(contents).toContain(`'${plan.command}' report --provider ${skill.provider} --view summary --format md`);
+      expect(contents).toContain("The primary and required result is `redução cache-aware`");
+      expect(contents).toContain("Never replace it with 24-hour or 7-day emptiness");
       expect(contents).not.toContain("{{TOKENPILOT_COMMAND}}");
       expect(skill.state).toBe("installed");
     }

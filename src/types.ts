@@ -147,6 +147,8 @@ export interface MeasurementCoverage {
 
 export interface SessionSummary {
   id: string;
+  /** Content-free ordering key used to select the latest measured comparison. */
+  startedAt?: string;
   provider: Provider;
   mode: RunMode;
   optimizationApplied: boolean;
@@ -196,6 +198,8 @@ export interface TreatmentComparison {
   metricLabel: MeasurementTotalSource;
   baselineSessions: number;
   treatmentSessions: number;
+  /** Latest treatment session represented by this comparison. */
+  latestTreatmentAt?: string;
   baselineMedianTokenPressure?: number;
   treatmentMedianTokenPressure?: number;
   baselineMedianInputNew?: number;

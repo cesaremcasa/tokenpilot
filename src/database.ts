@@ -390,7 +390,7 @@ export class TelemetryDatabase {
           SUM(CASE WHEN type = 'retry' THEN count ELSE 0 END) AS retries
         FROM session_events GROUP BY run_id
       )
-      SELECT r.id, r.provider, r.mode, r.optimization_applied AS optimizationApplied,
+      SELECT r.id, r.started_at AS startedAt, r.provider, r.mode, r.optimization_applied AS optimizationApplied,
         r.optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "r.comparison_profile" : "NULL"} AS comparisonProfile,
         ${this.hasPricingProfileColumn ? "r.pricing_profile" : "NULL"} AS pricingProfile, r.task_kind AS taskKind, r.outcome,
         MAX(0, strftime('%s', COALESCE(r.ended_at, datetime('now'))) - strftime('%s', r.started_at)) AS durationSeconds,
