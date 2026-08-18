@@ -299,7 +299,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           cliVersion: version,
           optimizationApplied: optimization.applied && treatmentMerge.applied,
           optimizationProfile: optimization.applied && treatmentMerge.applied ? optimization.profile : undefined,
-          comparisonProfile: optimization.applied && treatmentMerge.applied ? reductionPlan?.profile : undefined,
+          comparisonProfile: reductionPlan?.profile,
           pricingProfile: pricingProfile(config, provider),
           collectionState: "pending",
           taskKind: "unknown",

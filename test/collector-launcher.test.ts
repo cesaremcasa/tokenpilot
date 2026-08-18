@@ -108,6 +108,36 @@ describe("local launcher and collector", () => {
     cleanup(paths);
   });
 
+  it("records a balanced observe arm with its comparison profile but no treatment profile", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "codex-observe-arguments");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+if [ "$1" = "--help" ]; then echo '--config'; exit 0; fi
+if [ "$1" = "--version" ]; then echo 'fake-codex 1.0'; exit 0; fi
+printf '%s\n' "$@" > '${observedArguments}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "balanced";
+    writeConfig(paths, config);
+    const allocator = new TelemetryDatabase(paths);
+    expect(allocator.allocateBalancedMode("codex", () => 0.1)).toBe("balanced");
+    allocator.close();
+
+    const explicit = ["exec", "observe-user"];
+    expect(await withProviderPath(originalBin, () => runProvider("codex", explicit, paths))).toBe(0);
+    const database = new TelemetryDatabase(paths);
+    const run = database.recentRunsSince(new Date(0).toISOString())[0];
+    expect(run).toMatchObject({ mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v2" });
+    expect(run?.optimizationProfile).toBeNull();
+    database.close();
+    const observed = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(observed.slice(-explicit.length)).toEqual(explicit);
+    expect(observed.join(" ")).not.toContain("model_reasoning_effort");
+    expect(observed.join(" ")).not.toContain(TOKEN_EFFICIENCY_INSTRUCTION);
+    cleanup(paths);
+  });
+
   it("always injects the Grok reduction policy in reduce mode", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-reduce-arguments");
