@@ -52,6 +52,196 @@ export interface OptimizationPlan {
   unavailableReason?: string;
 }
 
+export interface TreatmentMergeResult {
+  args: string[];
+  applied: boolean;
+  deduplicated: boolean;
+  conflicts: string[];
+  omitted: string[];
+  reason?: string;
+}
+
+interface TreatmentArgumentSchema {
+  provider: Provider;
+  key: string;
+  flags: string[];
+  takesValue: boolean;
+}
+
+interface ParsedTreatmentArgument {
+  schema: TreatmentArgumentSchema;
+  value?: string;
+  tokens: string[];
+  ambiguous: boolean;
+}
+
+const TREATMENT_ARGUMENT_SCHEMAS: TreatmentArgumentSchema[] = [
+  { provider: "claude", key: "effort", flags: ["--effort"], takesValue: true },
+  { provider: "claude", key: "tools", flags: ["--tools"], takesValue: true },
+  { provider: "claude", key: "append-system-prompt", flags: ["--append-system-prompt"], takesValue: true },
+  { provider: "claude", key: "no-chrome", flags: ["--no-chrome"], takesValue: false },
+  { provider: "claude", key: "exclude-dynamic-system-prompt-sections", flags: ["--exclude-dynamic-system-prompt-sections"], takesValue: false },
+  { provider: "claude", key: "prompt", flags: ["-p", "--print", "--prompt"], takesValue: true },
+  { provider: "claude", key: "model", flags: ["--model"], takesValue: true },
+  { provider: "claude", key: "output-format", flags: ["--output-format"], takesValue: true },
+  { provider: "claude", key: "max-turns", flags: ["--max-turns"], takesValue: true },
+  { provider: "claude", key: "settings", flags: ["--settings"], takesValue: true },
+  { provider: "claude", key: "add-dir", flags: ["--add-dir"], takesValue: true },
+  { provider: "claude", key: "permission-mode", flags: ["--permission-mode"], takesValue: true },
+  { provider: "codex", key: "config", flags: ["--config", "-c"], takesValue: true },
+  { provider: "codex", key: "model", flags: ["--model", "-m"], takesValue: true },
+  { provider: "codex", key: "profile", flags: ["--profile"], takesValue: true },
+  { provider: "codex", key: "sandbox", flags: ["--sandbox"], takesValue: true },
+  { provider: "codex", key: "ask-for-approval", flags: ["--ask-for-approval"], takesValue: true },
+  { provider: "codex", key: "output-last-message", flags: ["--output-last-message"], takesValue: true },
+  { provider: "codex", key: "output-schema", flags: ["--output-schema"], takesValue: true },
+  { provider: "codex", key: "color", flags: ["--color"], takesValue: true },
+  { provider: "codex", key: "cd", flags: ["--cd", "-C"], takesValue: true },
+  { provider: "codex", key: "image", flags: ["--image"], takesValue: true },
+  { provider: "codex", key: "max-turns", flags: ["--max-turns"], takesValue: true },
+  { provider: "codex", key: "output-format", flags: ["--output-format"], takesValue: true },
+  { provider: "grok", key: "effort", flags: ["--effort", "--reasoning-effort"], takesValue: true },
+  { provider: "grok", key: "tools", flags: ["--tools"], takesValue: true },
+  { provider: "grok", key: "system-prompt-override", flags: ["--system-prompt-override"], takesValue: true },
+  { provider: "grok", key: "verbatim", flags: ["--verbatim"], takesValue: false },
+  { provider: "grok", key: "no-subagents", flags: ["--no-subagents"], takesValue: false },
+  { provider: "grok", key: "no-memory", flags: ["--no-memory"], takesValue: false },
+  { provider: "grok", key: "disable-web-search", flags: ["--disable-web-search"], takesValue: false },
+  { provider: "grok", key: "no-plan", flags: ["--no-plan"], takesValue: false },
+  { provider: "grok", key: "single", flags: ["--single", "-p", "--prompt"], takesValue: true },
+  { provider: "grok", key: "prompt-file", flags: ["--prompt-file"], takesValue: true },
+  { provider: "grok", key: "prompt-json", flags: ["--prompt-json"], takesValue: true },
+  { provider: "grok", key: "json-schema", flags: ["--json-schema"], takesValue: true },
+  { provider: "grok", key: "model", flags: ["--model"], takesValue: true },
+  { provider: "grok", key: "cwd", flags: ["--cwd"], takesValue: true },
+  { provider: "grok", key: "max-turns", flags: ["--max-turns"], takesValue: true },
+  { provider: "grok", key: "output-format", flags: ["--output-format"], takesValue: true }
+];
+
+function schemasFor(provider: Provider): TreatmentArgumentSchema[] {
+  return TREATMENT_ARGUMENT_SCHEMAS.filter((schema) => schema.provider === provider);
+}
+
+function argumentMatch(token: string, schemas: TreatmentArgumentSchema[]): { schema: TreatmentArgumentSchema; inlineValue?: string } | undefined {
+  for (const schema of schemas) {
+    for (const flag of schema.flags) {
+      if (token === flag) return { schema };
+      if (token.startsWith(`${flag}=`)) return { schema, inlineValue: token.slice(flag.length + 1) };
+    }
+  }
+  return undefined;
+}
+
+function looksLikeTreatmentFlag(token: string, schemas: TreatmentArgumentSchema[]): boolean {
+  return argumentMatch(token, schemas) !== undefined || schemas.some((schema) => schema.flags.some((flag) => token.startsWith(`${flag}=`)));
+}
+
+function unknownOptionMayConsumeTreatmentFlag(token: string, next: string | undefined, schemas: TreatmentArgumentSchema[]): boolean {
+  if (!token.startsWith("-")) return false;
+  const separator = token.indexOf("=");
+  if (separator > 0 && looksLikeTreatmentFlag(token.slice(separator + 1), schemas)) return true;
+  return next !== undefined && next !== "--" && looksLikeTreatmentFlag(next, schemas);
+}
+
+function parseTreatmentArguments(args: string[], schemas: TreatmentArgumentSchema[], strict: boolean): ParsedTreatmentArgument[] {
+  const parsed: ParsedTreatmentArgument[] = [];
+  for (let index = 0; index < args.length;) {
+    const token = args[index];
+    if (token === "--") break;
+    const match = argumentMatch(token, schemas);
+    if (!match) {
+      if (unknownOptionMayConsumeTreatmentFlag(token, args[index + 1], schemas)) {
+        if (strict) throw new Error(`Ambiguous unknown option arity: ${token}`);
+        parsed.push({ schema: schemas[0] ?? { provider: "grok", key: "ambiguous", flags: [], takesValue: false }, tokens: args[index + 1] ? [token, args[index + 1]] : [token], ambiguous: true });
+        index += args[index + 1] ? 2 : 1;
+        continue;
+      }
+      index += 1;
+      continue;
+    }
+    if (!match.schema.takesValue) {
+      parsed.push({ schema: match.schema, value: match.inlineValue, tokens: [token], ambiguous: match.inlineValue !== undefined });
+      index += 1;
+      continue;
+    }
+    if (match.inlineValue !== undefined) {
+      parsed.push({ schema: match.schema, value: match.inlineValue, tokens: [token], ambiguous: false });
+      index += 1;
+      continue;
+    }
+    const value = args[index + 1];
+    if (value === undefined || value === "--") {
+      if (strict) throw new Error(`Incomplete treatment argument: ${token}`);
+      parsed.push({ schema: match.schema, tokens: [token], ambiguous: true });
+      index += 1;
+      continue;
+    }
+    parsed.push({ schema: match.schema, value, tokens: [token, value], ambiguous: false });
+    index += 2;
+  }
+  return parsed;
+}
+
+function argumentIdentity(argument: ParsedTreatmentArgument): string | undefined {
+  if (argument.schema.key !== "config") return argument.schema.key;
+  const value = argument.value ?? "";
+  const separator = value.indexOf("=");
+  if (separator <= 0) return undefined;
+  return `${argument.schema.key}:${value.slice(0, separator)}`;
+}
+
+/**
+ * Merge explicit provider arguments with a validated treatment. Explicit
+ * flags and their values always win. Only known treatment flags are parsed;
+ * arbitrary prompt/positional values are left untouched, including values
+ * that happen to resemble flags. An incomplete or ambiguous known argument
+ * throws so the launcher can fail open to the original invocation.
+ */
+export function mergeTreatmentArguments(provider: Provider, explicitArgs: string[], injectedArgs: string[]): TreatmentMergeResult {
+  if (injectedArgs.length === 0) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [], omitted: [] };
+  const schemas = schemasFor(provider);
+  let injected: ParsedTreatmentArgument[];
+  let explicit: ParsedTreatmentArgument[];
+  try {
+    injected = parseTreatmentArguments(injectedArgs, schemas, true);
+    explicit = parseTreatmentArguments(explicitArgs, schemas, false);
+  } catch (error) {
+    return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [error instanceof Error ? error.message : "ambiguous treatment arguments"], omitted: injectedArgs, reason: "treatment argument validation failed" };
+  }
+  const explicitByIdentity = new Map<string, ParsedTreatmentArgument[]>();
+  for (const argument of explicit) {
+    if (argument.ambiguous) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [argument.tokens[0] ?? "ambiguous"], omitted: injectedArgs, reason: "ambiguous explicit treatment argument" };
+    const identity = argumentIdentity(argument);
+    if (!identity) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [argument.tokens[0] ?? "ambiguous"], omitted: injectedArgs, reason: "ambiguous Codex config argument" };
+    explicitByIdentity.set(identity, [...(explicitByIdentity.get(identity) ?? []), argument]);
+  }
+  const selected: string[] = [];
+  const injectedByIdentity = new Map<string, ParsedTreatmentArgument>();
+  const omitted: string[] = [];
+  const conflicts: string[] = [];
+  for (const argument of injected) {
+    const identity = argumentIdentity(argument);
+    if (!identity) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [argument.tokens[0] ?? "invalid"], omitted: injectedArgs, reason: "invalid injected treatment argument" };
+    const prior = injectedByIdentity.get(identity);
+    if (prior) {
+      if (prior.tokens.join("\0") !== argument.tokens.join("\0")) conflicts.push(identity);
+      continue;
+    }
+    injectedByIdentity.set(identity, argument);
+    const explicitMatches = explicitByIdentity.get(identity) ?? [];
+    if (explicitMatches.length === 0) {
+      selected.push(...argument.tokens);
+      continue;
+    }
+    const explicitValues = new Set(explicitMatches.map((match) => match.value));
+    if (argument.schema.takesValue && (explicitValues.size > 1 || [...explicitValues][0] !== argument.value)) conflicts.push(identity);
+    else if (!argument.schema.takesValue && explicitMatches.some((match) => match.value !== undefined)) conflicts.push(identity);
+    else omitted.push(identity);
+  }
+  if (conflicts.length > 0) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [...new Set(conflicts)], omitted: [...injectedByIdentity.keys()], reason: "explicit treatment value conflicts with the fixed policy" };
+  return { args: [...selected, ...explicitArgs], applied: true, deduplicated: omitted.length > 0, conflicts: [], omitted };
+}
+
 const NONE: OptimizationPlan = { args: [], applied: false };
 
 function supports(help: string, option: string): boolean {

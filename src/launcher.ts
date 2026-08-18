@@ -6,7 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { getAdapter } from "./adapters/index.js";
 import { ensureConfig } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
-import { appliesReductionPolicy, planForInstalledCli, planFromHelp } from "./optimization.js";
+import { appliesReductionPolicy, mergeTreatmentArguments, planForInstalledCli, planFromHelp } from "./optimization.js";
 import { pricingProfile } from "./pricing.js";
 import { hasUnsafeMacAcl } from "./acl.js";
 import type { TokenPilotPaths } from "./paths.js";
@@ -256,68 +256,103 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
     } else {
       const trusted = trustedExecutable(binary);
       if (!trusted) throw new Error("Provider executable no longer meets TokenPilot trust checks");
-      database = new TelemetryDatabase(paths);
       const version = binaryVersion(trusted);
       const reductionPlan = appliesReductionPolicy(config.defaultMode)
         ? planForInstalledCli(provider, config.defaultMode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined)
         : undefined;
-      if (mode === "balanced") mode = database.allocateBalancedMode(provider);
+      if (mode === "balanced") {
+        database = new TelemetryDatabase(paths);
+        try {
+          mode = database.allocateBalancedMode(provider);
+        } finally {
+          database.close();
+          database = undefined;
+        }
+      }
       const optimization = appliesReductionPolicy(mode) && reductionPlan
         ? reductionPlan
         : planForInstalledCli(provider, mode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined);
-      if (appliesReductionPolicy(mode) && optimization.applied) {
-        process.stderr.write(`TokenPilot: ${mode} optimization active for ${provider} (${optimization.summary}).\n`);
-      } else if (appliesReductionPolicy(mode)) {
-        process.stderr.write(`TokenPilot: ${optimization.unavailableReason}; starting ${provider} without injected settings.\n`);
-      }
-
-      runId = randomUUID();
-      database.createRun({
-        id: runId,
-        provider,
-        mode,
-        startedAt: new Date().toISOString(),
-        cliVersion: version,
-        optimizationApplied: optimization.applied,
-        optimizationProfile: optimization.profile,
-        comparisonProfile: reductionPlan?.profile,
-        pricingProfile: pricingProfile(config, provider),
-        collectionState: "pending",
-        taskKind: "unknown",
-        outcome: "unknown"
-      });
-      if (provider === "claude") {
-        claudeMetrics = await startClaudeMetricsReceiver(database, runId);
-        launchEnvironment = providerEnvironment(claudeMetrics.environment, trusted);
-      }
-      if (provider === "codex" && supportsCodexSessionConfiguration(trusted)) {
-        // Codex's documented OTLP configuration is per invocation. If a
-        // local receiver cannot start, preserve the existing `exec` parser
-        // rather than failing the provider session or touching user config.
-        try {
-          codexOtelMetrics = await startCodexMetricsReceiver(database, runId);
-        } catch {
-          codexOtelMetrics = undefined;
-        }
-      }
-      if (provider === "grok" && supportsGrokExternalOtelVersion(binaryVersion(trusted))) {
-        // Grok Build 1.0.3+ documents a content-free External OTEL v1 stream
-        // for normal CLI/TTY sessions. Configure it only for this child.
-        try {
-          grokOtelMetrics = await startGrokMetricsReceiver(database, runId);
-          launchEnvironment = providerEnvironment(grokOtelMetrics.environment, trusted);
-        } catch {
-          grokOtelMetrics = undefined;
-        }
-      }
       const providerOptimizationArgs = provider === "grok" && isGrokHeadless(args)
         ? [...optimization.args, ...(optimization.headlessArgs ?? [])]
         : optimization.args;
-      launchArgs = [...(codexOtelMetrics?.args ?? []), ...providerOptimizationArgs, ...args];
+      const treatmentMerge = mergeTreatmentArguments(provider, args, providerOptimizationArgs);
+      if (providerOptimizationArgs.length > 0 && !treatmentMerge.applied) {
+        // Resolve explicit treatment conflicts before creating any telemetry
+        // run, so fail-open cannot leave a pending/profile-only ghost cohort.
+        process.stderr.write(`TokenPilot: ${treatmentMerge.reason ?? "explicit treatment arguments conflict"}; starting ${provider} normally.\n`);
+        launchArgs = args;
+      } else {
+        launchArgs = treatmentMerge.args;
+        if (appliesReductionPolicy(mode) && optimization.applied) {
+          process.stderr.write(`TokenPilot: ${mode} optimization active for ${provider} (${optimization.summary}).\n`);
+        } else if (appliesReductionPolicy(mode)) {
+          process.stderr.write(`TokenPilot: ${optimization.unavailableReason}; starting ${provider} without injected settings.\n`);
+        }
+
+        runId = randomUUID();
+        database = new TelemetryDatabase(paths);
+        database.createRun({
+          id: runId,
+          provider,
+          mode,
+          startedAt: new Date().toISOString(),
+          cliVersion: version,
+          optimizationApplied: optimization.applied && treatmentMerge.applied,
+          optimizationProfile: optimization.applied && treatmentMerge.applied ? optimization.profile : undefined,
+          comparisonProfile: reductionPlan?.profile,
+          pricingProfile: pricingProfile(config, provider),
+          collectionState: "pending",
+          taskKind: "unknown",
+          outcome: "unknown"
+        });
+        if (provider === "claude") {
+          claudeMetrics = await startClaudeMetricsReceiver(database, runId);
+          launchEnvironment = providerEnvironment(claudeMetrics.environment, trusted);
+        }
+        if (provider === "codex" && supportsCodexSessionConfiguration(trusted)) {
+          // Codex's documented OTLP configuration is per invocation. If a
+          // local receiver cannot start, preserve the existing `exec` parser
+          // rather than failing the provider session or touching user config.
+          try {
+            codexOtelMetrics = await startCodexMetricsReceiver(database, runId);
+          } catch {
+            codexOtelMetrics = undefined;
+          }
+        }
+        if (provider === "grok" && supportsGrokExternalOtelVersion(binaryVersion(trusted))) {
+          // Grok Build 1.0.3+ documents a content-free External OTEL v1 stream
+          // for normal CLI/TTY sessions. Configure it only for this child.
+          try {
+            grokOtelMetrics = await startGrokMetricsReceiver(database, runId);
+            launchEnvironment = providerEnvironment(grokOtelMetrics.environment, trusted);
+          } catch {
+            grokOtelMetrics = undefined;
+          }
+        }
+        const mergedWithReceiver = mergeTreatmentArguments(provider, args, [...(codexOtelMetrics?.args ?? []), ...providerOptimizationArgs]);
+        if (codexOtelMetrics && !mergedWithReceiver.applied) {
+          await codexOtelMetrics.close().catch(() => undefined);
+          codexOtelMetrics = undefined;
+          database.deleteRun(runId);
+          database.close();
+          database = undefined;
+          runId = undefined;
+          launchArgs = args;
+        } else {
+          launchArgs = mergedWithReceiver.args;
+        }
+      }
     }
   } catch {
     // All optional state, telemetry, and optimization failures fail open.
     process.stderr.write(`TokenPilot: telemetry unavailable; starting ${provider} normally.\n`);
+    if (database && runId) {
+      try {
+        database.deleteRun(runId);
+      } catch {
+        // Preserve fail-open behavior if cleanup itself cannot access state.
+      }
+    }
     database?.close();
     database = undefined;
     runId = undefined;

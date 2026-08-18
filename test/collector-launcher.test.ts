@@ -108,6 +108,36 @@ describe("local launcher and collector", () => {
     cleanup(paths);
   });
 
+  it("records a balanced observe arm with its comparison profile but no treatment profile", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "codex-observe-arguments");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+if [ "$1" = "--help" ]; then echo '--config'; exit 0; fi
+if [ "$1" = "--version" ]; then echo 'fake-codex 1.0'; exit 0; fi
+printf '%s\n' "$@" > '${observedArguments}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "balanced";
+    writeConfig(paths, config);
+    const allocator = new TelemetryDatabase(paths);
+    expect(allocator.allocateBalancedMode("codex", () => 0.1)).toBe("balanced");
+    allocator.close();
+
+    const explicit = ["exec", "observe-user"];
+    expect(await withProviderPath(originalBin, () => runProvider("codex", explicit, paths))).toBe(0);
+    const database = new TelemetryDatabase(paths);
+    const run = database.recentRunsSince(new Date(0).toISOString())[0];
+    expect(run).toMatchObject({ mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v2" });
+    expect(run?.optimizationProfile).toBeNull();
+    database.close();
+    const observed = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(observed.slice(-explicit.length)).toEqual(explicit);
+    expect(observed.join(" ")).not.toContain("model_reasoning_effort");
+    expect(observed.join(" ")).not.toContain(TOKEN_EFFICIENCY_INSTRUCTION);
+    cleanup(paths);
+  });
+
   it("always injects the Grok reduction policy in reduce mode", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-reduce-arguments");
@@ -191,6 +221,55 @@ exit 0
       expect(rawDatabase).not.toContain(forbidden);
       expect(markdown).not.toContain(forbidden);
     }
+    cleanup(paths);
+  });
+
+  it("deduplicates explicit Grok treatment flags in the real v0.4.16 reproduction", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "grok-deduplicated-arguments.json");
+    const originalBin = writeFakeGrok(paths, `#!/usr/bin/env node
+import fs from "node:fs";
+const args = process.argv.slice(2);
+const flags = ["--no-subagents", "--disable-web-search", "--no-memory"];
+if (args.includes("--version")) { console.log("grok 1.0.4"); process.exit(0); }
+if (args.includes("--help")) { console.log("--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>"); process.exit(0); }
+const duplicate = flags.find((flag) => args.filter((argument) => argument === flag).length > 1);
+if (duplicate) { console.error("argument cannot be used multiple times: " + duplicate); process.exit(64); }
+fs.writeFileSync("${observedArguments}", JSON.stringify(args));
+process.exit(0);
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+    const explicit = ["--single", "Return exactly TOKENPILOT_CANARY_OK.", "--max-turns", "1", "--no-subagents", "--disable-web-search", "--no-memory", "--output-format", "json"];
+
+    expect(await withProviderPath(originalBin, () => runProvider("grok", explicit, paths))).toBe(0);
+    const observed = JSON.parse(fs.readFileSync(observedArguments, "utf8"));
+    expect(observed.slice(-explicit.length)).toEqual(explicit);
+    for (const flag of ["--no-subagents", "--disable-web-search", "--no-memory"]) {
+      expect(observed.filter((argument) => argument === flag)).toHaveLength(1);
+    }
+    cleanup(paths);
+  });
+
+  it("fails open before database creation when an explicit treatment value conflicts", async () => {
+    const paths = temporaryPaths();
+    const invocations = path.join(paths.userHome, "grok-conflict-invocations");
+    const originalBin = writeFakeGrok(paths, `#!/bin/sh
+case " $* " in
+  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
+esac
+printf x >> '${invocations}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+
+    expect(await withProviderPath(originalBin, () => runProvider("grok", ["--reasoning-effort", "high", "--single", "task"], paths))).toBe(0);
+    expect(fs.readFileSync(invocations, "utf8")).toBe("x");
+    expect(fs.existsSync(paths.databaseFile)).toBe(false);
     cleanup(paths);
   });
 
