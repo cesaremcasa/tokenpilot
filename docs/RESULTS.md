@@ -6,6 +6,8 @@ This document is the first manually reviewed TokenPilot research snapshot publis
 
 The Kimi figures below are historical only. The Kimi REST/WebSocket bridge was disabled during the subsequent Codex Security hardening audit, so current Kimi sessions run unchanged and remain envelope-only.
 
+This snapshot predates the 0.4.16 reproducible artifact workflow and the later report safeguards. Those distribution and reporting controls do not revise any historical result in this document.
+
 The next weekly snapshot is planned for Saturday, August 22, 2026. Future rounds should be appended as separate dated sections or files so earlier evidence remains reproducible.
 
 ## Environment

@@ -46,7 +46,7 @@ A decrease in new input is not automatically a reduction. If cache reads rise in
 | `limited` | Correlated complete counters are unavailable. | No reduction estimate. |
 | `incomparable` | Provider, task, policy, basis, or price snapshot does not match. | No reduction estimate. |
 | `cache-shift` | New input moved into cache while the complete total stayed effectively flat. | No reduction estimate. |
-| `preliminary-signal` | Comparable direction exists, but validation requirements are incomplete. | Directional percentage may be shown in detail, never called a reduction; the concise scoreboard shows measured use instead. |
+| `preliminary-signal` | Comparable direction exists, but validation requirements are incomplete. | Observed metrics may be shown, never called a reduction; economy fields stay suppressed and the concise scoreboard shows measured use instead. |
 | `validated-reduction` | Complete matched cohort satisfies every validation rule and avoided tokens are positive. | May report reduction and avoided tokens. |
 
 ## Validation requirements
@@ -59,8 +59,8 @@ A reduction is validated only when all of the following are true:
 - same complete-total basis;
 - same price snapshot, including no-price as a distinct snapshot;
 - at least three measured baselines and three measured treatments;
-- positive avoided tokens and positive median reduction; and
-- cache-shift detector is false.
+- positive avoided tokens and positive median reduction;
+- cache-shift detector is false; and
 - formal quality evidence; the observed outcome safeguard below is not sufficient on its own.
 
 Providers are never summed. Benchmarks are retained as compatibility evidence but excluded from real-work validation.

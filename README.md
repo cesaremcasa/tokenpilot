@@ -5,6 +5,8 @@
 [![Node.js 22.5+](https://img.shields.io/badge/Node.js-22.5%2B-339933.svg)](https://nodejs.org/)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](docs/INSTALLATION.md)
 
+TokenPilot 0.4.16 is the current reproducible release candidate. Its runtime package has no production dependencies; the lockfile, checksum, and SBOM are generated as part of the release-artifact workflow.
+
 TokenPilot is a local-first measurement and optimization layer for the terminal versions of Claude Code, OpenAI Codex, Grok Build, and Kimi Code CLI. Developers keep using the provider commands and provider authentication they already know:
 
 ```sh
@@ -108,6 +110,20 @@ tokenpilot report
 
 Read the full [installation and upgrade guide](docs/INSTALLATION.md) before distributing TokenPilot to another machine. `scripts/update.sh` fast-forwards from `origin/main` and reinstalls without touching local telemetry. Optional automatic updates use the local poller (`scripts/install-auto-update.sh`).
 
+## Verified release artifacts
+
+Release candidates are generated from the lockfile without publishing to npm:
+
+```sh
+npm ci --ignore-scripts
+npm run build
+npm run release:artifact -- --output release-artifacts
+shasum -a 256 -c release-artifacts/tokenpilot-0.4.16.tgz.sha256
+cat release-artifacts/tokenpilot-0.4.16.cdx.json
+```
+
+The artifact script packs the real npm tarball twice and requires identical bytes before writing the tarball, SHA-256 manifest, and deterministic CycloneDX SBOM. The ignored `release-artifacts/` directory is for review or release staging; it is not a user-state directory.
+
 ## Report skills
 
 Each provider receives a read-only local report skill. Skills never inspect the SQLite database directly and never combine providers.
@@ -136,7 +152,7 @@ tokenpilot report --view detail
 tokenpilot report --view diagnostics
 ```
 
-`tokenpilot report` prints a short scoreboard: rolling last 24 hours (from now backward, not a calendar day), then the last 7 days. It shows expected tokens, used tokens, and the savings percentage. USD stays out of the summary. The scoreboard itself is in Portuguese (`últimas 24 horas`, `sem medição ainda`).
+`tokenpilot report` prints a short scoreboard: rolling last 24 hours (from now backward, not a calendar day), then the last 7 days. Preliminary states show measured use; `cache-shift` shows a neutral label and expected → used totals; a reduction headline requires formal quality evidence. USD stays out of the summary. The scoreboard itself is in Portuguese (`últimas 24 horas`, `sem medição ainda`).
 
 Authentication and support commands such as login, logout, help, and version pass through without creating telemetry. `TOKENPILOT_BYPASS=1` is the process-level emergency bypass.
 
@@ -152,7 +168,7 @@ TokenPilot never calls a cache shift a token reduction. It reports these categor
 - token pressure; and
 - a complete cache-aware total.
 
-A reduction is validated only for the same provider, known non-benchmark task type, policy, metric basis, and price snapshot, with at least three measured baselines and three measured treatments. If new input moves into cache while the complete total remains effectively flat, the state is `cache-shift` and TokenPilot emits no percentage, avoided tokens, or avoided USD.
+A reduction is validated only for the same provider, known non-benchmark task type, policy, metric basis, and price snapshot, with at least three measured baselines and three measured treatments plus formal quality evidence. Observed outcomes alone remain preliminary. If new input moves into cache while the complete total remains effectively flat, the state is `cache-shift` and TokenPilot emits no percentage, avoided tokens, or avoided USD.
 
 See [Measurement methodology](docs/MEASUREMENT.md) for formulas, comparison states, pricing rules, and audit requirements.
 
@@ -184,7 +200,7 @@ Read [Security](SECURITY.md), [Architecture](docs/ARCHITECTURE.md), and [Measure
 
 TokenPilot is active research software. The measured reductions above are promising, but provider CLIs and telemetry surfaces can change. Unsupported or uncorrelated sessions are reported as unavailable rather than estimated. Use the bypass controls whenever a task requires the provider's full native behavior.
 
-The npm package remains marked `private` to prevent accidental registry publication. This does not restrict source use: the repository is licensed under MIT.
+The npm package remains marked `private` to prevent accidental registry publication. The tarball is a reviewed release artifact, not an npm registry publication. This does not restrict source use: the repository is licensed under MIT.
 
 ## License
 

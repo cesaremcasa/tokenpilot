@@ -1,6 +1,6 @@
 # Installation and lifecycle
 
-TokenPilot 0.4.15 supports macOS and Linux with Node.js 22.5 or newer. It runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
+TokenPilot 0.4.16 supports macOS and Linux with Node.js 22.5 or newer. It runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
 
 If you opened this repository to use Grok: install **Grok Build** first. TokenPilot only wraps it.
 
@@ -45,6 +45,19 @@ tokenpilot doctor
 ```
 
 The repository is not published to npm. The `private` package flag deliberately prevents an accidental registry release; it does not limit use under the MIT License.
+
+## Verified release artifact
+
+For a reviewed tarball rather than a checkout, generate and verify the release artifacts before installation:
+
+```sh
+npm ci --ignore-scripts
+npm run build
+npm run release:artifact -- --output release-artifacts
+shasum -a 256 -c release-artifacts/tokenpilot-0.4.16.tgz.sha256
+```
+
+The generated CycloneDX file is derived from `package-lock.json`. The release script packs the tarball twice and refuses to continue if the bytes differ. The tarball smoke installs that exact file into a temporary npm consumer, executes the staged private runtime after removing the consumer copy, and uninstalls the temporary launchers. It does not use the source checkout as the runtime artifact.
 
 ## What is installed
 

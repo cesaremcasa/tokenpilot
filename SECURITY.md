@@ -42,6 +42,7 @@ Claude's metrics exporter may include provider-supplied resource attributes tran
 - Provider executables are resolved only as regular executables outside TokenPilot's launcher directory, and their containing directory must not be group- or world-writable.
 - TokenPilot runs as the current user and never requires root.
 - Raw telemetry remains under the current user's private local state directory.
+- Release tarballs must be verified with their adjacent SHA-256 manifest before installation; the accompanying CycloneDX SBOM is derived from the committed lockfile and contains no host paths or generated timestamps.
 
 ## Adapter requirements
 
