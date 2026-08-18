@@ -231,6 +231,12 @@ export interface TreatmentComparison {
   latencyResult?: "faster" | "slower" | "unchanged";
   baselineCompletionRate?: number;
   treatmentCompletionRate?: number;
+  baselineReworkRate?: number;
+  treatmentReworkRate?: number;
+  baselineAbandonmentRate?: number;
+  treatmentAbandonmentRate?: number;
+  /** Outcome-only, content-free quality gate for a reduction claim. */
+  qualityResult: "equivalent" | "degraded" | "unknown";
   pricingProfile?: Pick<PricingProfile, "id" | "version" | "label" | "currency">;
   baselineExpectedUsd?: number;
   treatmentRecordedUsd?: number;

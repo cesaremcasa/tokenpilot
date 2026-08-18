@@ -287,7 +287,55 @@ describe("aggregate reporting", () => {
       retries: 0
     })));
     const [comparison] = treatmentComparisons(sessions);
-    expect(comparison).toMatchObject({ totalSource: "category total", tokenResult: "validated-reduction", tokenReductionPercent: 100 / 120 * 50 });
+    expect(comparison).toMatchObject({
+      totalSource: "category total",
+      qualityResult: "equivalent",
+      baselineCompletionRate: 1,
+      treatmentCompletionRate: 1,
+      baselineReworkRate: 0,
+      treatmentReworkRate: 0,
+      baselineAbandonmentRate: 0,
+      treatmentAbandonmentRate: 0,
+      tokenResult: "validated-reduction",
+      tokenReductionPercent: 100 / 120 * 50
+    });
+  });
+
+  it("keeps an unclassified cohort directional instead of claiming quality equivalence", () => {
+    const sessions = pricedSessions().map((session) => ({ ...session, outcome: "unknown" as const }));
+    const [comparison] = treatmentComparisons(sessions);
+    expect(comparison).toMatchObject({
+      readiness: "ready",
+      qualityResult: "unknown",
+      tokenResult: "preliminary-signal",
+      reason: expect.stringContaining("quality-equivalence unavailable")
+    });
+    expect(reportSummaryMarkdown({
+      generatedAt: "now",
+      since: "then",
+      rows: [],
+      coverage: [{ provider: "codex", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
+      comparisons: [comparison]
+    })).toContain("medição ainda");
+  });
+
+  it("fails the quality gate when treatment outcomes have more rework or abandonment", () => {
+    const sessions = pricedSessions().map((session) => ({
+      ...session,
+      outcome: session.mode === "balanced" ? "rework" as const : "completed" as const
+    }));
+    const [comparison] = treatmentComparisons(sessions);
+    expect(comparison).toMatchObject({
+      readiness: "ready",
+      qualityResult: "degraded",
+      baselineCompletionRate: 1,
+      treatmentCompletionRate: 0,
+      baselineReworkRate: 0,
+      treatmentReworkRate: 1,
+      tokenResult: "preliminary-signal",
+      reason: expect.stringContaining("quality-equivalence failed")
+    });
+    expect(reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons: [comparison] })).toContain("quality degraded");
   });
 
   it("keeps the provider skill summary to the latest policy and one concise block", () => {
@@ -486,6 +534,7 @@ describe("aggregate reporting", () => {
         treatmentSessions: 0,
         readiness: "unavailable" as const,
         tokenResult: "incomparable" as const,
+        qualityResult: "unknown" as const,
         reason: "measured sessions exist, but no matched baseline and treatment cohort exists",
         baselineSessionIds: ["cd67060e"],
         treatmentSessionIds: []
