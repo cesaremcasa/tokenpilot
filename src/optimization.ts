@@ -52,7 +52,17 @@ export interface OptimizationPlan {
   unavailableReason?: string;
 }
 
+export interface TreatmentMergeResult {
+  args: string[];
+  applied: boolean;
+  deduplicated: boolean;
+  conflicts: string[];
+  omitted: string[];
+  reason?: string;
+}
+
 interface TreatmentArgumentSchema {
+  provider: Provider;
   key: string;
   flags: string[];
   takesValue: boolean;
@@ -66,22 +76,54 @@ interface ParsedTreatmentArgument {
 }
 
 const TREATMENT_ARGUMENT_SCHEMAS: TreatmentArgumentSchema[] = [
-  { key: "effort", flags: ["--effort", "--reasoning-effort"], takesValue: true },
-  { key: "tools", flags: ["--tools"], takesValue: true },
-  { key: "config", flags: ["--config", "-c"], takesValue: true },
-  { key: "append-system-prompt", flags: ["--append-system-prompt"], takesValue: true },
-  { key: "system-prompt-override", flags: ["--system-prompt-override"], takesValue: true },
-  { key: "no-chrome", flags: ["--no-chrome"], takesValue: false },
-  { key: "exclude-dynamic-system-prompt-sections", flags: ["--exclude-dynamic-system-prompt-sections"], takesValue: false },
-  { key: "verbatim", flags: ["--verbatim"], takesValue: false },
-  { key: "no-subagents", flags: ["--no-subagents"], takesValue: false },
-  { key: "no-memory", flags: ["--no-memory"], takesValue: false },
-  { key: "disable-web-search", flags: ["--disable-web-search"], takesValue: false },
-  { key: "no-plan", flags: ["--no-plan"], takesValue: false }
+  { provider: "claude", key: "effort", flags: ["--effort"], takesValue: true },
+  { provider: "claude", key: "tools", flags: ["--tools"], takesValue: true },
+  { provider: "claude", key: "append-system-prompt", flags: ["--append-system-prompt"], takesValue: true },
+  { provider: "claude", key: "no-chrome", flags: ["--no-chrome"], takesValue: false },
+  { provider: "claude", key: "exclude-dynamic-system-prompt-sections", flags: ["--exclude-dynamic-system-prompt-sections"], takesValue: false },
+  { provider: "claude", key: "prompt", flags: ["-p", "--print", "--prompt"], takesValue: true },
+  { provider: "claude", key: "model", flags: ["--model"], takesValue: true },
+  { provider: "claude", key: "output-format", flags: ["--output-format"], takesValue: true },
+  { provider: "claude", key: "max-turns", flags: ["--max-turns"], takesValue: true },
+  { provider: "claude", key: "settings", flags: ["--settings"], takesValue: true },
+  { provider: "claude", key: "add-dir", flags: ["--add-dir"], takesValue: true },
+  { provider: "claude", key: "permission-mode", flags: ["--permission-mode"], takesValue: true },
+  { provider: "codex", key: "config", flags: ["--config", "-c"], takesValue: true },
+  { provider: "codex", key: "model", flags: ["--model", "-m"], takesValue: true },
+  { provider: "codex", key: "profile", flags: ["--profile"], takesValue: true },
+  { provider: "codex", key: "sandbox", flags: ["--sandbox"], takesValue: true },
+  { provider: "codex", key: "ask-for-approval", flags: ["--ask-for-approval"], takesValue: true },
+  { provider: "codex", key: "output-last-message", flags: ["--output-last-message"], takesValue: true },
+  { provider: "codex", key: "output-schema", flags: ["--output-schema"], takesValue: true },
+  { provider: "codex", key: "color", flags: ["--color"], takesValue: true },
+  { provider: "codex", key: "cd", flags: ["--cd", "-C"], takesValue: true },
+  { provider: "codex", key: "image", flags: ["--image"], takesValue: true },
+  { provider: "codex", key: "max-turns", flags: ["--max-turns"], takesValue: true },
+  { provider: "codex", key: "output-format", flags: ["--output-format"], takesValue: true },
+  { provider: "grok", key: "effort", flags: ["--effort", "--reasoning-effort"], takesValue: true },
+  { provider: "grok", key: "tools", flags: ["--tools"], takesValue: true },
+  { provider: "grok", key: "system-prompt-override", flags: ["--system-prompt-override"], takesValue: true },
+  { provider: "grok", key: "verbatim", flags: ["--verbatim"], takesValue: false },
+  { provider: "grok", key: "no-subagents", flags: ["--no-subagents"], takesValue: false },
+  { provider: "grok", key: "no-memory", flags: ["--no-memory"], takesValue: false },
+  { provider: "grok", key: "disable-web-search", flags: ["--disable-web-search"], takesValue: false },
+  { provider: "grok", key: "no-plan", flags: ["--no-plan"], takesValue: false },
+  { provider: "grok", key: "single", flags: ["--single", "-p", "--prompt"], takesValue: true },
+  { provider: "grok", key: "prompt-file", flags: ["--prompt-file"], takesValue: true },
+  { provider: "grok", key: "prompt-json", flags: ["--prompt-json"], takesValue: true },
+  { provider: "grok", key: "json-schema", flags: ["--json-schema"], takesValue: true },
+  { provider: "grok", key: "model", flags: ["--model"], takesValue: true },
+  { provider: "grok", key: "cwd", flags: ["--cwd"], takesValue: true },
+  { provider: "grok", key: "max-turns", flags: ["--max-turns"], takesValue: true },
+  { provider: "grok", key: "output-format", flags: ["--output-format"], takesValue: true }
 ];
 
-function argumentMatch(token: string): { schema: TreatmentArgumentSchema; inlineValue?: string } | undefined {
-  for (const schema of TREATMENT_ARGUMENT_SCHEMAS) {
+function schemasFor(provider: Provider): TreatmentArgumentSchema[] {
+  return TREATMENT_ARGUMENT_SCHEMAS.filter((schema) => schema.provider === provider);
+}
+
+function argumentMatch(token: string, schemas: TreatmentArgumentSchema[]): { schema: TreatmentArgumentSchema; inlineValue?: string } | undefined {
+  for (const schema of schemas) {
     for (const flag of schema.flags) {
       if (token === flag) return { schema };
       if (token.startsWith(`${flag}=`)) return { schema, inlineValue: token.slice(flag.length + 1) };
@@ -90,12 +132,12 @@ function argumentMatch(token: string): { schema: TreatmentArgumentSchema; inline
   return undefined;
 }
 
-function parseTreatmentArguments(args: string[], strict: boolean): ParsedTreatmentArgument[] {
+function parseTreatmentArguments(args: string[], schemas: TreatmentArgumentSchema[], strict: boolean): ParsedTreatmentArgument[] {
   const parsed: ParsedTreatmentArgument[] = [];
   for (let index = 0; index < args.length;) {
     const token = args[index];
     if (token === "--") break;
-    const match = argumentMatch(token);
+    const match = argumentMatch(token, schemas);
     if (!match) {
       index += 1;
       continue;
@@ -123,14 +165,11 @@ function parseTreatmentArguments(args: string[], strict: boolean): ParsedTreatme
   return parsed;
 }
 
-function argumentIdentity(argument: ParsedTreatmentArgument): string {
+function argumentIdentity(argument: ParsedTreatmentArgument): string | undefined {
   if (argument.schema.key !== "config") return argument.schema.key;
   const value = argument.value ?? "";
   const separator = value.indexOf("=");
-  if (separator <= 0) {
-    if (argument.ambiguous) throw new Error("Ambiguous Codex config argument");
-    throw new Error("Codex config argument must include a key and value");
-  }
+  if (separator <= 0) return undefined;
   return `${argument.schema.key}:${value.slice(0, separator)}`;
 }
 
@@ -141,31 +180,49 @@ function argumentIdentity(argument: ParsedTreatmentArgument): string {
  * that happen to resemble flags. An incomplete or ambiguous known argument
  * throws so the launcher can fail open to the original invocation.
  */
-export function mergeTreatmentArguments(explicitArgs: string[], injectedArgs: string[]): string[] {
-  if (injectedArgs.length === 0) return [...explicitArgs];
-  const injected = parseTreatmentArguments(injectedArgs, true);
-  const explicit = parseTreatmentArguments(explicitArgs, false);
+export function mergeTreatmentArguments(provider: Provider, explicitArgs: string[], injectedArgs: string[]): TreatmentMergeResult {
+  if (injectedArgs.length === 0) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [], omitted: [] };
+  const schemas = schemasFor(provider);
+  let injected: ParsedTreatmentArgument[];
+  let explicit: ParsedTreatmentArgument[];
+  try {
+    injected = parseTreatmentArguments(injectedArgs, schemas, true);
+    explicit = parseTreatmentArguments(explicitArgs, schemas, false);
+  } catch (error) {
+    return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [error instanceof Error ? error.message : "ambiguous treatment arguments"], omitted: injectedArgs, reason: "treatment argument validation failed" };
+  }
   const explicitByIdentity = new Map<string, ParsedTreatmentArgument[]>();
   for (const argument of explicit) {
-    if (argument.ambiguous) throw new Error("Ambiguous explicit treatment argument");
+    if (argument.ambiguous) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [argument.tokens[0] ?? "ambiguous"], omitted: injectedArgs, reason: "ambiguous explicit treatment argument" };
     const identity = argumentIdentity(argument);
+    if (!identity) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [argument.tokens[0] ?? "ambiguous"], omitted: injectedArgs, reason: "ambiguous Codex config argument" };
     explicitByIdentity.set(identity, [...(explicitByIdentity.get(identity) ?? []), argument]);
   }
   const selected: string[] = [];
   const injectedByIdentity = new Map<string, ParsedTreatmentArgument>();
+  const omitted: string[] = [];
+  const conflicts: string[] = [];
   for (const argument of injected) {
     const identity = argumentIdentity(argument);
+    if (!identity) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [argument.tokens[0] ?? "invalid"], omitted: injectedArgs, reason: "invalid injected treatment argument" };
     const prior = injectedByIdentity.get(identity);
     if (prior) {
-      if (prior.tokens.join("\0") !== argument.tokens.join("\0")) throw new Error(`Conflicting injected treatment argument: ${identity}`);
+      if (prior.tokens.join("\0") !== argument.tokens.join("\0")) conflicts.push(identity);
       continue;
     }
     injectedByIdentity.set(identity, argument);
-    // Any explicit occurrence owns this component, whether it matches or
-    // intentionally overrides the treatment value. Preserve it in place.
-    if (!explicitByIdentity.has(identity)) selected.push(...argument.tokens);
+    const explicitMatches = explicitByIdentity.get(identity) ?? [];
+    if (explicitMatches.length === 0) {
+      selected.push(...argument.tokens);
+      continue;
+    }
+    const explicitValues = new Set(explicitMatches.map((match) => match.value));
+    if (argument.schema.takesValue && (explicitValues.size > 1 || [...explicitValues][0] !== argument.value)) conflicts.push(identity);
+    else if (!argument.schema.takesValue && explicitMatches.some((match) => match.value !== undefined)) conflicts.push(identity);
+    else omitted.push(identity);
   }
-  return [...selected, ...explicitArgs];
+  if (conflicts.length > 0) return { args: [...explicitArgs], applied: false, deduplicated: false, conflicts: [...new Set(conflicts)], omitted: [...injectedByIdentity.keys()], reason: "explicit treatment value conflicts with the fixed policy" };
+  return { args: [...selected, ...explicitArgs], applied: true, deduplicated: omitted.length > 0, conflicts: [], omitted };
 }
 
 const NONE: OptimizationPlan = { args: [], applied: false };

@@ -222,6 +222,27 @@ process.exit(0);
     cleanup(paths);
   });
 
+  it("fails open before database creation when an explicit treatment value conflicts", async () => {
+    const paths = temporaryPaths();
+    const invocations = path.join(paths.userHome, "grok-conflict-invocations");
+    const originalBin = writeFakeGrok(paths, `#!/bin/sh
+case " $* " in
+  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
+esac
+printf x >> '${invocations}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+
+    expect(await withProviderPath(originalBin, () => runProvider("grok", ["--reasoning-effort", "high", "--single", "task"], paths))).toBe(0);
+    expect(fs.readFileSync(invocations, "utf8")).toBe("x");
+    expect(fs.existsSync(paths.databaseFile)).toBe(false);
+    cleanup(paths);
+  });
+
   it("injects the complete Claude v7 latency policy without retaining its fixed instruction", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "claude-arguments");

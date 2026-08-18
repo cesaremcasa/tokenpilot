@@ -248,6 +248,11 @@ export class TelemetryDatabase {
     return result.changes === 1;
   }
 
+  /** Remove a run that was created only for a setup attempt before launch. */
+  deleteRun(id: string): void {
+    this.db.prepare("DELETE FROM runs WHERE id = ?").run(id);
+  }
+
   getRun(id: string): RunRecord | undefined {
     const row = this.db.prepare(`SELECT id, provider, mode, started_at AS startedAt, ended_at AS endedAt,
       exit_code AS exitCode, cli_version AS cliVersion, optimization_applied AS optimizationApplied,

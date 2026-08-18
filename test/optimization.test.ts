@@ -105,42 +105,45 @@ describe("version-gated balanced optimization", () => {
     const help = "--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>";
     const plan = planFromHelp("grok", "reduce", help);
     const explicit = ["--single", "Return exactly TOKENPILOT_CANARY_OK.", "--max-turns", "1", "--no-subagents", "--disable-web-search", "--no-memory", "--output-format", "json"];
-    const merged = mergeTreatmentArguments(explicit, [...plan.args, ...(plan.headlessArgs ?? [])]);
-    expect(merged.slice(-explicit.length)).toEqual(explicit);
+    const merged = mergeTreatmentArguments("grok", explicit, [...plan.args, ...(plan.headlessArgs ?? [])]);
+    expect(merged).toMatchObject({ applied: true, deduplicated: true, conflicts: [] });
+    const mergedArgs = merged.args;
+    expect(mergedArgs.slice(-explicit.length)).toEqual(explicit);
     for (const flag of ["--no-subagents", "--disable-web-search", "--no-memory"]) {
-      expect(merged.filter((argument) => argument === flag)).toHaveLength(1);
+      expect(mergedArgs.filter((argument) => argument === flag)).toHaveLength(1);
     }
-    expect(merged).toContain("--tools");
+    expect(mergedArgs).toContain("--tools");
   });
 
   it("lets explicit value flags win across aliases and --flag=value forms", () => {
-    const merged = mergeTreatmentArguments(
+    const merged = mergeTreatmentArguments("codex",
       ["--effort=high", "--config=developer_instructions=--no-memory", "-c", "model_verbosity=high", "task --no-subagents"],
       ["--reasoning-effort", "low", "--config", "developer_instructions=low", "--config", "model_verbosity=low", "--no-memory"]
     );
-    expect(merged).toEqual(["--no-memory", "--effort=high", "--config=developer_instructions=--no-memory", "-c", "model_verbosity=high", "task --no-subagents"]);
+    expect(merged).toMatchObject({ applied: false, conflicts: ["config:developer_instructions", "config:model_verbosity"] });
+    expect(merged.args).toEqual(["--effort=high", "--config=developer_instructions=--no-memory", "-c", "model_verbosity=high", "task --no-subagents"]);
+    expect(mergeTreatmentArguments("grok", ["--effort=high"], ["--reasoning-effort", "low"])).toMatchObject({ applied: false, conflicts: ["effort"] });
   });
 
-  it("deduplicates Claude value and boolean controls without dropping prompt values", () => {
+  it("fails open for conflicting Claude value overrides", () => {
     const plan = planFromHelp("claude", "balanced", "--effort <level> --tools <tools> --append-system-prompt <prompt> --no-chrome --exclude-dynamic-system-prompt-sections");
     const explicit = ["--tools=Read", "--append-system-prompt", "--no-chrome", "task"];
-    const merged = mergeTreatmentArguments(explicit, plan.args);
-    expect(merged.slice(-explicit.length)).toEqual(explicit);
-    expect(merged).not.toContain(CLAUDE_CORE_TOOLS);
-    expect(merged).toEqual(["--effort", "low", "--no-chrome", "--exclude-dynamic-system-prompt-sections", "--tools=Read", "--append-system-prompt", "--no-chrome", "task"]);
-    expect(merged).toContain("--exclude-dynamic-system-prompt-sections");
+    const merged = mergeTreatmentArguments("claude", explicit, plan.args);
+    expect(merged.applied).toBe(false);
+    expect(merged.args).toEqual(explicit);
+    expect(merged).toMatchObject({ conflicts: ["tools", "append-system-prompt"] });
   });
 
   it("does not mistake a prompt value that resembles a flag for an explicit boolean", () => {
-    const merged = mergeTreatmentArguments(
-      ["--system-prompt-override", "--no-subagents", "prompt --disable-web-search"],
-      ["--system-prompt-override", GROK_TOKEN_EFFICIENCY_INSTRUCTION, "--no-subagents", "--disable-web-search"]
+    const merged = mergeTreatmentArguments("grok",
+      ["--single", "--no-subagents", "prompt --disable-web-search"],
+      ["--no-subagents", "--disable-web-search"]
     );
-    expect(merged).toEqual(["--no-subagents", "--disable-web-search", "--system-prompt-override", "--no-subagents", "prompt --disable-web-search"]);
+    expect(merged.args).toEqual(["--no-subagents", "--disable-web-search", "--single", "--no-subagents", "prompt --disable-web-search"]);
   });
 
   it("fails closed to the launcher when an explicit value-taking flag is incomplete", () => {
-    expect(() => mergeTreatmentArguments(["--config"], ["--config", "model_verbosity=low"])).toThrow("Ambiguous explicit treatment argument");
+    expect(mergeTreatmentArguments("codex", ["--config"], ["--config", "model_verbosity=low"])).toMatchObject({ applied: false, conflicts: ["--config"], reason: "ambiguous explicit treatment argument" });
   });
 
   it("fails open when the exact CLI rejects the complete fixed policy", () => {
