@@ -15,6 +15,7 @@ Describe the user-visible change and why it is needed.
 - [ ] `npm run check`
 - [ ] `npm test`
 - [ ] `npm run build`
+- [ ] `npm run test:install`
 - [ ] `git diff --check`
 - [ ] Documentation and changelog updated
 

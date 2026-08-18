@@ -19,6 +19,7 @@ npm ci --ignore-scripts
 npm run check
 npm test
 npm run build
+npm run test:install
 ```
 
 Node.js 22.5 or newer is required. Tests must use synthetic, content-free fixtures.

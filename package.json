@@ -33,6 +33,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "test:install": "node scripts/install-smoke.mjs",
     "dev": "tsx src/cli.ts"
   },
   "devDependencies": {
