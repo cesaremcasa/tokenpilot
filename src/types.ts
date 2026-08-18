@@ -5,6 +5,8 @@ export const RUN_MODES = ["observe", "reduce", "balanced", "deep", "off"] as con
 export type RunMode = (typeof RUN_MODES)[number];
 export type TaskKind = "feature" | "bugfix" | "research" | "operations" | "benchmark" | "other" | "unknown";
 export type TaskOutcome = "completed" | "rework" | "abandoned" | "unknown";
+export type QualityObservation = "observed-not-degraded" | "degraded" | "unknown";
+export type QualityEvidence = "observed-outcomes" | "formal-equivalence";
 export type CollectionState = "pending" | "collected" | "unavailable";
 export const COLLECTION_UNAVAILABLE_REASONS = [
   "collection-pending",
@@ -231,6 +233,16 @@ export interface TreatmentComparison {
   latencyResult?: "faster" | "slower" | "unchanged";
   baselineCompletionRate?: number;
   treatmentCompletionRate?: number;
+  baselineReworkRate?: number;
+  treatmentReworkRate?: number;
+  baselineAbandonmentRate?: number;
+  treatmentAbandonmentRate?: number;
+  /** Outcome-only observation; it is not statistical equivalence evidence. */
+  qualityObservation?: QualityObservation;
+  /** Formal evidence is intentionally unavailable in this PR. */
+  qualityEvidence?: QualityEvidence;
+  /** @deprecated Source compatibility for pre-remediation report consumers. */
+  qualityResult?: "equivalent" | "degraded" | "unknown";
   pricingProfile?: Pick<PricingProfile, "id" | "version" | "label" | "currency">;
   baselineExpectedUsd?: number;
   treatmentRecordedUsd?: number;

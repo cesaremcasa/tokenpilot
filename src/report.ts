@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { AggregateRow, AuditableSession, MeasurementCoverage, Provider, SessionSummary, TreatmentComparison } from "./types.js";
+import type { AggregateRow, AuditableSession, MeasurementCoverage, Provider, QualityObservation, SessionSummary, TreatmentComparison } from "./types.js";
 import { TelemetryDatabase } from "./database.js";
 import { assertSafeStateFile, hasSafePrivateDirectory, type TokenPilotPaths } from "./paths.js";
 
@@ -142,9 +142,64 @@ function apiEquivalentUsd(session: SessionSummary): number | undefined {
     + session.reasoning * (rates.reasoningUsdPerMillion ?? 0)) / units;
 }
 
-function completionRate(sessions: SessionSummary[]): number | undefined {
+type QualityAssessment = Pick<TreatmentComparison, "qualityObservation" | "qualityEvidence" | "baselineCompletionRate" | "treatmentCompletionRate" | "baselineReworkRate" | "treatmentReworkRate" | "baselineAbandonmentRate" | "treatmentAbandonmentRate">;
+
+function outcomeRate(sessions: SessionSummary[], outcome: "completed" | "rework" | "abandoned"): number | undefined {
   const classified = sessions.filter((session) => session.outcome !== "unknown");
-  return classified.length === 0 ? undefined : classified.filter((session) => session.outcome === "completed").length / classified.length;
+  return classified.length === 0 ? undefined : classified.filter((session) => session.outcome === outcome).length / classified.length;
+}
+
+/**
+ * Quality is deliberately derived from the closed outcome vocabulary only.
+ * Unknown outcomes fail open to an unverified result; they never become a
+ * successful or failed quality claim and never expose provider content.
+ */
+function qualityAssessment(baseline: SessionSummary[], treatment: SessionSummary[]): QualityAssessment {
+  const knownOutcomes = new Set(["completed", "rework", "abandoned"]);
+  const baselineCompletionRate = outcomeRate(baseline, "completed");
+  const treatmentCompletionRate = outcomeRate(treatment, "completed");
+  const baselineReworkRate = outcomeRate(baseline, "rework");
+  const treatmentReworkRate = outcomeRate(treatment, "rework");
+  const baselineAbandonmentRate = outcomeRate(baseline, "abandoned");
+  const treatmentAbandonmentRate = outcomeRate(treatment, "abandoned");
+  if (![...baseline, ...treatment].every((session) => knownOutcomes.has(session.outcome))) {
+    return {
+      qualityObservation: "unknown",
+      qualityEvidence: "observed-outcomes",
+      baselineCompletionRate,
+      treatmentCompletionRate,
+      baselineReworkRate,
+      treatmentReworkRate,
+      baselineAbandonmentRate,
+      treatmentAbandonmentRate
+    };
+  }
+  if ([baselineCompletionRate, treatmentCompletionRate, baselineReworkRate, treatmentReworkRate, baselineAbandonmentRate, treatmentAbandonmentRate]
+    .some((value) => value === undefined)) {
+    return {
+      qualityObservation: "unknown",
+      qualityEvidence: "observed-outcomes",
+      baselineCompletionRate,
+      treatmentCompletionRate,
+      baselineReworkRate,
+      treatmentReworkRate,
+      baselineAbandonmentRate,
+      treatmentAbandonmentRate
+    };
+  }
+  const observedNotDegraded = treatmentCompletionRate! >= baselineCompletionRate!
+    && treatmentReworkRate! <= baselineReworkRate!
+    && treatmentAbandonmentRate! <= baselineAbandonmentRate!;
+  return {
+    qualityObservation: observedNotDegraded ? "observed-not-degraded" : "degraded",
+    qualityEvidence: "observed-outcomes",
+    baselineCompletionRate,
+    treatmentCompletionRate,
+    baselineReworkRate,
+    treatmentReworkRate,
+    baselineAbandonmentRate,
+    treatmentAbandonmentRate
+  };
 }
 
 function cacheShift(baseline: SessionSummary[], treatment: SessionSummary[], baselineTotal: number, treatmentTotal: number): boolean {
@@ -214,11 +269,12 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const estimatedTokensAvoided = baselineExpectedTreatmentTokens - treatmentRecordedTokens;
     const tokenReductionPercent = baselineMedianTotal === 0 ? 0 : ((baselineMedianTotal - treatmentMedianTotal) / baselineMedianTotal) * 100;
     const isCacheShift = cacheShift(baseline, treatment, baselineMedianTotal, treatmentMedianTotal);
+    const quality = qualityAssessment(baseline, treatment);
     const classifiedWork = taskKind !== "unknown" && taskKind !== "benchmark";
     const readiness = classifiedWork && baseline.length >= MIN_VALIDATED_SESSIONS_PER_ARM && treatment.length >= MIN_VALIDATED_SESSIONS_PER_ARM ? "ready" as const : "preliminary" as const;
     const tokenResult: TreatmentComparison["tokenResult"] = isCacheShift
       ? "cache-shift"
-      : readiness === "ready" && estimatedTokensAvoided > 0 && tokenReductionPercent > 0 ? "validated-reduction" : "preliminary-signal";
+      : readiness === "ready" && quality.qualityEvidence === "formal-equivalence" && estimatedTokensAvoided > 0 && tokenReductionPercent > 0 ? "validated-reduction" : "preliminary-signal";
     const baselineUsd = baseline.map(apiEquivalentUsd);
     const treatmentUsd = treatment.map(apiEquivalentUsd);
     const hasComparableUsd = baselineUsd.every((value): value is number => value !== undefined)
@@ -237,6 +293,7 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const latencyDeltaPercent = baselineMedianDurationSeconds === 0 ? 0 : (latencyDeltaSeconds / baselineMedianDurationSeconds) * 100;
     const latencyResult: TreatmentComparison["latencyResult"] = latencyDeltaSeconds < 0 ? "faster" : latencyDeltaSeconds > 0 ? "slower" : "unchanged";
     const attachedProfile = treatment[0].pricingProfile;
+    const emitsEconomy = tokenResult === "validated-reduction";
     return [{
       provider,
       taskKind,
@@ -259,11 +316,13 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       treatmentMedianReasoning: numberMedian(treatment, "reasoning"),
       baselineMedianComparableTotal: baselineMedianTotal,
       treatmentMedianComparableTotal: treatmentMedianTotal,
-      baselineExpectedTreatmentTokens,
+      // Cache-shift retains the neutral expected/used evidence; all other
+      // counterfactual economy fields require a formally validated result.
+      baselineExpectedTreatmentTokens: emitsEconomy || isCacheShift ? baselineExpectedTreatmentTokens : undefined,
       treatmentRecordedTokens,
-      estimatedTokensAvoided: isCacheShift ? undefined : estimatedTokensAvoided,
-      tokenReductionPercent: isCacheShift ? undefined : tokenReductionPercent,
-      tokenPressureDeltaPercent: isCacheShift ? undefined : median(baselinePressure) === 0 ? 0 : ((median(treatmentPressure) - median(baselinePressure)) / median(baselinePressure)) * 100,
+      estimatedTokensAvoided: emitsEconomy ? estimatedTokensAvoided : undefined,
+      tokenReductionPercent: emitsEconomy ? tokenReductionPercent : undefined,
+      tokenPressureDeltaPercent: emitsEconomy ? median(baselinePressure) === 0 ? 0 : ((median(treatmentPressure) - median(baselinePressure)) / median(baselinePressure)) * 100 : undefined,
       baselineIqrTokenPressure: interquartileRange(baselineTotals),
       treatmentIqrTokenPressure: interquartileRange(treatmentTotals),
       baselineMedianDurationSeconds,
@@ -271,16 +330,23 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       latencyDeltaSeconds,
       latencyDeltaPercent,
       latencyResult,
-      baselineCompletionRate: completionRate(baseline),
-      treatmentCompletionRate: completionRate(treatment),
+      ...quality,
       pricingProfile: attachedProfile ? { id: attachedProfile.id, version: attachedProfile.version, label: attachedProfile.label, currency: attachedProfile.currency } : undefined,
-      baselineExpectedUsd: isCacheShift ? undefined : baselineExpectedUsd,
-      treatmentRecordedUsd: isCacheShift ? undefined : treatmentRecordedUsd,
-      estimatedUsdAvoided: isCacheShift ? undefined : rawEstimatedUsdAvoided,
-      usdReductionPercent: isCacheShift ? undefined : usdReductionPercent,
+      baselineExpectedUsd: emitsEconomy ? baselineExpectedUsd : undefined,
+      treatmentRecordedUsd: emitsEconomy ? treatmentRecordedUsd : undefined,
+      estimatedUsdAvoided: emitsEconomy ? rawEstimatedUsdAvoided : undefined,
+      usdReductionPercent: emitsEconomy ? usdReductionPercent : undefined,
       readiness,
       tokenResult,
-      reason: isCacheShift ? "new input moved into cache reads while the complete total stayed flat" : tokenResult === "validated-reduction" ? undefined : "sample is directional and does not satisfy validated-reduction criteria",
+      reason: isCacheShift
+        ? "new input moved into cache reads while the complete total stayed flat"
+        : tokenResult === "validated-reduction"
+          ? undefined
+          : quality.qualityObservation === "unknown"
+            ? "quality observation unavailable; classify every matched session as completed, rework, or abandoned"
+            : quality.qualityObservation === "degraded"
+              ? "observed quality degraded; treatment outcomes are worse than baseline"
+              : "sample is directional; formal quality evidence is unavailable",
       baselineSessionIds: baseline.map((session) => session.id),
       treatmentSessionIds: treatment.map((session) => session.id)
     }];
@@ -307,6 +373,8 @@ function stateComparison(
     treatmentSessions: treatment.length,
     readiness: "unavailable",
     tokenResult,
+    qualityObservation: "unknown",
+    qualityEvidence: "observed-outcomes",
     reason,
     baselineSessionIds: baseline.map((session) => session.id),
     treatmentSessionIds: treatment.map((session) => session.id)
@@ -345,12 +413,22 @@ function latency(comparison: TreatmentComparison): string {
   return `${seconds} (${comparison.latencyDeltaPercent > 0 ? "+" : ""}${comparison.latencyDeltaPercent.toFixed(1)}%; ${comparison.latencyResult})`;
 }
 
+function qualityObservation(comparison: TreatmentComparison): QualityObservation {
+  if (comparison.qualityObservation) return comparison.qualityObservation;
+  if (comparison.qualityResult === "equivalent") return "observed-not-degraded";
+  return comparison.qualityResult ?? "unknown";
+}
+
 function comparisonResult(comparison: TreatmentComparison): string {
   if (comparison.tokenResult === "limited") return `limited measurement — ${comparison.reason ?? "numeric total unavailable"}`;
   if (comparison.tokenResult === "incomparable") return `no comparable base — ${comparison.reason ?? "cohorts do not match"}`;
   if (comparison.tokenResult === "cache-shift") return "cache-shift — no reduction emitted";
-  if (comparison.tokenResult === "validated-reduction") return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated reduction`;
-  return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% preliminary signal — not an economy`;
+  const quality = qualityObservation(comparison) === "observed-not-degraded"
+    ? "quality observed not degraded"
+    : qualityObservation(comparison) === "degraded" ? "quality degraded" : "quality unverified";
+  if (comparison.tokenResult === "validated-reduction") return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated reduction (${quality})`;
+  const percent = comparison.tokenReductionPercent === undefined ? "" : `${comparison.tokenReductionPercent.toFixed(1)}% `;
+  return `${percent}preliminary signal — not an economy (${quality})`;
 }
 
 function categoryLine(comparison: TreatmentComparison): string {
@@ -428,7 +506,7 @@ function windowScore(report: Report, provider: Provider): { headline: string; de
   const hasTotals = expected !== undefined && used !== undefined && expected > 0;
   if (comparison && hasTotals && comparison.tokenResult === "cache-shift") {
     return {
-      headline: scoreboardPercent(0),
+      headline: "cache-shift",
       detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
     };
   }
@@ -539,7 +617,7 @@ export function reportDiagnosticsMarkdown(report: Report): string {
         : comparison.reason?.includes("mixed metric bases")
           ? "provider-reported and category totals are both available but cannot be mixed"
           : "provider total missing or unverified; category total unavailable";
-    lines.push(`- ${comparison.provider}/${comparison.taskKind}/${comparison.optimizationProfile}: ${comparison.tokenResult}; ${comparison.reason ?? "matched cohorts"}; ${metric}.`);
+    lines.push(`- ${comparison.provider}/${comparison.taskKind}/${comparison.optimizationProfile}: ${comparison.tokenResult}; quality ${qualityObservation(comparison)}; ${comparison.reason ?? "matched cohorts"}; ${metric}.`);
   }
   if (report.comparisons.length === 0) lines.push("- No treatment cohort is available.");
   lines.push("", "## Per-session unavailable reasons", "");
