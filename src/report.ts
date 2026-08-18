@@ -38,6 +38,8 @@ function emptyReport(since: string): Report {
   return { generatedAt: new Date().toISOString(), since, rows: [], coverage: [], comparisons: [], sessions: [] };
 }
 
+const ALL_RECORDED_DATA_SINCE = "1970-01-01T00:00:00.000Z";
+
 function usesLegacyWalDatabase(databaseFile: string): boolean {
   const descriptor = fs.openSync(databaseFile, "r");
   try {
@@ -49,10 +51,7 @@ function usesLegacyWalDatabase(databaseFile: string): boolean {
   }
 }
 
-/** Read-only report construction. It never creates, migrates, or journals telemetry. */
-export function buildReport(paths: TokenPilotPaths, days: number): Report {
-  if (!Number.isFinite(days) || days <= 0 || days > 365) throw new Error("--days must be between 1 and 365");
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1_000).toISOString();
+function buildReportSince(paths: TokenPilotPaths, since: string): Report {
   if (!fs.existsSync(paths.databaseFile)) return emptyReport(since);
   if (!hasSafePrivateDirectory(paths, paths.dataDir)) throw new Error("TokenPilot telemetry directory is unsafe");
   assertSafeStateFile(paths, paths.databaseFile);
@@ -76,6 +75,17 @@ export function buildReport(paths: TokenPilotPaths, days: number): Report {
   } finally {
     database.close();
   }
+}
+
+/** Read-only report construction. It never creates, migrates, or journals telemetry. */
+export function buildReport(paths: TokenPilotPaths, days: number): Report {
+  if (!Number.isFinite(days) || days <= 0 || days > 365) throw new Error("--days must be between 1 and 365");
+  return buildReportSince(paths, new Date(Date.now() - days * 24 * 60 * 60 * 1_000).toISOString());
+}
+
+/** Skill summaries use the latest comparable measurement, regardless of rolling-window boundaries. */
+export function buildLatestSummaryReport(paths: TokenPilotPaths): Report {
+  return buildReportSince(paths, ALL_RECORDED_DATA_SINCE);
 }
 
 function integer(value: number): string {
@@ -102,6 +112,10 @@ function interquartileRange(values: number[]): number {
 
 function sum(values: number[]): number {
   return values.reduce((total, value) => total + value, 0);
+}
+
+function latestStartedAt(sessions: SessionSummary[]): string | undefined {
+  return sessions.map((session) => session.startedAt).filter((value): value is string => value !== undefined).sort().at(-1);
 }
 
 function tokenPressure(session: SessionSummary): number {
@@ -302,6 +316,7 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       totalSource,
       baselineSessions: baseline.length,
       treatmentSessions: treatment.length,
+      latestTreatmentAt: latestStartedAt(treatment),
       baselineMedianTokenPressure: median(baselinePressure),
       treatmentMedianTokenPressure: median(treatmentPressure),
       baselineMedianInputNew: numberMedian(baseline, "inputNew"),
@@ -316,13 +331,14 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       treatmentMedianReasoning: numberMedian(treatment, "reasoning"),
       baselineMedianComparableTotal: baselineMedianTotal,
       treatmentMedianComparableTotal: treatmentMedianTotal,
-      // Cache-shift retains the neutral expected/used evidence; all other
-      // counterfactual economy fields require a formally validated result.
-      baselineExpectedTreatmentTokens: emitsEconomy || isCacheShift ? baselineExpectedTreatmentTokens : undefined,
+      // Token comparisons remain visible as observed cache-aware measurements.
+      // Formal quality evidence gates financial/economy claims, not the raw
+      // percentage the provider skill exists to report.
+      baselineExpectedTreatmentTokens,
       treatmentRecordedTokens,
-      estimatedTokensAvoided: emitsEconomy ? estimatedTokensAvoided : undefined,
-      tokenReductionPercent: emitsEconomy ? tokenReductionPercent : undefined,
-      tokenPressureDeltaPercent: emitsEconomy ? median(baselinePressure) === 0 ? 0 : ((median(treatmentPressure) - median(baselinePressure)) / median(baselinePressure)) * 100 : undefined,
+      estimatedTokensAvoided: isCacheShift ? undefined : estimatedTokensAvoided,
+      tokenReductionPercent: isCacheShift ? undefined : tokenReductionPercent,
+      tokenPressureDeltaPercent: isCacheShift ? undefined : median(baselinePressure) === 0 ? 0 : ((median(treatmentPressure) - median(baselinePressure)) / median(baselinePressure)) * 100,
       baselineIqrTokenPressure: interquartileRange(baselineTotals),
       treatmentIqrTokenPressure: interquartileRange(treatmentTotals),
       baselineMedianDurationSeconds,
@@ -371,6 +387,7 @@ function stateComparison(
     totalSource,
     baselineSessions: baseline.length,
     treatmentSessions: treatment.length,
+    latestTreatmentAt: latestStartedAt(treatment),
     readiness: "unavailable",
     tokenResult,
     qualityObservation: "unknown",
@@ -437,13 +454,10 @@ function categoryLine(comparison: TreatmentComparison): string {
 }
 
 function summaryComparison(comparisons: TreatmentComparison[]): TreatmentComparison | undefined {
-  const versioned = comparisons.filter((comparison) => comparison.optimizationProfile !== "none");
-  if (versioned.length === 0) return comparisons[0];
-  const latestProfile = versioned
-    .map((comparison) => comparison.optimizationProfile)
-    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
-    .at(-1)!;
-  const current = versioned.filter((comparison) => comparison.optimizationProfile === latestProfile);
+  const measurable = comparisons.filter((comparison) => (
+    comparison.tokenReductionPercent !== undefined || comparison.tokenResult === "cache-shift"
+  ));
+  const current = measurable.length > 0 ? measurable : comparisons;
   const taskRank = (comparison: TreatmentComparison) => comparison.taskKind === "unknown" ? 0 : comparison.taskKind === "benchmark" ? 1 : 2;
   const conservativeRank = (comparison: TreatmentComparison) => ({
     "validated-reduction": 0,
@@ -452,114 +466,60 @@ function summaryComparison(comparisons: TreatmentComparison[]): TreatmentCompari
     limited: 3,
     "cache-shift": 4
   })[comparison.tokenResult];
-  return [...current].sort((left, right) => taskRank(left) - taskRank(right) || conservativeRank(left) - conservativeRank(right)).at(-1);
+  return [...current].sort((left, right) => {
+    const time = (left.latestTreatmentAt ?? "").localeCompare(right.latestTreatmentAt ?? "");
+    if (time !== 0) return time;
+    const profile = left.optimizationProfile.localeCompare(right.optimizationProfile, undefined, { numeric: true });
+    if (profile !== 0) return profile;
+    return taskRank(left) - taskRank(right) || conservativeRank(left) - conservativeRank(right);
+  }).at(-1);
 }
 
 function providerName(provider: Provider): string {
   return provider === "codex" ? "Codex" : provider === "claude" ? "Claude" : provider === "grok" ? "Grok" : "Kimi";
 }
 
-const SCOREBOARD_MISSING = "sem medição ainda";
-const SCOREBOARD_LABEL_WIDTH = 20;
-
-function scoreboardInteger(value: number): string {
-  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(value);
-}
+const SCOREBOARD_MISSING = "sem comparação cache-aware medida";
 
 function scoreboardPercent(value: number): string {
-  const bounded = Math.max(0, value);
-  const rounded = Math.round(bounded * 10) / 10;
+  const rounded = Math.round(Math.abs(value) * 10) / 10;
   const text = Number.isInteger(rounded) ? `${rounded.toFixed(0)}` : `${rounded.toFixed(1).replace(".", ",")}`;
-  return `${text}% a menos`;
+  return value < 0 ? `${text}% a mais` : `${text}% a menos`;
 }
 
-function emptySummaryWindow(report: Report): Report {
-  const providers = [...new Set(report.coverage.map((row) => row.provider))];
-  return {
-    generatedAt: report.generatedAt,
-    since: report.since,
-    rows: [],
-    coverage: providers.map((provider) => ({ provider, sessions: 0, measuredSessions: 0, unavailableSessions: 0 })),
-    comparisons: [],
-    sessions: []
-  };
-}
-
-function measuredTokensUsed(report: Report, provider: Provider): number | undefined {
-  const coverage = report.coverage.find((row) => row.provider === provider);
-  if (!coverage || coverage.measuredSessions <= 0) return undefined;
-  const rows = report.rows.filter((row) => row.provider === provider);
-  if (rows.length === 0) return undefined;
-  const categoryTotal = rows.reduce((sum, row) => (
-    sum + row.inputNew + row.inputCached + row.cacheCreated + row.output + row.reasoning
-  ), 0);
-  if (categoryTotal > 0) return categoryTotal;
-  const reported = rows.reduce((sum, row) => sum + row.reportedTotal, 0);
-  return reported > 0 ? reported : undefined;
-}
-
-function windowScore(report: Report, provider: Provider): { headline: string; detail?: string } {
+function providerScore(report: Report, provider: Provider): string {
   const scoped = filterReportByProvider(report, provider);
   const comparison = summaryComparison(scoped.comparisons);
-  const expected = comparison?.baselineExpectedTreatmentTokens;
-  const used = comparison?.treatmentRecordedTokens;
-  const hasTotals = expected !== undefined && used !== undefined && expected > 0;
-  if (comparison && hasTotals && comparison.tokenResult === "cache-shift") {
-    return {
-      headline: "cache-shift",
-      detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
-    };
+  if (comparison?.tokenResult === "cache-shift") {
+    return scoreboardPercent(0);
   }
-  if (comparison && hasTotals && comparison.tokenResult === "validated-reduction") {
-    return {
-      headline: scoreboardPercent(((expected - used) / expected) * 100),
-      detail: `${scoreboardInteger(expected)} → ${scoreboardInteger(used)} tokens`
-    };
+  if (comparison?.tokenReductionPercent !== undefined) {
+    return scoreboardPercent(comparison.tokenReductionPercent);
   }
-  const measuredUsed = measuredTokensUsed(scoped, provider);
-  if (measuredUsed !== undefined) {
-    return {
-      headline: "medido",
-      detail: `${scoreboardInteger(measuredUsed)} tokens usados`
-    };
-  }
-  return { headline: SCOREBOARD_MISSING };
+  return SCOREBOARD_MISSING;
 }
 
-function scoreboardBlock(provider: Provider | undefined, last24Hours: Report, last7Days: Report): string {
+function scoreboardBlock(provider: Provider | undefined, report: Report): string {
   const title = provider ? `TokenPilot · ${providerName(provider)}` : "TokenPilot";
-  const hours = provider ? windowScore(last24Hours, provider) : { headline: SCOREBOARD_MISSING };
-  const days = provider ? windowScore(last7Days, provider) : { headline: SCOREBOARD_MISSING };
-  const lines = [title, "", `últimas 24 horas`.padEnd(SCOREBOARD_LABEL_WIDTH) + hours.headline];
-  if (hours.detail) lines.push("".padEnd(SCOREBOARD_LABEL_WIDTH) + hours.detail);
-  lines.push("", `7 dias`.padEnd(SCOREBOARD_LABEL_WIDTH) + days.headline);
-  if (days.detail) lines.push("".padEnd(SCOREBOARD_LABEL_WIDTH) + days.detail);
-  lines.push("");
-  return lines.join("\n");
+  const score = provider ? providerScore(report, provider) : SCOREBOARD_MISSING;
+  return [title, "", `redução cache-aware  ${score}`, ""].join("\n");
 }
 
-function summaryProviders(last24Hours: Report, last7Days: Report): Provider[] {
+function summaryProviders(report: Report): Provider[] {
   const seen = new Set<Provider>();
-  for (const row of [...last24Hours.coverage, ...last7Days.coverage]) seen.add(row.provider);
+  for (const row of report.coverage) seen.add(row.provider);
   return (["claude", "codex", "grok", "kimi"] as const).filter((provider) => seen.has(provider));
 }
 
 /**
- * Skill-facing scoreboard: rolling last 24 hours, then last 7 days.
- * Providers stay separate. USD, latency, and policy jargon stay out.
+ * Skill-facing scoreboard: the latest locally recorded, comparable,
+ * cache-aware token-reduction percentage. Providers stay separate. Rolling
+ * window totals, USD, latency, quality labels, and policy jargon stay out.
  */
-export function reportSummaryMarkdown(last7Days: Report, last24Hours: Report = emptySummaryWindow(last7Days)): string {
-  const providers = summaryProviders(last24Hours, last7Days);
-  if (providers.length === 0) return scoreboardBlock(undefined, last24Hours, last7Days);
-  return providers.map((provider) => scoreboardBlock(provider, last24Hours, last7Days)).join("\n");
-}
-
-/** Summary windows are always rolling from now: the last 24 hours, then 7 days. */
-export function buildRollingSummaryReports(paths: TokenPilotPaths): { last24Hours: Report; last7Days: Report } {
-  return {
-    last24Hours: buildReport(paths, 1),
-    last7Days: buildReport(paths, 7)
-  };
+export function reportSummaryMarkdown(report: Report): string {
+  const providers = summaryProviders(report);
+  if (providers.length === 0) return scoreboardBlock(undefined, report);
+  return providers.map((provider) => scoreboardBlock(provider, report)).join("\n");
 }
 
 /** Detailed audit view. All session identifiers are opaque local UUIDs. */

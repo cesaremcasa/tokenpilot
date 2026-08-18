@@ -1,5 +1,5 @@
-# tokenpilot-managed-skill:v4 codex
+# tokenpilot-managed-skill:v5 codex
 interface:
   display_name: "TokenPilot"
-  short_description: "Paste the live local Codex TokenPilot scoreboard stdout"
-  default_prompt: "Run the local TokenPilot Codex scoreboard command and paste its stdout unchanged."
+  short_description: "Show the latest cache-aware Codex token reduction"
+  default_prompt: "Use $tokenpilot to show the latest measured cache-aware Codex token-reduction percentage."

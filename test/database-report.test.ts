@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
-import { buildReport, filterReportByProvider, reportDiagnosticsMarkdown, reportMarkdown, reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
+import { buildLatestSummaryReport, buildReport, filterReportByProvider, reportDiagnosticsMarkdown, reportMarkdown, reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
 import type { PricingProfile, SessionSummary } from "../src/types.js";
 import { renderSessions } from "../src/sessions.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
@@ -31,7 +31,7 @@ describe("aggregate reporting", () => {
     const grok = filterReportByProvider(complete, "grok");
     expect(grok.coverage).toEqual([{ provider: "grok", sessions: 0, measuredSessions: 0, unavailableSessions: 0 }]);
     expect(reportSummaryMarkdown(grok)).toContain("TokenPilot · Grok");
-    expect(reportSummaryMarkdown(grok)).toContain("sem medição ainda");
+    expect(reportSummaryMarkdown(grok)).toContain("sem comparação cache-aware medida");
     expect(reportSummaryMarkdown(grok)).not.toContain("USD");
   });
   const pricedCodex: PricingProfile = {
@@ -79,6 +79,22 @@ describe("aggregate reporting", () => {
     expect(report).toMatchObject({ rows: [], coverage: [], comparisons: [] });
     expect(fs.existsSync(paths.dataDir)).toBe(false);
     expect(fs.existsSync(paths.databaseFile)).toBe(false);
+    cleanup(paths);
+  });
+
+  it("finds the latest comparable percentage across all recorded history", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    const old = new Date(Date.now() - 400 * 24 * 60 * 60 * 1_000).toISOString();
+    database.createRun({ id: "old-observe", provider: "codex", mode: "observe", startedAt: old, endedAt: old, comparisonProfile: "codex-balanced-v1", collectionState: "collected", taskKind: "feature", outcome: "completed" });
+    database.addUsage({ runId: "old-observe", observedAt: old, source: "codex-otlp-metrics-v1", inputNew: 100, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0 });
+    database.createRun({ id: "old-treatment", provider: "codex", mode: "reduce", startedAt: old, endedAt: old, optimizationApplied: true, optimizationProfile: "codex-balanced-v1", comparisonProfile: "codex-balanced-v1", collectionState: "collected", taskKind: "feature", outcome: "completed" });
+    database.addUsage({ runId: "old-treatment", observedAt: old, source: "codex-otlp-metrics-v1", inputNew: 50, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0 });
+    database.close();
+
+    expect(buildReport(paths, 365).comparisons).toHaveLength(0);
+    const summary = reportSummaryMarkdown(filterReportByProvider(buildLatestSummaryReport(paths), "codex"));
+    expect(summary).toContain("redução cache-aware  50% a menos");
     cleanup(paths);
   });
 
@@ -137,10 +153,10 @@ describe("aggregate reporting", () => {
       baselineSessions: 2,
       treatmentSessions: 1,
       treatmentRecordedTokens: 600,
-      baselineExpectedTreatmentTokens: undefined,
-      estimatedTokensAvoided: undefined,
-      tokenReductionPercent: undefined,
-      tokenPressureDeltaPercent: undefined,
+      baselineExpectedTreatmentTokens: 700,
+      estimatedTokensAvoided: 100,
+      tokenReductionPercent: 100 / 700 * 100,
+      tokenPressureDeltaPercent: -40,
       latencyDeltaSeconds: -5,
       latencyDeltaPercent: -(5 / 30) * 100,
       latencyResult: "faster",
@@ -171,12 +187,16 @@ describe("aggregate reporting", () => {
     })));
     const [comparison] = treatmentComparisons(sessions);
     expect(comparison).toMatchObject({
-      baselineExpectedTreatmentTokens: undefined,
+      baselineExpectedTreatmentTokens: 505,
       treatmentRecordedTokens: 500350,
-      estimatedTokensAvoided: undefined,
+      estimatedTokensAvoided: -499845,
       readiness: "ready",
       tokenResult: "preliminary-signal"
     });
+    expect(comparison.tokenReductionPercent).toBeLessThan(0);
+    const summary = reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "grok", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }], comparisons: [comparison] });
+    expect(summary).toContain("% a mais");
+    expect(summary).not.toContain("% a menos");
   });
 
   it("labels a flat category total with moved new input as cache-shift, including for Claude", () => {
@@ -216,9 +236,8 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
       comparisons: [comparison]
     });
-    expect(summary).toContain("cache-shift");
-    expect(summary).toContain("95.635 → 95.560 tokens");
-    expect(summary).not.toContain("% a menos");
+    expect(summary).toContain("redução cache-aware  0% a menos");
+    expect(summary).not.toContain("95.635 → 95.560 tokens");
     expect(summary).not.toContain("97.4%");
     expect(summary).not.toContain("97,4%");
     expect(summary).not.toContain("USD");
@@ -263,8 +282,7 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "claude", sessions: 2, measuredSessions: 2, unavailableSessions: 0 }],
       comparisons: [comparison]
     });
-    expect(summary).toContain("cache-shift");
-    expect(summary).not.toContain("% a menos");
+    expect(summary).toContain("redução cache-aware  0% a menos");
   });
 
   it("keeps observed non-degraded outcomes preliminary without formal quality evidence", () => {
@@ -300,7 +318,7 @@ describe("aggregate reporting", () => {
       baselineAbandonmentRate: 0,
       treatmentAbandonmentRate: 0,
       tokenResult: "preliminary-signal",
-      tokenReductionPercent: undefined
+      tokenReductionPercent: 100 / 120 * 50
     });
   });
 
@@ -314,14 +332,14 @@ describe("aggregate reporting", () => {
       tokenResult: "preliminary-signal",
       reason: expect.stringContaining("quality observation unavailable")
     });
-    expect(comparison.baselineExpectedTreatmentTokens).toBeUndefined();
-    expect(comparison.estimatedTokensAvoided).toBeUndefined();
-    expect(comparison.tokenReductionPercent).toBeUndefined();
+    expect(comparison.baselineExpectedTreatmentTokens).toBe(20_000_000);
+    expect(comparison.estimatedTokensAvoided).toBe(10_000_000);
+    expect(comparison.tokenReductionPercent).toBe(50);
     expect(comparison.baselineExpectedUsd).toBeUndefined();
     expect(comparison.estimatedUsdAvoided).toBeUndefined();
     const serialized = JSON.stringify(comparison);
-    expect(serialized).not.toContain("baselineExpectedTreatmentTokens");
-    expect(serialized).not.toContain("estimatedTokensAvoided");
+    expect(serialized).toContain("baselineExpectedTreatmentTokens");
+    expect(serialized).toContain("estimatedTokensAvoided");
     expect(serialized).not.toContain("estimatedUsdAvoided");
     expect(reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons: [comparison] })).not.toContain("$");
     expect(reportSummaryMarkdown({
@@ -330,7 +348,7 @@ describe("aggregate reporting", () => {
       rows: [],
       coverage: [{ provider: "codex", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
       comparisons: [comparison]
-    })).toContain("medição ainda");
+    })).toContain("redução cache-aware  50% a menos");
   });
 
   it("marks an observed quality degradation when treatment outcomes have more rework", () => {
@@ -350,11 +368,11 @@ describe("aggregate reporting", () => {
       tokenResult: "preliminary-signal",
       reason: expect.stringContaining("observed quality degraded")
     });
-    expect(comparison.baselineExpectedTreatmentTokens).toBeUndefined();
-    expect(comparison.estimatedTokensAvoided).toBeUndefined();
+    expect(comparison.baselineExpectedTreatmentTokens).toBe(20_000_000);
+    expect(comparison.estimatedTokensAvoided).toBe(10_000_000);
     expect(comparison.estimatedUsdAvoided).toBeUndefined();
     const serialized = JSON.stringify(comparison);
-    expect(serialized).not.toContain("estimatedTokensAvoided");
+    expect(serialized).toContain("estimatedTokensAvoided");
     expect(serialized).not.toContain("estimatedUsdAvoided");
     const markdown = reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons: [comparison] });
     expect(markdown).toContain("quality degraded");
@@ -389,12 +407,25 @@ describe("aggregate reporting", () => {
       comparisons: treatmentComparisons(sessions)
     });
     expect(summary).toContain("TokenPilot · Codex");
-    expect(summary).toContain("sem medição ainda");
-    expect(summary).not.toContain("16,7% a menos");
+    expect(summary).toContain("redução cache-aware  16,7% a menos");
     expect(summary).not.toContain("600 → 500 tokens");
     expect(summary).not.toContain("550 tokens");
     expect(summary).not.toContain("USD");
     expect(summary).not.toContain("per comparable session");
+  });
+
+  it("selects the most recently measured comparison instead of the highest profile version", () => {
+    const pair = (profile: string, startedAt: string, treatmentInput: number): SessionSummary[] => ([
+      { id: `${profile}-observe`, startedAt, provider: "codex", mode: "observe", optimizationApplied: false, comparisonProfile: profile, taskKind: "feature", outcome: "completed", durationSeconds: 1, inputNew: 100, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, categoryMetricsComplete: true, compactions: 0, retries: 0 },
+      { id: `${profile}-treatment`, startedAt, provider: "codex", mode: "reduce", optimizationApplied: true, optimizationProfile: profile, comparisonProfile: profile, taskKind: "feature", outcome: "completed", durationSeconds: 1, inputNew: treatmentInput, inputCached: 0, cacheCreated: 0, output: 0, reasoning: 0, categoryMetricsComplete: true, compactions: 0, retries: 0 }
+    ]);
+    const comparisons = treatmentComparisons([
+      ...pair("codex-balanced-v9", "2026-08-17T10:00:00.000Z", 90),
+      ...pair("codex-balanced-v1", "2026-08-18T10:00:00.000Z", 50)
+    ]);
+    const summary = reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "codex", sessions: 4, measuredSessions: 4, unavailableSessions: 0 }], comparisons });
+    expect(summary).toContain("redução cache-aware  50% a menos");
+    expect(summary).not.toContain("10% a menos");
   });
 
   it("shows Grok TTY coverage as limited rather than estimating zero", () => {
@@ -406,7 +437,7 @@ describe("aggregate reporting", () => {
       comparisons: []
     });
     expect(summary).toContain("TokenPilot · Grok");
-    expect(summary).toContain("sem medição ainda");
+    expect(summary).toContain("sem comparação cache-aware medida");
     expect(summary).not.toContain("0.0% reduction");
     expect(summary).not.toContain("0% a menos");
   });
@@ -435,7 +466,7 @@ describe("aggregate reporting", () => {
     cleanup(paths);
   });
 
-  it("shows measured Grok use instead of an economy for a preliminary unknown pair", () => {
+  it("shows the cache-aware Grok reduction for a preliminary unknown pair", () => {
     const sessions: SessionSummary[] = (["observe", "balanced"] as const).map((mode) => ({
       id: `grok-${mode}`,
       provider: "grok" as const,
@@ -483,12 +514,12 @@ describe("aggregate reporting", () => {
       comparisons: treatmentComparisons(sessions)
     });
     expect(summary).toContain("TokenPilot · Grok");
-    expect(summary).toMatch(/7 dias\s+medido/);
-    expect(summary).toContain("115 tokens usados");
+    expect(summary).toContain("redução cache-aware  51,1% a menos");
+    expect(summary).not.toContain("tokens usados");
     expect(summary).not.toContain("235 → 115 tokens");
   });
 
-  it("prints a rolling 24-hour window before the last 7 days and never invents a 24-hour percentage", () => {
+  it("keeps the latest measured percentage when a shorter window is empty", () => {
     const sevenDaySessions = pricedSessions("research");
     const last7Days = {
       generatedAt: "now",
@@ -504,20 +535,16 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "codex" as const, sessions: 1, measuredSessions: 1, unavailableSessions: 0 }],
       comparisons: []
     };
-    const summary = reportSummaryMarkdown(last7Days, last24Hours);
-    const hoursIndex = summary.indexOf("últimas 24 horas");
-    const daysIndex = summary.indexOf("7 dias");
-    expect(hoursIndex).toBeGreaterThan(-1);
-    expect(daysIndex).toBeGreaterThan(hoursIndex);
-    expect(summary).toMatch(/últimas 24 horas\s+sem medição ainda/);
-    expect(summary).toContain("sem medição ainda");
-    expect(summary).not.toContain("50% a menos");
-    expect(summary).not.toContain("20.000.000 → 10.000.000 tokens");
+    expect(last24Hours.comparisons).toHaveLength(0);
+    const summary = reportSummaryMarkdown(last7Days);
+    expect(summary).toContain("redução cache-aware  50% a menos");
+    expect(summary).not.toContain("últimas 24 horas");
+    expect(summary).not.toContain("7 dias");
     expect(summary).not.toContain("USD");
     expect(summary).not.toContain("Latency");
   });
 
-  it("shows measured 24-hour token totals when a session exists without a treatment pair", () => {
+  it("does not replace the latest reduction with raw totals from an unmatched recent session", () => {
     const last7Days = {
       generatedAt: "now",
       since: "seven-days-ago",
@@ -565,12 +592,10 @@ describe("aggregate reporting", () => {
         treatmentSessionIds: []
       }]
     };
-    const summary = reportSummaryMarkdown(last7Days, last24Hours);
-    expect(summary).toMatch(/últimas 24 horas\s+medido/);
-    expect(summary).toContain("115 tokens usados");
-    expect(summary).not.toContain("50% a menos");
-    expect(summary).not.toContain("20.000.000 → 10.000.000 tokens");
-    expect(summary).not.toMatch(/últimas 24 horas\s+sem medição ainda/);
+    expect(last24Hours.rows).toHaveLength(1);
+    const summary = reportSummaryMarkdown(last7Days);
+    expect(summary).toContain("redução cache-aware  50% a menos");
+    expect(summary).not.toContain("115 tokens usados");
     expect(summary).not.toContain("USD");
   });
 
@@ -595,10 +620,13 @@ describe("aggregate reporting", () => {
     })));
     const [comparison] = treatmentComparisons(sessions);
     expect(comparison).toMatchObject({
-      estimatedTokensAvoided: undefined,
+      estimatedTokensAvoided: -100,
       readiness: "ready",
       tokenResult: "preliminary-signal"
     });
+    expect(comparison.tokenReductionPercent).toBe(-20);
+    const summary = reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }], comparisons: [comparison] });
+    expect(summary).toContain("redução cache-aware  20% a mais");
   });
 
   it("does not validate when aggregate use falls but the treatment median rises", () => {
@@ -631,8 +659,8 @@ describe("aggregate reporting", () => {
     }));
     expect(treatmentComparisons([...baseline, ...treatment])).toMatchObject([{
       readiness: "ready",
-      estimatedTokensAvoided: undefined,
-      tokenReductionPercent: undefined,
+      estimatedTokensAvoided: 197,
+      tokenReductionPercent: -1,
       tokenResult: "preliminary-signal"
     }]);
   });
@@ -700,7 +728,7 @@ describe("aggregate reporting", () => {
       retries: 0
     })));
     const [comparison] = treatmentComparisons(sessions);
-    expect(comparison).toMatchObject({ tokenResult: "preliminary-signal", baselineExpectedTreatmentTokens: undefined, baselineExpectedUsd: undefined, treatmentRecordedUsd: undefined, estimatedUsdAvoided: undefined });
+    expect(comparison).toMatchObject({ tokenResult: "preliminary-signal", baselineExpectedTreatmentTokens: 500, tokenReductionPercent: 50, baselineExpectedUsd: undefined, treatmentRecordedUsd: undefined, estimatedUsdAvoided: undefined });
   });
 
   it("stores the selected price profile inside the session record", () => {

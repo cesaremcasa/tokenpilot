@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { getPaths } from "./paths.js";
 import { install, uninstall } from "./installer.js";
 import { collectPendingRuns } from "./collector.js";
-import { buildReport, buildRollingSummaryReports, filterReportByProvider, renderReportMarkdown, reportSummaryMarkdown, type ReportView } from "./report.js";
+import { buildLatestSummaryReport, buildReport, filterReportByProvider, renderReportMarkdown, reportSummaryMarkdown, type ReportView } from "./report.js";
 import { runProvider } from "./launcher.js";
 import { addPricing, disablePricing, ensureConfig, listPricing, setMode, setPricing } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
@@ -271,13 +271,13 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     }
     if (format !== "md" && format !== "json") throw new Error("--format must be md or json");
     if (view === "summary") {
-      // Summary is always a rolling last-24-hours window plus the last 7 days.
-      // --days does not change those two clocks.
-      const rolling = buildRollingSummaryReports(paths);
-      const last24Hours = requestedProvider === undefined ? rolling.last24Hours : filterReportByProvider(rolling.last24Hours, requestedProvider);
-      const last7Days = requestedProvider === undefined ? rolling.last7Days : filterReportByProvider(rolling.last7Days, requestedProvider);
-      if (format === "json") process.stdout.write(`${JSON.stringify({ last24Hours, last7Days }, null, 2)}\n`);
-      else process.stdout.write(reportSummaryMarkdown(last7Days, last24Hours));
+      // The provider skill exists to show the latest comparable cache-aware
+      // reduction. A quiet rolling window must never erase the last measured
+      // percentage or replace it with an unrelated raw token total.
+      const completeSummary = buildLatestSummaryReport(paths);
+      const report = requestedProvider === undefined ? completeSummary : filterReportByProvider(completeSummary, requestedProvider);
+      if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+      else process.stdout.write(reportSummaryMarkdown(report));
       return 0;
     }
     const completeReport = buildReport(paths, daysArgument(args));

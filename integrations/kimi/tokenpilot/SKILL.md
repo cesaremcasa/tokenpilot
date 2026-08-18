@@ -1,11 +1,11 @@
 ---
 name: tokenpilot
-description: Run the local Kimi TokenPilot scoreboard command and paste its stdout. Never use README or docs/RESULTS.md numbers.
+description: Show the latest locally measured cache-aware TokenPilot token-reduction percentage for Kimi. Use for TokenPilot reports, token reduction, cache-aware reduction, or savings checks; never substitute documentation snapshots or raw window totals.
 ---
 
-<!-- tokenpilot-managed-skill:v4 kimi -->
+<!-- tokenpilot-managed-skill:v5 kimi -->
 
-# TokenPilot report
+# TokenPilot cache-aware reduction
 
 Run exactly this read-only command:
 
@@ -18,9 +18,10 @@ Print the command stdout and nothing else.
 ## Hard rules
 
 - If stdout starts with `TokenPilot ·`, that is the live report. Paste it unchanged.
-- `sem medição ainda` and `0% a menos` are valid live answers. Do not replace them.
-- Never print `TokenPilot — Kimi — last seven days`, `Window starts:`, `validated median reduction`, `USD:`, or `API-equivalent`.
-- Never use numbers from README, CHANGELOG, or `docs/RESULTS.md`. The 51.6% Kimi research row is a historical snapshot, not this machine.
+- The primary and required result is `redução cache-aware` followed by the latest measured percentage.
+- The command searches all local history for the most recent comparable measurement. Never replace it with 24-hour or 7-day emptiness, raw tokens used, USD, latency, quality labels, or policy jargon.
+- `% a menos`, `0% a menos`, and `% a mais` are valid live measured outcomes. Never turn an increase into a reduction.
+- Never use numbers from README, CHANGELOG, or `docs/RESULTS.md`.
 - Do not read the SQLite database, provider logs, prompts, transcripts, project files, account details, or environment variables.
 - Never add another provider or combine totals.
-- If the command is missing or fails, say `TokenPilot command failed. No token estimate.`
+- If the command is missing, fails, or does not emit `redução cache-aware`, say `TokenPilot command failed. No cache-aware reduction.`
