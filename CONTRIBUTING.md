@@ -20,6 +20,7 @@ npm run check
 npm test
 npm run build
 npm run test:install
+npm run test:release
 ```
 
 Node.js 22.5 or newer is required. Tests must use synthetic, content-free fixtures.
@@ -33,7 +34,7 @@ A pull request should:
 - preserve arguments, TTY behavior, signals, output streams, and fail-open behavior;
 - add tests for success, unsupported versions, missing counters, and privacy rejection;
 - update the relevant documentation and changelog; and
-- leave `npm run check`, `npm test`, `npm run build`, and `git diff --check` green.
+- leave `npm run check`, `npm test`, `npm run build`, `npm run test:release`, and `git diff --check` green.
 
 Do not mix providers in one token comparison. Do not estimate unavailable counters. Do not label a cache shift as a reduction.
 

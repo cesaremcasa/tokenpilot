@@ -2,6 +2,13 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.4.16 — 2026-08-18
+
+- Version the reproducible release candidate and keep the compiled CLI identity synchronized with package metadata.
+- Carry forward the verified CI supply-chain controls from PR1: SHA-pinned Actions, least-privilege read-only permissions, lockfile verification, and a clean installation smoke.
+- Carry forward the verified PR2 report safeguards: content-free observed outcome signals, fail-open quality handling, economy suppression for non-validated states, and neutral cache-shift reporting.
+- Add deterministic npm tarball generation with a SHA-256 checksum, lock-derived CycloneDX SBOM, and a real tarball install/execute/uninstall smoke.
+
 ## 0.4.15 — 2026-08-17
 
 - Add `grok-balanced-v6`, replacing the large native instruction prefix with a concise bounded coding contract.
@@ -51,7 +58,7 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 - Replaced the skill summary with a short scoreboard: rolling last 24 hours, then last 7 days.
 - The 24-hour window always counts backward from now. It is not a calendar day.
 - The scoreboard shows expected tokens, used tokens, and the savings percentage. It omits USD, latency, and policy jargon.
-- Cache-shift, preliminary, and unmatched windows print `sem medição ainda` or `0% a menos` instead of an invented reduction.
+- Cache-shift, preliminary, and unmatched windows remain non-economic and show measured-use or neutral cache evidence instead of an invented reduction.
 
 ## 0.4.7 — 2026-08-17
 

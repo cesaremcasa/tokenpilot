@@ -14,3 +14,4 @@ data/
 *.sqlite-*
 *.jsonl
 reports/personal-*.md
+release-artifacts/

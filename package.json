@@ -1,6 +1,6 @@
 {
   "name": "tokenpilot",
-  "version": "0.4.15",
+  "version": "0.4.16",
   "description": "Local-first token measurement and optimization for Claude Code, OpenAI Codex, Grok Build, and Kimi CLI. Measures provider-published usage, runs version-gated treatments, and produces cache-aware reports without proxying traffic or storing prompts.",
   "private": true,
   "license": "MIT",
@@ -23,6 +23,14 @@
     "tokens"
   ],
   "type": "module",
+  "files": [
+    "dist",
+    "integrations",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ],
   "bin": {
     "tokenpilot": "dist/cli.js"
   },
@@ -34,6 +42,8 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:install": "node scripts/install-smoke.mjs",
+    "release:artifact": "node scripts/release-artifact.mjs",
+    "test:release": "node scripts/release-smoke.mjs",
     "dev": "tsx src/cli.ts"
   },
   "devDependencies": {
