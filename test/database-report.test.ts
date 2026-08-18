@@ -136,11 +136,11 @@ describe("aggregate reporting", () => {
       optimizationProfile: "codex-balanced-v1",
       baselineSessions: 2,
       treatmentSessions: 1,
-      baselineExpectedTreatmentTokens: 700,
       treatmentRecordedTokens: 600,
-      estimatedTokensAvoided: 100,
-      tokenReductionPercent: 100 / 700 * 100,
-      tokenPressureDeltaPercent: -40,
+      baselineExpectedTreatmentTokens: undefined,
+      estimatedTokensAvoided: undefined,
+      tokenReductionPercent: undefined,
+      tokenPressureDeltaPercent: undefined,
       latencyDeltaSeconds: -5,
       latencyDeltaPercent: -(5 / 30) * 100,
       latencyResult: "faster",
@@ -171,9 +171,9 @@ describe("aggregate reporting", () => {
     })));
     const [comparison] = treatmentComparisons(sessions);
     expect(comparison).toMatchObject({
-      baselineExpectedTreatmentTokens: 505,
+      baselineExpectedTreatmentTokens: undefined,
       treatmentRecordedTokens: 500350,
-      estimatedTokensAvoided: -499845,
+      estimatedTokensAvoided: undefined,
       readiness: "ready",
       tokenResult: "preliminary-signal"
     });
@@ -265,7 +265,7 @@ describe("aggregate reporting", () => {
       .toContain("0% a menos");
   });
 
-  it("allows Claude category totals to produce a validated reduction when cache is stable", () => {
+  it("keeps observed non-degraded outcomes preliminary without formal quality evidence", () => {
     const sessions: SessionSummary[] = (["observe", "balanced"] as const).flatMap((mode) => Array.from({ length: 5 }, (_, index) => ({
       id: `claude-${mode}-${index}`,
       provider: "claude" as const,
@@ -289,27 +289,39 @@ describe("aggregate reporting", () => {
     const [comparison] = treatmentComparisons(sessions);
     expect(comparison).toMatchObject({
       totalSource: "category total",
-      qualityResult: "equivalent",
+      qualityObservation: "observed-not-degraded",
+      qualityEvidence: "observed-outcomes",
       baselineCompletionRate: 1,
       treatmentCompletionRate: 1,
       baselineReworkRate: 0,
       treatmentReworkRate: 0,
       baselineAbandonmentRate: 0,
       treatmentAbandonmentRate: 0,
-      tokenResult: "validated-reduction",
-      tokenReductionPercent: 100 / 120 * 50
+      tokenResult: "preliminary-signal",
+      tokenReductionPercent: undefined
     });
   });
 
-  it("keeps an unclassified cohort directional instead of claiming quality equivalence", () => {
+  it("keeps an unclassified cohort directional instead of claiming formal quality", () => {
     const sessions = pricedSessions().map((session) => ({ ...session, outcome: "unknown" as const }));
     const [comparison] = treatmentComparisons(sessions);
     expect(comparison).toMatchObject({
       readiness: "ready",
-      qualityResult: "unknown",
+      qualityObservation: "unknown",
+      qualityEvidence: "observed-outcomes",
       tokenResult: "preliminary-signal",
-      reason: expect.stringContaining("quality-equivalence unavailable")
+      reason: expect.stringContaining("quality observation unavailable")
     });
+    expect(comparison.baselineExpectedTreatmentTokens).toBeUndefined();
+    expect(comparison.estimatedTokensAvoided).toBeUndefined();
+    expect(comparison.tokenReductionPercent).toBeUndefined();
+    expect(comparison.baselineExpectedUsd).toBeUndefined();
+    expect(comparison.estimatedUsdAvoided).toBeUndefined();
+    const serialized = JSON.stringify(comparison);
+    expect(serialized).not.toContain("baselineExpectedTreatmentTokens");
+    expect(serialized).not.toContain("estimatedTokensAvoided");
+    expect(serialized).not.toContain("estimatedUsdAvoided");
+    expect(reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons: [comparison] })).not.toContain("$");
     expect(reportSummaryMarkdown({
       generatedAt: "now",
       since: "then",
@@ -319,7 +331,7 @@ describe("aggregate reporting", () => {
     })).toContain("medição ainda");
   });
 
-  it("fails the quality gate when treatment outcomes have more rework or abandonment", () => {
+  it("marks an observed quality degradation when treatment outcomes have more rework", () => {
     const sessions = pricedSessions().map((session) => ({
       ...session,
       outcome: session.mode === "balanced" ? "rework" as const : "completed" as const
@@ -327,15 +339,24 @@ describe("aggregate reporting", () => {
     const [comparison] = treatmentComparisons(sessions);
     expect(comparison).toMatchObject({
       readiness: "ready",
-      qualityResult: "degraded",
+      qualityObservation: "degraded",
+      qualityEvidence: "observed-outcomes",
       baselineCompletionRate: 1,
       treatmentCompletionRate: 0,
       baselineReworkRate: 0,
       treatmentReworkRate: 1,
       tokenResult: "preliminary-signal",
-      reason: expect.stringContaining("quality-equivalence failed")
+      reason: expect.stringContaining("observed quality degraded")
     });
-    expect(reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons: [comparison] })).toContain("quality degraded");
+    expect(comparison.baselineExpectedTreatmentTokens).toBeUndefined();
+    expect(comparison.estimatedTokensAvoided).toBeUndefined();
+    expect(comparison.estimatedUsdAvoided).toBeUndefined();
+    const serialized = JSON.stringify(comparison);
+    expect(serialized).not.toContain("estimatedTokensAvoided");
+    expect(serialized).not.toContain("estimatedUsdAvoided");
+    const markdown = reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons: [comparison] });
+    expect(markdown).toContain("quality degraded");
+    expect(markdown).not.toContain("$");
   });
 
   it("keeps the provider skill summary to the latest policy and one concise block", () => {
@@ -366,8 +387,9 @@ describe("aggregate reporting", () => {
       comparisons: treatmentComparisons(sessions)
     });
     expect(summary).toContain("TokenPilot · Codex");
-    expect(summary).toContain("16,7% a menos");
-    expect(summary).toContain("600 → 500 tokens");
+    expect(summary).toContain("sem medição ainda");
+    expect(summary).not.toContain("16,7% a menos");
+    expect(summary).not.toContain("600 → 500 tokens");
     expect(summary).not.toContain("550 tokens");
     expect(summary).not.toContain("USD");
     expect(summary).not.toContain("per comparable session");
@@ -486,8 +508,9 @@ describe("aggregate reporting", () => {
     expect(hoursIndex).toBeGreaterThan(-1);
     expect(daysIndex).toBeGreaterThan(hoursIndex);
     expect(summary).toMatch(/últimas 24 horas\s+sem medição ainda/);
-    expect(summary).toContain("50% a menos");
-    expect(summary).toContain("20.000.000 → 10.000.000 tokens");
+    expect(summary).toContain("sem medição ainda");
+    expect(summary).not.toContain("50% a menos");
+    expect(summary).not.toContain("20.000.000 → 10.000.000 tokens");
     expect(summary).not.toContain("USD");
     expect(summary).not.toContain("Latency");
   });
@@ -543,8 +566,8 @@ describe("aggregate reporting", () => {
     const summary = reportSummaryMarkdown(last7Days, last24Hours);
     expect(summary).toMatch(/últimas 24 horas\s+medido/);
     expect(summary).toContain("115 tokens usados");
-    expect(summary).toContain("50% a menos");
-    expect(summary).toContain("20.000.000 → 10.000.000 tokens");
+    expect(summary).not.toContain("50% a menos");
+    expect(summary).not.toContain("20.000.000 → 10.000.000 tokens");
     expect(summary).not.toMatch(/últimas 24 horas\s+sem medição ainda/);
     expect(summary).not.toContain("USD");
   });
@@ -570,7 +593,7 @@ describe("aggregate reporting", () => {
     })));
     const [comparison] = treatmentComparisons(sessions);
     expect(comparison).toMatchObject({
-      estimatedTokensAvoided: -100,
+      estimatedTokensAvoided: undefined,
       readiness: "ready",
       tokenResult: "preliminary-signal"
     });
@@ -606,8 +629,8 @@ describe("aggregate reporting", () => {
     }));
     expect(treatmentComparisons([...baseline, ...treatment])).toMatchObject([{
       readiness: "ready",
-      estimatedTokensAvoided: 197,
-      tokenReductionPercent: -1,
+      estimatedTokensAvoided: undefined,
+      tokenReductionPercent: undefined,
       tokenResult: "preliminary-signal"
     }]);
   });
@@ -617,10 +640,10 @@ describe("aggregate reporting", () => {
     expect(comparison).toMatchObject({
       readiness: "ready",
       pricingProfile: { id: "codex-local-example", version: "2026-08-14" },
-      baselineExpectedUsd: 405,
-      treatmentRecordedUsd: 202.5,
-      estimatedUsdAvoided: 202.5,
-      usdReductionPercent: 50
+      baselineExpectedUsd: undefined,
+      treatmentRecordedUsd: undefined,
+      estimatedUsdAvoided: undefined,
+      usdReductionPercent: undefined,
     });
   });
 
@@ -646,7 +669,7 @@ describe("aggregate reporting", () => {
     const twoPerArm = sessions.filter((session) => Number(session.id.split("-").at(-1)) < 2);
     const threePerArm = sessions.filter((session) => Number(session.id.split("-").at(-1)) < 3);
     expect(treatmentComparisons(twoPerArm)).toMatchObject([{ readiness: "preliminary", tokenResult: "preliminary-signal" }]);
-    expect(treatmentComparisons(threePerArm)).toMatchObject([{ readiness: "ready", tokenResult: "validated-reduction", baselineSessions: 3, treatmentSessions: 3 }]);
+    expect(treatmentComparisons(threePerArm)).toMatchObject([{ readiness: "ready", tokenResult: "preliminary-signal", baselineSessions: 3, treatmentSessions: 3 }]);
   });
 
   it("never converts a provider-reported total to USD without category metrics", () => {
@@ -675,7 +698,7 @@ describe("aggregate reporting", () => {
       retries: 0
     })));
     const [comparison] = treatmentComparisons(sessions);
-    expect(comparison).toMatchObject({ tokenResult: "validated-reduction", baselineExpectedUsd: undefined, treatmentRecordedUsd: undefined, estimatedUsdAvoided: undefined });
+    expect(comparison).toMatchObject({ tokenResult: "preliminary-signal", baselineExpectedTreatmentTokens: undefined, baselineExpectedUsd: undefined, treatmentRecordedUsd: undefined, estimatedUsdAvoided: undefined });
   });
 
   it("stores the selected price profile inside the session record", () => {

@@ -61,12 +61,15 @@ A reduction is validated only when all of the following are true:
 - at least three measured baselines and three measured treatments;
 - positive avoided tokens and positive median reduction; and
 - cache-shift detector is false.
+- formal quality evidence; the observed outcome safeguard below is not sufficient on its own.
 
 Providers are never summed. Benchmarks are retained as compatibility evidence but excluded from real-work validation.
 
-## Quality-equivalence gate
+## Observed quality safeguard
 
-A validated reduction also requires content-free outcome evidence for every matched session. Outcomes use only the local enum `completed`, `rework`, or `abandoned`; `unknown` outcomes keep the comparison directional and never prove equivalence. Treatment is quality-equivalent only when its completion rate is at least the matched baseline rate and its rework and abandonment rates are no higher. A degraded or unavailable quality comparison fails open to a preliminary signal, so the concise scoreboard emits no reduction or economy claim.
+The report records a conservative, content-free observation over the closed outcome enum `completed`, `rework`, or `abandoned`. `observed-not-degraded` means only that treatment completion was no lower and treatment rework/abandonment were no higher in this sample; it is not statistical equivalence, non-inferiority, or formal quality evidence. `unknown` outcomes or degraded observations fail open to a preliminary signal. This PR has no formal quality test, confidence interval, margin, or power analysis, so no observed outcome gate can authorize `validated-reduction`; economy fields remain suppressed until formal evidence exists.
+
+Outcome labels are local, user-supplied classifications and can be misclassified or gamed. Do not relabel a weak result as `completed` to unlock a claim; retain `unknown` when the outcome is not independently clear and review any future quality evidence outside this content-free telemetry path.
 
 ## Median and cohort totals
 
