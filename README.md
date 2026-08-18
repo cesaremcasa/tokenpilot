@@ -5,7 +5,7 @@
 [![Node.js 22.5+](https://img.shields.io/badge/Node.js-22.5%2B-339933.svg)](https://nodejs.org/)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](docs/INSTALLATION.md)
 
-TokenPilot 0.4.16 is the current reproducible release candidate. Its runtime package has no production dependencies; the lockfile, checksum, and SBOM are generated as part of the release-artifact workflow.
+TokenPilot 0.4.17 is the current reproducible release candidate. Its runtime package has no production dependencies; the lockfile, checksum, and SBOM are generated as part of the release-artifact workflow.
 
 TokenPilot is a local-first measurement and optimization layer for the terminal versions of Claude Code, OpenAI Codex, Grok Build, and Kimi Code CLI. Developers keep using the provider commands and provider authentication they already know:
 
@@ -118,8 +118,8 @@ Release candidates are generated from the lockfile without publishing to npm:
 npm ci --ignore-scripts
 npm run build
 npm run release:artifact -- --output release-artifacts
-shasum -a 256 -c release-artifacts/tokenpilot-0.4.16.tgz.sha256
-cat release-artifacts/tokenpilot-0.4.16.cdx.json
+shasum -a 256 -c release-artifacts/tokenpilot-0.4.17.tgz.sha256
+cat release-artifacts/tokenpilot-0.4.17.cdx.json
 ```
 
 The artifact script packs the real npm tarball twice and requires identical bytes before writing the tarball, SHA-256 manifest, and deterministic CycloneDX SBOM. The ignored `release-artifacts/` directory is for review or release staging; it is not a user-state directory.

@@ -2,6 +2,12 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.4.17 — 2026-08-18
+
+- Deduplicate explicit provider treatment flags and value-taking options before adding validated policy arguments, preserving user argument order and values.
+- Fail open to the original provider invocation when a known treatment argument is incomplete or ambiguous; prompt values that resemble flags remain opaque values.
+- Add the exact Grok canary regression and provider-wide merge coverage without changing treatment policies or measurement formats.
+
 ## 0.4.16 — 2026-08-18
 
 - Version the reproducible release candidate and keep the compiled CLI identity synchronized with package metadata.
