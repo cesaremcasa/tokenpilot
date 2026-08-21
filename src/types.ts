@@ -255,7 +255,8 @@ export interface TreatmentComparison {
   readiness: "ready" | "preliminary" | "unavailable";
   /**
    * A cache shift never becomes a saving. A preliminary signal can expose a
-   * directional number, but it is never an economy claim.
+   * measured directional variation, but it is never a validated reduction or
+   * economy claim.
    */
   tokenResult: "limited" | "incomparable" | "cache-shift" | "preliminary-signal" | "validated-reduction";
   /** Content-free reason for limited or incomparable evidence. */

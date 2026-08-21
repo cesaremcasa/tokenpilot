@@ -1,6 +1,6 @@
 # Security policy
 
-TokenPilot is a local measurement and optimization tool developed by Mycellium Lab. Its primary security boundary is simple: it must remain outside provider authentication and must never retain model or developer content.
+TokenPilot is a local measurement and optimization tool created by Cesar Augusto / Mycellium Lab. Its primary security boundary is simple: it must remain outside provider authentication and must never retain model or developer content.
 
 ## Supported versions
 

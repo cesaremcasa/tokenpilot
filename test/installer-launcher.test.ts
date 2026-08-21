@@ -34,9 +34,9 @@ describe("installation and fail-open launcher lookup", () => {
     expect(plan.skills.map((skill) => skill.provider)).toEqual(["codex", "claude", "grok", "kimi"]);
     for (const skill of plan.skills) {
       const contents = fs.readFileSync(skill.target, "utf8");
-      expect(contents).toContain(`tokenpilot-managed-skill:v5 ${skill.provider}`);
+      expect(contents).toContain(`tokenpilot-managed-skill:v6 ${skill.provider}`);
       expect(contents).toContain(`'${plan.command}' report --provider ${skill.provider} --view summary --format md`);
-      expect(contents).toContain("The primary and required result is `redução cache-aware`");
+      expect(contents).toContain("The primary and required result is the live cache-aware variation and its evidence state");
       expect(contents).toContain("Never replace it with 24-hour or 7-day emptiness");
       expect(contents).not.toContain("{{TOKENPILOT_COMMAND}}");
       expect(skill.state).toBe("installed");
@@ -150,6 +150,47 @@ describe("installation and fail-open launcher lookup", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toBe("runtime report --format md");
     uninstall(paths);
+    cleanup(paths);
+  });
+
+  it("upgrades a staged runtime without changing existing telemetry state", () => {
+    const paths = temporaryPaths();
+    const runtime = (version: string) => {
+      const source = path.join(paths.userHome, `checkout-${version}`);
+      const sourceCli = path.join(source, "dist", "cli.js");
+      const sourceSkill = path.join(source, "integrations", "codex", "tokenpilot", "SKILL.md");
+      fs.mkdirSync(path.dirname(sourceCli), { recursive: true, mode: 0o700 });
+      fs.mkdirSync(path.dirname(sourceSkill), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(sourceCli, `process.stdout.write("tokenpilot ${version}\\n");\n`, { mode: 0o600 });
+      fs.writeFileSync(sourceSkill, "tokenpilot-managed-skill\n{{TOKENPILOT_COMMAND}}\n", { mode: 0o600 });
+      return sourceCli;
+    };
+
+    const first = install(paths, {
+      noShellConfig: true,
+      noAgent: true,
+      noSkills: true,
+      executable: runtime("0.4.17"),
+      nodeExecutable: process.execPath
+    });
+    expect(spawnSync(first.command, [], { encoding: "utf8" }).stdout).toBe("tokenpilot 0.4.17\n");
+
+    fs.mkdirSync(paths.dataDir, { recursive: true, mode: 0o700 });
+    const telemetry = path.join(paths.dataDir, "telemetry.sqlite");
+    fs.writeFileSync(telemetry, "preserve-me", { mode: 0o600 });
+
+    const second = install(paths, {
+      noShellConfig: true,
+      noAgent: true,
+      noSkills: true,
+      executable: runtime("0.5.0"),
+      nodeExecutable: process.execPath
+    });
+    expect(spawnSync(second.command, [], { encoding: "utf8" }).stdout).toBe("tokenpilot 0.5.0\n");
+    expect(fs.readFileSync(telemetry, "utf8")).toBe("preserve-me");
+
+    uninstall(paths);
+    expect(fs.existsSync(telemetry)).toBe(true);
     cleanup(paths);
   });
 

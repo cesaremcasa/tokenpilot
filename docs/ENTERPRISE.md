@@ -1,6 +1,6 @@
 # Enterprise adoption
 
-TokenPilot is developed by Mycellium Lab as a local-first, provider-neutral measurement and optimization layer. The MIT License permits organizational review, modification, and deployment, but the license does not replace an organization's security, legal, privacy, procurement, or provider-terms review.
+TokenPilot is created by Cesar Augusto / Mycellium Lab as a local-first, provider-neutral measurement and optimization layer. The MIT License permits organizational review, modification, and deployment, but the license does not replace an organization's security, legal, privacy, procurement, or provider-terms review.
 
 ## Developer experience
 

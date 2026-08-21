@@ -82,7 +82,7 @@ describe("aggregate reporting", () => {
     cleanup(paths);
   });
 
-  it("finds the latest comparable percentage across all recorded history", () => {
+  it("finds the latest comparable result across all recorded history", () => {
     const paths = temporaryPaths();
     const database = new TelemetryDatabase(paths);
     const old = new Date(Date.now() - 400 * 24 * 60 * 60 * 1_000).toISOString();
@@ -94,8 +94,35 @@ describe("aggregate reporting", () => {
 
     expect(buildReport(paths, 365).comparisons).toHaveLength(0);
     const summary = reportSummaryMarkdown(filterReportByProvider(buildLatestSummaryReport(paths), "codex"));
-    expect(summary).toContain("redução cache-aware  50% a menos");
+    expect(summary).toContain("variação cache-aware medida — 50% a menos (preliminar)");
     cleanup(paths);
+  });
+
+  it("reserves reduction language for formal quality-equivalence evidence", () => {
+    const summary = reportSummaryMarkdown({
+      generatedAt: "now",
+      since: "then",
+      rows: [],
+      coverage: [{ provider: "codex", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
+      comparisons: [{
+        provider: "codex",
+        taskKind: "feature",
+        optimizationProfile: "codex-balanced-v3",
+        metricLabel: "category total",
+        totalSource: "category total",
+        baselineSessions: 5,
+        treatmentSessions: 5,
+        tokenReductionPercent: 50,
+        readiness: "ready",
+        tokenResult: "validated-reduction",
+        qualityObservation: "observed-not-degraded",
+        qualityEvidence: "formal-equivalence",
+        baselineSessionIds: ["baseline"],
+        treatmentSessionIds: ["treatment"]
+      }]
+    });
+    expect(summary).toContain("redução cache-aware validada — 50% a menos");
+    expect(summary).not.toContain("preliminar");
   });
 
   it("groups only aggregate numeric data by provider, mode, and task kind", () => {
@@ -236,7 +263,7 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
       comparisons: [comparison]
     });
-    expect(summary).toContain("redução cache-aware  0% a menos");
+    expect(summary).toContain("cache-shift — sem redução comprovada");
     expect(summary).not.toContain("95.635 → 95.560 tokens");
     expect(summary).not.toContain("97.4%");
     expect(summary).not.toContain("97,4%");
@@ -282,7 +309,7 @@ describe("aggregate reporting", () => {
       coverage: [{ provider: "claude", sessions: 2, measuredSessions: 2, unavailableSessions: 0 }],
       comparisons: [comparison]
     });
-    expect(summary).toContain("redução cache-aware  0% a menos");
+    expect(summary).toContain("cache-shift — sem redução comprovada");
   });
 
   it("keeps observed non-degraded outcomes preliminary without formal quality evidence", () => {
@@ -348,7 +375,7 @@ describe("aggregate reporting", () => {
       rows: [],
       coverage: [{ provider: "codex", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
       comparisons: [comparison]
-    })).toContain("redução cache-aware  50% a menos");
+    })).toContain("variação cache-aware medida — 50% a menos (preliminar)");
   });
 
   it("marks an observed quality degradation when treatment outcomes have more rework", () => {
@@ -377,6 +404,13 @@ describe("aggregate reporting", () => {
     const markdown = reportMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [], comparisons: [comparison] });
     expect(markdown).toContain("quality degraded");
     expect(markdown).not.toContain("$");
+    expect(reportSummaryMarkdown({
+      generatedAt: "now",
+      since: "then",
+      rows: [],
+      coverage: [{ provider: "codex", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }],
+      comparisons: [comparison]
+    })).toContain("variação cache-aware medida — 50% a menos (qualidade observada degradada)");
   });
 
   it("keeps the provider skill summary to the latest policy and one concise block", () => {
@@ -407,7 +441,7 @@ describe("aggregate reporting", () => {
       comparisons: treatmentComparisons(sessions)
     });
     expect(summary).toContain("TokenPilot · Codex");
-    expect(summary).toContain("redução cache-aware  16,7% a menos");
+    expect(summary).toContain("variação cache-aware medida — 16,7% a menos (preliminar)");
     expect(summary).not.toContain("600 → 500 tokens");
     expect(summary).not.toContain("550 tokens");
     expect(summary).not.toContain("USD");
@@ -424,7 +458,7 @@ describe("aggregate reporting", () => {
       ...pair("codex-balanced-v1", "2026-08-18T10:00:00.000Z", 50)
     ]);
     const summary = reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "codex", sessions: 4, measuredSessions: 4, unavailableSessions: 0 }], comparisons });
-    expect(summary).toContain("redução cache-aware  50% a menos");
+    expect(summary).toContain("variação cache-aware medida — 50% a menos (preliminar)");
     expect(summary).not.toContain("10% a menos");
   });
 
@@ -466,7 +500,7 @@ describe("aggregate reporting", () => {
     cleanup(paths);
   });
 
-  it("shows the cache-aware Grok reduction for a preliminary unknown pair", () => {
+  it("shows the cache-aware Grok variation for a preliminary unknown pair", () => {
     const sessions: SessionSummary[] = (["observe", "balanced"] as const).map((mode) => ({
       id: `grok-${mode}`,
       provider: "grok" as const,
@@ -514,12 +548,12 @@ describe("aggregate reporting", () => {
       comparisons: treatmentComparisons(sessions)
     });
     expect(summary).toContain("TokenPilot · Grok");
-    expect(summary).toContain("redução cache-aware  51,1% a menos");
+    expect(summary).toContain("variação cache-aware medida — 51,1% a menos (preliminar)");
     expect(summary).not.toContain("tokens usados");
     expect(summary).not.toContain("235 → 115 tokens");
   });
 
-  it("keeps the latest measured percentage when a shorter window is empty", () => {
+  it("keeps the latest measured result when a shorter window is empty", () => {
     const sevenDaySessions = pricedSessions("research");
     const last7Days = {
       generatedAt: "now",
@@ -537,14 +571,14 @@ describe("aggregate reporting", () => {
     };
     expect(last24Hours.comparisons).toHaveLength(0);
     const summary = reportSummaryMarkdown(last7Days);
-    expect(summary).toContain("redução cache-aware  50% a menos");
+    expect(summary).toContain("variação cache-aware medida — 50% a menos (preliminar)");
     expect(summary).not.toContain("últimas 24 horas");
     expect(summary).not.toContain("7 dias");
     expect(summary).not.toContain("USD");
     expect(summary).not.toContain("Latency");
   });
 
-  it("does not replace the latest reduction with raw totals from an unmatched recent session", () => {
+  it("does not replace the latest comparison with raw totals from an unmatched recent session", () => {
     const last7Days = {
       generatedAt: "now",
       since: "seven-days-ago",
@@ -594,7 +628,7 @@ describe("aggregate reporting", () => {
     };
     expect(last24Hours.rows).toHaveLength(1);
     const summary = reportSummaryMarkdown(last7Days);
-    expect(summary).toContain("redução cache-aware  50% a menos");
+    expect(summary).toContain("variação cache-aware medida — 50% a menos (preliminar)");
     expect(summary).not.toContain("115 tokens usados");
     expect(summary).not.toContain("USD");
   });
@@ -626,7 +660,7 @@ describe("aggregate reporting", () => {
     });
     expect(comparison.tokenReductionPercent).toBe(-20);
     const summary = reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }], comparisons: [comparison] });
-    expect(summary).toContain("redução cache-aware  20% a mais");
+    expect(summary).toContain("variação cache-aware medida — 20% a mais (preliminar)");
   });
 
   it("does not validate when aggregate use falls but the treatment median rises", () => {
@@ -751,7 +785,7 @@ describe("aggregate reporting", () => {
     expect(markdown).toContain("baseline: observe");
     expect(markdown).toContain("## API-equivalent USD");
     expect(markdown).toContain("not a provider bill");
-    expect(markdown).toContain("preliminary signal");
+    expect(markdown).toContain("measured cache-aware variation");
   });
 
   it("does not compare a treatment with a baseline assigned to another policy version", () => {

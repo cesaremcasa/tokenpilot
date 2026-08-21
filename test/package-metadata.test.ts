@@ -9,6 +9,8 @@ type PackageMetadata = {
   bin: Record<string, string>;
   engines: Record<string, string>;
   devDependencies: Record<string, string>;
+  private?: boolean;
+  publishConfig?: { access?: string };
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
@@ -58,5 +60,11 @@ describe("package reproducibility contract", () => {
       expect(packageMetadata[field] ?? expected).toEqual(expected);
       expect(lockRoot[field] ?? expected).toEqual(expected);
     }
+  });
+
+  it("is explicitly ready for the public npm registry", () => {
+    expect(packageMetadata.name).toBe("tokenpilot");
+    expect(packageMetadata.private).not.toBe(true);
+    expect(packageMetadata.publishConfig).toEqual({ access: "public" });
   });
 });

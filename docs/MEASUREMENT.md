@@ -1,6 +1,6 @@
 # Measurement methodology
 
-TokenPilot measures token reduction, not provider billing and not control of the provider's cache. Provider caches remain provider-side. The experiment changes documented session settings and measures the resulting provider-published counters.
+TokenPilot measures cache-aware token variation, not provider billing and not control of the provider's cache. Provider caches remain provider-side. The experiment changes documented session settings and measures the resulting provider-published counters. Reduction language is reserved for comparisons backed by formal quality-equivalence evidence.
 
 ## Categories
 
@@ -65,7 +65,7 @@ A reduction is validated only when all of the following are true:
 
 Providers are never summed. Benchmarks are retained as compatibility evidence but excluded from real-work validation.
 
-The concise scoreboard labels a `cache-shift` directly and may show only its neutral expected → used totals; it never prints a percentage or reduction headline for that state.
+The concise scoreboard labels a `cache-shift` directly as `sem redução comprovada`; it never prints a percentage or reduction headline for that state.
 
 ## Observed quality safeguard
 
@@ -75,7 +75,7 @@ Outcome labels are local, user-supplied classifications and can be misclassified
 
 ## Median and cohort totals
 
-The headline percentage compares the median complete total per session. Cohort avoided tokens use the baseline median multiplied by the number of treatment sessions, minus the recorded treatment total. These percentages can differ and are both labeled.
+The measured percentage compares the median complete total per session. Cohort avoided tokens use the baseline median multiplied by the number of treatment sessions, minus the recorded treatment total. These percentages can differ and are both labeled. Preliminary percentages are directional variations, not validated reductions or economy claims.
 
 Latency uses the baseline and treatment median session durations. A faster result does not prove equal task quality; task outcome, retries, rework, and abandonment remain separate evidence.
 
@@ -91,7 +91,7 @@ All currency output is labeled **API-equivalent USD, not a provider bill**. Subs
 
 `tokenpilot sessions` and the detailed report expose opaque run IDs, timestamps, provider, mode, policy, task category/outcome, measurement state, total basis, price snapshot, and closed unavailability reason. They do not expose content or provider account identity.
 
-The concise report is a rolling last-24-hours window plus the last 7 days. Validated reductions and cache shifts show expected and used tokens; preliminary, incomparable, and limited cohorts show measured use without an economy claim. Use:
+The concise report searches local history for the most recent comparable provider-local result so a quiet rolling window does not erase the last measurement. It prints the measured variation plus `preliminar` or `qualidade observada degradada`, reserves `redução cache-aware validada` for formal evidence, labels cache shifts without a percentage, and leaves limited or incomparable evidence without a numeric claim. Use:
 
 ```sh
 tokenpilot report

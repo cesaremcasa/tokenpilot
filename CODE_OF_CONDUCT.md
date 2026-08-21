@@ -1,6 +1,6 @@
 # Code of Conduct
 
-Mycellium Lab is committed to a respectful, inclusive, and technically rigorous TokenPilot community.
+Cesar Augusto / Mycellium Lab are committed to a respectful, inclusive, and technically rigorous TokenPilot community.
 
 ## Expected behavior
 

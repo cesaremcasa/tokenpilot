@@ -31,6 +31,8 @@ assert.equal(packageLock.version, packageMetadata.version);
 assert.equal(packageRoot?.name, packageMetadata.name);
 assert.equal(packageRoot?.version, packageMetadata.version);
 assert.equal(packageLock.lockfileVersion, 3);
+assert.notEqual(packageMetadata.private, true);
+assert.equal(packageMetadata.publishConfig?.access, "public");
 assert.deepEqual(packageMetadata.dependencies ?? {}, {});
 assert.deepEqual(packageMetadata.optionalDependencies ?? {}, {});
 assert.deepEqual(packageMetadata.peerDependencies ?? {}, {});

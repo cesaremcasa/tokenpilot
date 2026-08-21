@@ -23,7 +23,7 @@ command -v kimi
 The expected launchers are under `~/.tokenpilot/bin`. Reinstall and start a new login shell:
 
 ```sh
-node dist/cli.js install
+tokenpilot install
 exec "$SHELL" -l
 tokenpilot doctor
 ```
@@ -67,7 +67,7 @@ Cache-shift means new input moved toward cache reads while the complete cache-aw
 
 ## Report says preliminary
 
-The cohort is directionally comparable but lacks a validation requirement, commonly 3+3 measured sessions or a known non-benchmark task type. The detailed report preserves that diagnostic, while the concise scoreboard prints only measured use and makes no economy claim. Continue normal use and classify only sessions you can categorize without entering task content.
+The cohort is directionally comparable but lacks a validation requirement, commonly 3+3 measured sessions, a known non-benchmark task type, or formal quality evidence. The concise report may show the measured cache-aware variation, but it labels it `preliminar` and makes no validated-reduction or economy claim. Continue normal use and classify only sessions you can categorize without entering task content.
 
 ## Kimi
 
@@ -91,8 +91,8 @@ The process bypass records nothing. `off` applies to future sessions until the m
 Reinstalling preserves the database. Check the dry run first if the shell or skill directories were manually modified:
 
 ```sh
-node dist/cli.js install --dry-run
-node dist/cli.js install
+tokenpilot install --dry-run
+tokenpilot install
 ```
 
 The installer refuses to overwrite foreign launchers, modified managed blocks, unsafe directories, or third-party skills.
