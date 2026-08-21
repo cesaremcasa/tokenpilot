@@ -1,7 +1,7 @@
 # TokenPilot
 
 [![CI](https://github.com/cesaremcasa/tokenpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/cesaremcasa/tokenpilot/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/tokenpilot.svg)](https://www.npmjs.com/package/tokenpilot)
+[![npm](https://img.shields.io/npm/v/%40cesaremcasa%2Ftokenpilot.svg)](https://www.npmjs.com/package/@cesaremcasa/tokenpilot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js 22.5+](https://img.shields.io/badge/Node.js-22.5%2B-339933.svg)](https://nodejs.org/)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](docs/INSTALLATION.md)
@@ -17,7 +17,7 @@ TokenPilot is created by **Cesar Augusto / Mycellium Lab**, released under the [
 Install at least one supported provider CLI first and confirm that it works normally. TokenPilot wraps existing provider commands; it does not install or authenticate them.
 
 ```sh
-npm install -g tokenpilot
+npm install -g @cesaremcasa/tokenpilot
 tokenpilot install
 tokenpilot doctor
 ```
@@ -144,8 +144,8 @@ GitHub release artifacts are generated twice from the committed lockfile and mus
 npm ci --ignore-scripts
 npm run build
 npm run release:artifact -- --output release-artifacts
-shasum -a 256 -c release-artifacts/tokenpilot-0.5.0.tgz.sha256
-cat release-artifacts/tokenpilot-0.5.0.cdx.json
+shasum -a 256 -c release-artifacts/cesaremcasa-tokenpilot-0.5.0.tgz.sha256
+cat release-artifacts/cesaremcasa-tokenpilot-0.5.0.cdx.json
 ```
 
 The release smoke installs that exact tarball into a temporary npm consumer, executes the staged runtime after removing the consumer package, and uninstalls the temporary launchers.

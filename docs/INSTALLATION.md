@@ -29,7 +29,7 @@ At least one provider CLI is sufficient. A missing provider does not prevent the
 ## npm installation
 
 ```sh
-npm install -g tokenpilot
+npm install -g @cesaremcasa/tokenpilot
 tokenpilot install --dry-run
 tokenpilot install
 tokenpilot doctor
@@ -63,7 +63,7 @@ For a reviewed tarball rather than a checkout, generate and verify the release a
 npm ci --ignore-scripts
 npm run build
 npm run release:artifact -- --output release-artifacts
-shasum -a 256 -c release-artifacts/tokenpilot-0.5.0.tgz.sha256
+shasum -a 256 -c release-artifacts/cesaremcasa-tokenpilot-0.5.0.tgz.sha256
 ```
 
 The generated CycloneDX file is derived from `package-lock.json`. The release script packs the tarball twice and refuses to continue if the bytes differ. The tarball smoke installs that exact file into a temporary npm consumer, executes the staged private runtime after removing the consumer copy, and uninstalls the temporary launchers. It does not use the source checkout as the runtime artifact.
@@ -98,7 +98,7 @@ command -v kimi
 ## Upgrade an npm installation
 
 ```sh
-npm install -g tokenpilot@latest
+npm install -g @cesaremcasa/tokenpilot@latest
 tokenpilot install
 tokenpilot doctor
 ```
@@ -132,7 +132,7 @@ For automation, run the build and install under the same login shell that owns t
 
 Each machine keeps its own SQLite database. An update never copies measurements between hosts.
 
-Source installations may install a local poller that pulls `origin/main` on a timer. npm installations should upgrade with `npm install -g tokenpilot@latest` instead.
+Source installations may install a local poller that pulls `origin/main` on a timer. npm installations should upgrade with `npm install -g @cesaremcasa/tokenpilot@latest` instead.
 
 ```sh
 ./scripts/update.sh
