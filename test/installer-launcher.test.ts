@@ -25,6 +25,33 @@ describe("installation and fail-open launcher lookup", () => {
     expect(() => assertRuntimeSupported("linux", "22.4.9")).toThrow("Node 22.4.9 is unsupported");
   });
 
+  it("keeps install and uninstall dry runs read-only", () => {
+    const paths = temporaryPaths();
+    const options = {
+      noShellConfig: true,
+      noAgent: true,
+      noSkills: true,
+      executable: "/opt/tokenpilot/dist/cli.js",
+      nodeExecutable: "/usr/local/bin/node"
+    };
+
+    const preview = install(paths, { ...options, dryRun: true });
+    expect(preview.shims).toHaveLength(4);
+    expect(fs.existsSync(paths.home)).toBe(false);
+    expect(fs.existsSync(paths.configFile)).toBe(false);
+    expect(fs.existsSync(paths.databaseFile)).toBe(false);
+
+    const installed = install(paths, options);
+    expect(fs.existsSync(installed.command)).toBe(true);
+    const uninstallPreview = uninstall(paths, true);
+    expect(uninstallPreview.command).toBe(installed.command);
+    expect(fs.existsSync(installed.command)).toBe(true);
+    expect(fs.existsSync(installed.shims[0])).toBe(true);
+
+    uninstall(paths);
+    cleanup(paths);
+  });
+
   it("creates removable per-provider shims without changing the shell when requested", () => {
     const paths = temporaryPaths();
     const plan = install(paths, { noShellConfig: true, noAgent: true, executable: "/opt/tokenpilot/dist/cli.js", nodeExecutable: "/usr/local/bin/node" });

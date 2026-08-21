@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { addPricing, DEFAULT_CONFIG, disablePricing, ensureConfig, setPricing } from "../src/config.js";
+import { addPricing, DEFAULT_CONFIG, disablePricing, ensureConfig, setMode, setPricing } from "../src/config.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { getPaths } from "../src/paths.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
@@ -14,6 +14,18 @@ describe("configuration and balanced allocation", () => {
     expect(DEFAULT_CONFIG).toMatchObject({ version: 2, defaultMode: "reduce", pricingProfiles: [], activePricing: {} });
     fs.writeFileSync(paths.configFile, JSON.stringify({ version: 1, defaultMode: "observe" }), { mode: 0o600 });
     expect(ensureConfig(paths)).toMatchObject({ version: 2, defaultMode: "observe", pricingProfiles: [], activePricing: {} });
+    cleanup(paths);
+  });
+
+  it("persists every public runtime mode without changing the configuration schema", () => {
+    const paths = temporaryPaths();
+    for (const mode of ["reduce", "balanced", "observe", "deep", "off"] as const) {
+      expect(setMode(paths, mode)).toEqual({
+        ...DEFAULT_CONFIG,
+        defaultMode: mode
+      });
+      expect(ensureConfig(paths).defaultMode).toBe(mode);
+    }
     cleanup(paths);
   });
 
