@@ -4,7 +4,7 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 
 ## 0.5.0 — 2026-08-21
 
-- Launch the first public npm beta as `tokenpilot`, with a three-command install path and explicit Cesar Augusto / Mycellium Lab authorship.
+- Launch the first public npm beta as `@cesaremcasa/tokenpilot`, with a three-command install path and explicit Cesar Augusto / Mycellium Lab authorship.
 - Replace unqualified summary reduction language with evidence-aware output: preliminary variation, observed quality degradation, validated reduction, cache shift, or no comparable measurement.
 - Preserve the JSON report and SQLite schema while updating every managed provider skill to paste the live evidence state unchanged.
 - Reframe the existing research table as an experimental snapshot rather than a universal or formal quality-equivalence claim.

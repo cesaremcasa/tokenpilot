@@ -63,7 +63,7 @@ describe("package reproducibility contract", () => {
   });
 
   it("is explicitly ready for the public npm registry", () => {
-    expect(packageMetadata.name).toBe("tokenpilot");
+    expect(packageMetadata.name).toBe("@cesaremcasa/tokenpilot");
     expect(packageMetadata.private).not.toBe(true);
     expect(packageMetadata.publishConfig).toEqual({ access: "public" });
   });
