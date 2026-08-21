@@ -23,7 +23,7 @@ TokenPilot preserves the model selected by the user. It does not maintain a priv
 
 ## Advertised model/reasoning compatibility check
 
-The first compatibility matrix was executed on August 15, 2026, using the models and effort levels advertised by the locally installed CLIs. These runs were classified as benchmarks and did not contribute to the reduction claims.
+The first compatibility matrix was executed on August 15, 2026, using the models and effort levels advertised by the locally installed CLIs. These runs were classified as benchmarks and did not contribute to the observed research cohorts.
 
 | Provider | Advertised matrix exercised | Result |
 | --- | --- | --- |

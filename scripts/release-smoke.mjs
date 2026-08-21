@@ -82,6 +82,8 @@ try {
   const installedRoot = path.join(consumerDirectory, "node_modules", packageMetadata.name);
   const installedPackage = JSON.parse(fs.readFileSync(path.join(installedRoot, "package.json"), "utf8"));
   assert.equal(installedPackage.version, packageMetadata.version);
+  assert.notEqual(installedPackage.private, true);
+  assert.equal(installedPackage.publishConfig?.access, "public");
   const installedCli = path.join(installedRoot, "dist", "cli.js");
   const installedCommand = path.join(consumerDirectory, "node_modules", ".bin", "tokenpilot");
   assert.equal(run(installedCommand, ["--version"], { cwd: consumerDirectory, env: { ...process.env, NODE_NO_WARNINGS: "1" } }).stdout, `tokenpilot ${packageMetadata.version}\n`);

@@ -2,6 +2,14 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.5.0 — 2026-08-21
+
+- Launch the first public npm beta as `tokenpilot`, with a three-command install path and explicit Cesar Augusto / Mycellium Lab authorship.
+- Replace unqualified summary reduction language with evidence-aware output: preliminary variation, observed quality degradation, validated reduction, cache shift, or no comparable measurement.
+- Preserve the JSON report and SQLite schema while updating every managed provider skill to paste the live evidence state unchanged.
+- Reframe the existing research table as an experimental snapshot rather than a universal or formal quality-equivalence claim.
+- Keep the zero-runtime-dependency package, deterministic tarball, SHA-256 manifest, CycloneDX SBOM, clean install smoke, and macOS/Linux Node 22 CI gates.
+
 ## 0.4.17 — 2026-08-18
 
 - Deduplicate explicit provider treatment flags and value-taking options before adding validated policy arguments, preserving user argument order and values.
@@ -78,7 +86,7 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 ## 0.4.6 — 2026-08-15
 
 - Published the project documentation under the Mycellium Lab identity and added the MIT License.
-- Documented the first validated research round for Claude, Codex, Grok, and Kimi.
+- Documented the first matched research snapshot for Claude, Codex, Grok, and Kimi.
 - Changed the audited Kimi 0.36.x treatment from the unverified `low` label to the documented boolean `thinking: off` control (`kimi-balanced-v4`).
 - Confirmed the advertised model/reasoning matrix on macOS and Linux test environments.
 - Retained fail-open behavior, content-free storage, provider-local comparisons, and cache-shift detection.

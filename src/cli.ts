@@ -272,8 +272,8 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     if (format !== "md" && format !== "json") throw new Error("--format must be md or json");
     if (view === "summary") {
       // The provider skill exists to show the latest comparable cache-aware
-      // reduction. A quiet rolling window must never erase the last measured
-      // percentage or replace it with an unrelated raw token total.
+      // comparison. A quiet rolling window must never erase the last measured
+      // variation or its evidence state, or replace it with a raw token total.
       const completeSummary = buildLatestSummaryReport(paths);
       const report = requestedProvider === undefined ? completeSummary : filterReportByProvider(completeSummary, requestedProvider);
       if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

@@ -52,6 +52,62 @@ describe("local launcher and collector", () => {
     return originalBin;
   }
 
+  it("bypasses treatment and telemetry through the process override or off mode", async () => {
+    const paths = temporaryPaths();
+    const invocations = path.join(paths.userHome, "bypass-invocations");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+if [ "$1" = "--version" ] || [ "$1" = "--help" ]; then exit 0; fi
+printf '%s\\n' "$*" >> '${invocations}'
+exit 0
+`);
+
+    const originalBypass = process.env.TOKENPILOT_BYPASS;
+    process.env.TOKENPILOT_BYPASS = "1";
+    try {
+      expect(await withProviderPath(originalBin, () => runProvider("codex", ["run", "bypassed-task"], paths))).toBe(0);
+    } finally {
+      if (originalBypass === undefined) delete process.env.TOKENPILOT_BYPASS;
+      else process.env.TOKENPILOT_BYPASS = originalBypass;
+    }
+    expect(fs.existsSync(paths.configFile)).toBe(false);
+    expect(fs.existsSync(paths.databaseFile)).toBe(false);
+
+    const config = ensureConfig(paths);
+    config.defaultMode = "off";
+    writeConfig(paths, config);
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["run", "off-task"], paths))).toBe(0);
+    expect(fs.readFileSync(invocations, "utf8")).toBe("run bypassed-task\nrun off-task\n");
+    expect(fs.existsSync(paths.databaseFile)).toBe(false);
+    cleanup(paths);
+  });
+
+  it("keeps deep mode argument-transparent while retaining measurement", async () => {
+    const paths = temporaryPaths();
+    const invocations = path.join(paths.userHome, "deep-invocations");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'fake-codex 1.0'; exit 0; fi
+if [ "$1" = "--help" ]; then exit 0; fi
+printf '%s\\n' "$*" > '${invocations}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "deep";
+    writeConfig(paths, config);
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["run", "deep-task"], paths))).toBe(0);
+    expect(fs.readFileSync(invocations, "utf8")).toBe("run deep-task\n");
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
+      provider: "codex",
+      mode: "deep",
+      optimizationApplied: false,
+      collectionState: "unavailable"
+    });
+    database.close();
+    expect(fs.readFileSync(paths.databaseFile).toString("latin1")).not.toContain("deep-task");
+    cleanup(paths);
+  });
+
   it("records an envelope but never imports ambient provider telemetry", async () => {
     const paths = temporaryPaths();
     const originalBin = writeFakeCodex(paths, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'fake-codex 1.0\\n'; fi\nexit 0\n");

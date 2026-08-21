@@ -1,6 +1,6 @@
 # Contributing to TokenPilot
 
-TokenPilot is developed by Mycellium Lab and welcomes focused, privacy-preserving contributions.
+TokenPilot is created by Cesar Augusto / Mycellium Lab and welcomes focused, privacy-preserving contributions.
 
 ## Before opening a change
 

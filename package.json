@@ -1,10 +1,12 @@
 {
   "name": "tokenpilot",
-  "version": "0.4.17",
+  "version": "0.5.0",
   "description": "Local-first token measurement and optimization for Claude Code, OpenAI Codex, Grok Build, and Kimi CLI. Measures provider-published usage, runs version-gated treatments, and produces cache-aware reports without proxying traffic or storing prompts.",
-  "private": true,
   "license": "MIT",
-  "author": "Mycellium Lab",
+  "author": "Cesar Augusto (Mycellium Lab)",
+  "publishConfig": {
+    "access": "public"
+  },
   "homepage": "https://github.com/cesaremcasa/tokenpilot#readme",
   "repository": {
     "type": "git",

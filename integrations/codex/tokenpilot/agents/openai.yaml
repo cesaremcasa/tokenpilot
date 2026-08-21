@@ -1,5 +1,5 @@
-# tokenpilot-managed-skill:v5 codex
+# tokenpilot-managed-skill:v6 codex
 interface:
   display_name: "TokenPilot"
-  short_description: "Show the latest cache-aware Codex token reduction"
-  default_prompt: "Use $tokenpilot to show the latest measured cache-aware Codex token-reduction percentage."
+  short_description: "Show the latest cache-aware Codex evidence"
+  default_prompt: "Use $tokenpilot to show the latest measured cache-aware Codex result and evidence state."

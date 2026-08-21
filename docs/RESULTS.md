@@ -1,12 +1,12 @@
-# First research round — August 15, 2026
+# First research snapshot — August 15, 2026
 
 This document is a **historical snapshot**. It is not live TokenPilot output. A `/tokenpilot` or `tokenpilot report` on any machine must print that machine's current scoreboard, never this table.
 
-This document is the first manually reviewed TokenPilot research snapshot published by Mycellium Lab. It records what the local reports said at the end of the round; it is not a promise of future performance.
+This document is the first manually reviewed TokenPilot research snapshot published by Cesar Augusto / Mycellium Lab. It records what the local reports said at the end of the round; it is not a promise of future performance.
 
 The Kimi figures below are historical only. The Kimi REST/WebSocket bridge was disabled during the subsequent Codex Security hardening audit, so current Kimi sessions run unchanged and remain envelope-only.
 
-This snapshot predates the 0.4.16 reproducible artifact workflow and the later report safeguards. Those distribution and reporting controls do not revise any historical result in this document.
+This snapshot predates the 0.4.16 reproducible artifact workflow and the 0.5 evidence terminology. Those distribution and reporting controls do not revise the recorded totals. Under the 0.5 contract, every percentage below is a preliminary observed cache-aware variation because the round did not include formal quality-equivalence evidence.
 
 The next weekly snapshot is planned for Saturday, August 22, 2026. Future rounds should be appended as separate dated sections or files so earlier evidence remains reproducible.
 
@@ -22,9 +22,9 @@ The next weekly snapshot is planned for Saturday, August 22, 2026. Future rounds
 
 The four providers were measured independently. Token counts were never added across providers.
 
-## Validated results
+## Observed research results
 
-| Provider / policy | Coverage | Baseline / treatment | Median total | Validated median reduction | Cohort expected / used / avoided | Cohort reduction | Median latency |
+| Provider / policy | Coverage | Baseline / treatment | Median total | Observed median change | Cohort expected / used / difference | Cohort change | Median latency |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Claude / `claude-balanced-v7` | 45/46 | 5 / 5 | 87,247 → 29,691 | **66.0%** | 436,235 / 146,898 / 289,337 | 66.3% | 6s faster (35.3%) |
 | Codex / `codex-balanced-v2` | 49/51 | 5 / 5 | 324,467 → 146,800 | **54.8%** | 1,622,335 / 722,273 / 900,062 | 55.5% | 60s faster (69.0%) |
@@ -44,9 +44,9 @@ Coverage is the provider's complete rolling seven-day coverage at snapshot time,
 
 All four complete totals declined materially; none of these selected cohorts triggered the cache-shift rule.
 
-## What was validated
+## Cohort matching checks
 
-Each headline row used:
+Each row matched:
 
 - the same provider;
 - a known, non-benchmark `research` task type;
@@ -55,6 +55,8 @@ Each headline row used:
 - the same no-price snapshot;
 - at least five measured baselines and five measured treatments; and
 - positive avoided tokens without a cache shift.
+
+Those checks establish a comparable directional cohort. They do not establish formal quality equivalence, so the 0.5 public beta does not call these rows validated reductions.
 
 ## Model and reasoning smoke matrix
 

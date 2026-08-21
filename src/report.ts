@@ -443,9 +443,9 @@ function comparisonResult(comparison: TreatmentComparison): string {
   const quality = qualityObservation(comparison) === "observed-not-degraded"
     ? "quality observed not degraded"
     : qualityObservation(comparison) === "degraded" ? "quality degraded" : "quality unverified";
-  if (comparison.tokenResult === "validated-reduction") return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated reduction (${quality})`;
+  if (comparison.tokenResult === "validated-reduction") return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated cache-aware reduction (${quality})`;
   const percent = comparison.tokenReductionPercent === undefined ? "" : `${comparison.tokenReductionPercent.toFixed(1)}% `;
-  return `${percent}preliminary signal — not an economy (${quality})`;
+  return `${percent}measured cache-aware variation — preliminary, not an economy (${quality})`;
 }
 
 function categoryLine(comparison: TreatmentComparison): string {
@@ -491,10 +491,17 @@ function providerScore(report: Report, provider: Provider): string {
   const scoped = filterReportByProvider(report, provider);
   const comparison = summaryComparison(scoped.comparisons);
   if (comparison?.tokenResult === "cache-shift") {
-    return scoreboardPercent(0);
+    return "cache-shift — sem redução comprovada";
   }
   if (comparison?.tokenReductionPercent !== undefined) {
-    return scoreboardPercent(comparison.tokenReductionPercent);
+    const percent = scoreboardPercent(comparison.tokenReductionPercent);
+    if (comparison.tokenResult === "validated-reduction") {
+      return `redução cache-aware validada — ${percent}`;
+    }
+    const evidence = qualityObservation(comparison) === "degraded"
+      ? "qualidade observada degradada"
+      : "preliminar";
+    return `variação cache-aware medida — ${percent} (${evidence})`;
   }
   return SCOREBOARD_MISSING;
 }
@@ -502,7 +509,7 @@ function providerScore(report: Report, provider: Provider): string {
 function scoreboardBlock(provider: Provider | undefined, report: Report): string {
   const title = provider ? `TokenPilot · ${providerName(provider)}` : "TokenPilot";
   const score = provider ? providerScore(report, provider) : SCOREBOARD_MISSING;
-  return [title, "", `redução cache-aware  ${score}`, ""].join("\n");
+  return [title, "", score, ""].join("\n");
 }
 
 function summaryProviders(report: Report): Provider[] {
@@ -513,8 +520,8 @@ function summaryProviders(report: Report): Provider[] {
 
 /**
  * Skill-facing scoreboard: the latest locally recorded, comparable,
- * cache-aware token-reduction percentage. Providers stay separate. Rolling
- * window totals, USD, latency, quality labels, and policy jargon stay out.
+ * cache-aware variation and its evidence state. Providers stay separate.
+ * Rolling-window totals, USD, latency, and policy jargon stay out.
  */
 export function reportSummaryMarkdown(report: Report): string {
   const providers = summaryProviders(report);
