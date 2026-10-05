@@ -373,7 +373,9 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
         ? "new input moved into cache reads while the complete total stayed flat"
         : tokenResult === "validated-reduction"
           ? undefined
-          : quality.qualityObservation === "unknown"
+          : tokenReductionPercent < 0
+            ? "increased cache-aware token use; reduction policy rejected and requires retesting"
+            : quality.qualityObservation === "unknown"
             ? "quality observation unavailable; classify every matched session as completed, rework, or abandoned"
             : quality.qualityObservation === "degraded"
               ? "observed quality degraded; treatment outcomes are worse than baseline"
@@ -458,6 +460,9 @@ function comparisonResult(comparison: TreatmentComparison): string {
   const quality = qualityObservation(comparison) === "observed-not-degraded"
     ? "quality observed not degraded"
     : qualityObservation(comparison) === "degraded" ? "quality degraded" : "quality unverified";
+  if (comparison.tokenReductionPercent !== undefined && comparison.tokenReductionPercent < 0) {
+    return `${Math.abs(comparison.tokenReductionPercent).toFixed(1)}% increased cache-aware use — reduction policy rejected (${quality})`;
+  }
   if (comparison.tokenResult === "validated-reduction") return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated cache-aware reduction (${quality})`;
   const percent = comparison.tokenReductionPercent === undefined ? "" : `${comparison.tokenReductionPercent.toFixed(1)}% `;
   return `${percent}measured cache-aware variation — preliminary, not an economy (${quality})`;
@@ -514,6 +519,9 @@ function providerScore(report: Report, provider: Provider): string {
   }
   if (comparison?.tokenReductionPercent !== undefined) {
     const percent = scoreboardPercent(comparison.tokenReductionPercent);
+    if (comparison.tokenReductionPercent < 0) {
+      return `política de redução reprovada — ${percent}`;
+    }
     if (comparison.tokenResult === "validated-reduction") {
       return `redução cache-aware validada — ${percent}`;
     }

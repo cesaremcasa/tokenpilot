@@ -694,7 +694,8 @@ describe("aggregate reporting", () => {
     });
     expect(comparison.tokenReductionPercent).toBe(-20);
     const summary = reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }], comparisons: [comparison] });
-    expect(summary).toContain("variação cache-aware medida — 20% a mais (preliminar)");
+    expect(summary).toContain("política de redução reprovada — 20% a mais");
+    expect(summary).not.toContain("variação cache-aware medida");
   });
 
   it("does not validate when aggregate use falls but the treatment median rises", () => {

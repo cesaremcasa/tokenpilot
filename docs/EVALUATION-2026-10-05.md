@@ -1,6 +1,6 @@
 # Real model evaluation — October 5, 2026
 
-24 real CLI calls: eight Codex models (CLI 0.155.1) and four Grok models (CLI 1.0.46), one observe/reduce pair per model. Each independently fixed the existing public [PR55 argument-order bug](https://github.com/cesaremcasa/tokenpilot/pull/55) from baseline `dfd4bcb06093f0644ef7002eee8616ac10d09830`. All 24 patches passed the five acceptance checks.
+24 real CLI calls: eight Codex models (CLI 0.155.1) and four Grok models (CLI 1.0.46), one observe/reduce pair per model. Each independently fixed the existing public [PR55 argument-order bug](https://github.com/cesaremcasa/tokenpilot/pull/55) from baseline `dfd4bcb06093f0644ef7002eee8616ac10d09830`. All 24 patches passed the five code-correctness checks. Reduction acceptance failed for GPT-5.5: its treatment increased use by 30.9%. That policy is not approved for this model and requires correction and a predeclared repeat evaluation.
 
 | Model | Observe tokens | Reduce tokens | Observed change |
 | --- | ---: | ---: | ---: |
