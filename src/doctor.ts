@@ -75,7 +75,7 @@ function providerCapability(provider: Provider, binary: string): { provider: Pro
   // This probes the supported v3 argument surface with --help only; it does
   // not query model access or imply the account can use the representative ID.
   const plan = planForInstalledCli(provider, "balanced", binary, helpEnvironment, undefined,
-    provider === "codex" ? "gpt-6-luna" : undefined);
+    provider === "codex" ? "gpt-6-astra" : undefined);
   let telemetry: string;
   if (provider === "claude") telemetry = "metrics-only local OTLP; a session must publish numeric counters before it is measured";
   else if (provider === "codex") telemetry = plan.applied

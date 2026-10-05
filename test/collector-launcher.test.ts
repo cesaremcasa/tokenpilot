@@ -145,7 +145,7 @@ exit 0
     expect(allocator.allocateBalancedMode("codex", () => 0.9)).toBe("observe");
     allocator.close();
 
-    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "--model", "gpt-6-luna", "super-secret-command-argument"], paths))).toBe(0);
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "--model", "gpt-6-astra", "super-secret-command-argument"], paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
@@ -157,7 +157,7 @@ exit 0
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
     const markdown = reportMarkdown(buildReport(paths, 7));
-    for (const forbidden of ["super-secret-command-argument", "gpt-6-luna", TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION]) {
+    for (const forbidden of ["super-secret-command-argument", "gpt-6-astra", TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION]) {
       expect(rawDatabase).not.toContain(forbidden);
       expect(markdown).not.toContain(forbidden);
     }
@@ -483,7 +483,7 @@ exit 0
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v3",
+      optimizationProfile: "codex-balanced-v5",
       collectionState: "collected"
     });
     const summary = database.sessionSummariesSince(new Date(0).toISOString())[0];
@@ -511,7 +511,12 @@ exit 0
     const markdown = reportMarkdown(buildReport(paths, 7));
     expect(rawDatabase).not.toContain("private task result");
     expect(markdown).not.toContain("private task result");
-    expect(fs.readFileSync(observedArguments, "utf8")).toContain("--json");
+    const launchedArguments = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(launchedArguments.slice(-args.length)).toEqual(args);
+    expect(launchedArguments.join(" ")).toContain('model_verbosity="low"');
+    for (const setting of ["model_reasoning_effort", "model_reasoning_summary", "model_auto_compact_token_limit", "developer_instructions"]) {
+      expect(launchedArguments.join(" ")).not.toContain(setting);
+    }
     cleanup(paths);
   });
 

@@ -361,6 +361,15 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string, co
       return { ...NONE, unavailableReason: "this Codex invocation has no unambiguous explicit model selector; measuring without treatment" };
     }
     const usesV4 = codexModel === "gpt-5.5";
+    const usesV5 = codexModel === "gpt-6-luna" || codexModel === "gpt-daybreak-blue-latest";
+    if (usesV5) {
+      return {
+        args: ["--config", "model_verbosity=\"low\""],
+        applied: true,
+        profile: "codex-balanced-v5",
+        summary: "native reasoning and compaction defaults, low verbosity"
+      };
+    }
     const instruction = usesV4 ? CODEX_TOKEN_EFFICIENCY_INSTRUCTION : CODEX_V3_TOKEN_EFFICIENCY_INSTRUCTION;
     const args = [
       "--config", "model_reasoning_effort=\"low\"",

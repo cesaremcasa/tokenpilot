@@ -84,7 +84,7 @@ describe("version-gated balanced optimization", () => {
     expect(CODEX_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("at most three");
     expect(CODEX_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("nl -ba");
 
-    const priorPolicy = planFromHelp("codex", "balanced", help, "gpt-6-luna");
+    const priorPolicy = planFromHelp("codex", "balanced", help, "gpt-6-astra");
     expect(priorPolicy).toMatchObject({ applied: true, profile: "codex-balanced-v3" });
     expect(priorPolicy.args.join(" ")).toContain("model_auto_compact_token_limit=32000");
     expect(priorPolicy.args.join(" ")).toContain("model_auto_compact_token_limit_scope=\"body_after_prefix\"");
@@ -93,6 +93,21 @@ describe("version-gated balanced optimization", () => {
       expect(priorPolicy.args.join(" ")).not.toContain(forbidden);
     }
     expect(planFromHelp("codex", "balanced", help)).toMatchObject({ applied: false, args: [] });
+  });
+
+  it("uses native defaults with only low verbosity for gpt-6-luna and daybreak", () => {
+    const help = "-c, --config <key=value> --profile <profile>";
+    for (const model of ["gpt-6-luna", "gpt-daybreak-blue-latest"]) {
+      const plan = planFromHelp("codex", "balanced", help, model);
+      expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v5" });
+      expect(plan.args).toEqual(["--config", "model_verbosity=\"low\""]);
+      for (const setting of ["model_reasoning_effort", "model_reasoning_summary", "model_auto_compact_token_limit", "developer_instructions"]) {
+        expect(plan.args.join(" ")).not.toContain(setting);
+      }
+      for (const capability of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false"]) {
+        expect(plan.args.join(" ")).not.toContain(capability);
+      }
+    }
   });
 
   it("uses current Grok controls while preserving the full feature surface", () => {
