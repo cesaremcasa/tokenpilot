@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
   it("uses the latency-first Claude v7 policy when every flag is advertised", () => {
@@ -95,15 +95,18 @@ describe("version-gated balanced optimization", () => {
     expect(planFromHelp("codex", "balanced", help)).toMatchObject({ applied: false, args: [] });
   });
 
-  it("uses native defaults with only low verbosity for gpt-6-luna and daybreak", () => {
+  it("uses native model controls with concise batched workflow guidance for gpt-6-luna and daybreak", () => {
     const help = "-c, --config <key=value> --profile <profile>";
     for (const model of ["gpt-6-luna", "gpt-daybreak-blue-latest"]) {
       const plan = planFromHelp("codex", "balanced", help, model);
-      expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v5" });
-      expect(plan.args).toEqual(["--config", "model_verbosity=\"low\""]);
-      for (const setting of ["model_reasoning_effort", "model_reasoning_summary", "model_auto_compact_token_limit", "developer_instructions"]) {
+      expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v6" });
+      expect(plan.args).toEqual(["--config", `developer_instructions=${JSON.stringify(CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION)}`]);
+      for (const setting of ["model=", "model_reasoning_effort", "model_reasoning_summary", "model_verbosity", "model_auto_compact_token_limit"]) {
         expect(plan.args.join(" ")).not.toContain(setting);
       }
+      expect(CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION).toContain("batch independent searches and reads");
+      expect(CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION).toContain("Run all requested checks");
+      expect(CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("at most");
       for (const capability of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false"]) {
         expect(plan.args.join(" ")).not.toContain(capability);
       }

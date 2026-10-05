@@ -5,7 +5,7 @@ import { collectPendingRuns } from "../src/collector.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 import { buildReport, reportMarkdown } from "../src/report.js";
 import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
@@ -483,7 +483,7 @@ exit 0
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v5",
+      optimizationProfile: "codex-balanced-v6",
       collectionState: "collected"
     });
     const summary = database.sessionSummariesSince(new Date(0).toISOString())[0];
@@ -513,10 +513,12 @@ exit 0
     expect(markdown).not.toContain("private task result");
     const launchedArguments = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
     expect(launchedArguments.slice(-args.length)).toEqual(args);
-    expect(launchedArguments.join(" ")).toContain('model_verbosity="low"');
-    for (const setting of ["model_reasoning_effort", "model_reasoning_summary", "model_auto_compact_token_limit", "developer_instructions"]) {
+    expect(launchedArguments.join(" ")).toContain(CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION);
+    for (const setting of ["model=", "model_reasoning_effort", "model_reasoning_summary", "model_verbosity", "model_auto_compact_token_limit"]) {
       expect(launchedArguments.join(" ")).not.toContain(setting);
     }
+    expect(rawDatabase).not.toContain(CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION);
+    expect(markdown).not.toContain(CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION);
     cleanup(paths);
   });
 

@@ -16,6 +16,7 @@ export const TOKEN_EFFICIENCY_INSTRUCTION = "Minimize token use without reducing
 /** Codex v4 keeps native context-compaction defaults and the full capability surface. */
 export const CODEX_TOKEN_EFFICIENCY_INSTRUCTION = `Preserve every available capability. ${TOKEN_EFFICIENCY_INSTRUCTION}`;
 const CODEX_V3_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve every available capability. Minimize total tokens without reducing correctness. For read-only repository work, use at most three batched shell calls: locate evidence, inspect only required ranges, then verify every exact value and citation with nl -ba. Never cite a line not present in numbered output. Answer immediately after verification. For edits, batch inspection, perform the edit, run one sufficient verification, then stop. Do not narrate routine steps, reread unchanged data, repeat context, or add unrequested work.";
+export const CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve every available capability and requested scope. Inspect relevant ranges rather than rereading whole files; batch independent searches and reads. Make the smallest complete edit. Run all requested checks in one shell invocation when independent. Retry only after a new failure, fix the observed cause, and repeat the affected check. Stop as soon as all required checks pass; avoid repeating context and routine narration.";
 
 /**
  * Claude's latency policy is deliberately shorter than the cross-provider
@@ -361,13 +362,13 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string, co
       return { ...NONE, unavailableReason: "this Codex invocation has no unambiguous explicit model selector; measuring without treatment" };
     }
     const usesV4 = codexModel === "gpt-5.5";
-    const usesV5 = codexModel === "gpt-6-luna" || codexModel === "gpt-daybreak-blue-latest";
-    if (usesV5) {
+    const usesV6 = codexModel === "gpt-6-luna" || codexModel === "gpt-daybreak-blue-latest";
+    if (usesV6) {
       return {
-        args: ["--config", "model_verbosity=\"low\""],
+        args: ["--config", `developer_instructions=${JSON.stringify(CODEX_V6_TOKEN_EFFICIENCY_INSTRUCTION)}`],
         applied: true,
-        profile: "codex-balanced-v5",
-        summary: "native reasoning and compaction defaults, low verbosity"
+        profile: "codex-balanced-v6",
+        summary: "native model, reasoning, verbosity and compaction defaults; concise batched workflow"
       };
     }
     const instruction = usesV4 ? CODEX_TOKEN_EFFICIENCY_INSTRUCTION : CODEX_V3_TOKEN_EFFICIENCY_INSTRUCTION;
