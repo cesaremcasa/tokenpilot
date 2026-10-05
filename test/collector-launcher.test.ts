@@ -225,7 +225,11 @@ exit 0
     cleanup(paths);
   });
 
-  it("measures Codex without a treatment when model selection is config-only, profile-only, or ambiguous", async () => {
+  it.each([
+    { selection: "config-only", args: ["exec", "--config", 'model="gpt-5.5"', "config-selected-task"] },
+    { selection: "profile-only", args: ["exec", "--profile", "gpt55", "profile-selected-task"] },
+    { selection: "ambiguous", args: ["exec", "--model", "gpt-5.5", "--model", "gpt-6-luna", "ambiguous-task"] }
+  ])("measures Codex without a treatment for $selection model selection", async ({ args }) => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "codex-unselected-model-arguments");
     const originalBin = writeFakeCodex(paths, `#!/bin/sh
@@ -238,33 +242,24 @@ exit 0
     config.defaultMode = "reduce";
     writeConfig(paths, config);
 
-    const invocations = [
-      ["exec", "--config", 'model="gpt-5.5"', "config-selected-task"],
-      ["exec", "--profile", "gpt55", "profile-selected-task"],
-      ["exec", "--model", "gpt-5.5", "--model", "gpt-6-luna", "ambiguous-task"]
-    ];
-    for (const args of invocations) {
-      expect(await withProviderPath(originalBin, () => runProvider("codex", args, paths))).toBe(0);
-    }
+    expect(await withProviderPath(originalBin, () => runProvider("codex", args, paths))).toBe(0);
 
     const database = new TelemetryDatabase(paths);
     const runs = database.recentRunsSince(new Date(0).toISOString());
-    expect(runs).toHaveLength(invocations.length);
-    expect(runs).toEqual(expect.arrayContaining(invocations.map(() => expect.objectContaining({
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
       provider: "codex",
       mode: "reduce",
       optimizationApplied: false,
       optimizationProfile: null,
       comparisonProfile: null
-    }))));
+    });
     database.close();
     const observed = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
-    expect(observed).toHaveLength(invocations.length);
-    for (const [index, args] of invocations.entries()) {
-      expect(observed[index]).toContain(args.join(" "));
-      expect(observed[index]).not.toContain("developer_instructions");
-      expect(observed[index]).not.toContain("model_auto_compact_token_limit");
-    }
+    expect(observed).toHaveLength(1);
+    expect(observed[0]).toContain(args.join(" "));
+    expect(observed[0]).not.toContain("developer_instructions");
+    expect(observed[0]).not.toContain("model_auto_compact_token_limit");
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
     expect(rawDatabase).not.toContain("gpt-5.5");
     expect(rawDatabase).not.toContain("gpt-6-luna");
