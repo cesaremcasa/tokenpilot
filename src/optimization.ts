@@ -362,7 +362,19 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string, co
       return { ...NONE, unavailableReason: "this Codex invocation has no unambiguous explicit model selector; measuring without treatment" };
     }
     const usesV4 = codexModel === "gpt-5.5";
-    const usesV7 = codexModel === "gpt-6-luna" || codexModel === "gpt-daybreak-blue-latest";
+    const usesV8 = codexModel === "gpt-6-luna";
+    if (usesV8) {
+      return {
+        args: [
+          "--config", "model_reasoning_effort=\"high\"",
+          "--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`
+        ],
+        applied: true,
+        profile: "codex-balanced-v8",
+        summary: "high native reasoning with batched inspection and complete required checks"
+      };
+    }
+    const usesV7 = codexModel === "gpt-daybreak-blue-latest";
     if (usesV7) {
       return {
         args: ["--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`],

@@ -95,23 +95,35 @@ describe("version-gated balanced optimization", () => {
     expect(planFromHelp("codex", "balanced", help)).toMatchObject({ applied: false, args: [] });
   });
 
-  it("uses native defaults with a complete batched workflow for gpt-6-luna and daybreak", () => {
+  it("routes Luna through v8 and Daybreak through v7 with native settings preserved", () => {
     const help = "-c, --config <key=value> --profile <profile>";
-    for (const model of ["gpt-6-luna", "gpt-daybreak-blue-latest"]) {
-      const plan = planFromHelp("codex", "balanced", help, model);
-      expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v7" });
-      expect(plan.args).toEqual(["--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`]);
-      for (const setting of ["model=", "model_reasoning_effort", "model_reasoning_summary", "model_verbosity", "model_auto_compact_token_limit"]) {
+    const v8 = planFromHelp("codex", "balanced", help, "gpt-6-luna");
+    expect(v8).toMatchObject({ applied: true, profile: "codex-balanced-v8" });
+    expect(v8.args).toEqual([
+      "--config", "model_reasoning_effort=\"high\"",
+      "--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`
+    ]);
+    const explicit = ["exec", "--model", "gpt-6-luna", "--config", "model_reasoning_effort=\"low\"", "task"];
+    expect(mergeTreatmentArguments("codex", explicit, v8.args)).toMatchObject({
+      args: explicit,
+      applied: false,
+      conflicts: ["config:model_reasoning_effort"]
+    });
+
+    const daybreak = planFromHelp("codex", "balanced", help, "gpt-daybreak-blue-latest");
+    expect(daybreak).toMatchObject({ applied: true, profile: "codex-balanced-v7" });
+    expect(daybreak.args).toEqual(["--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`]);
+
+    for (const plan of [v8, daybreak]) {
+      for (const setting of ["model=", "model_reasoning_summary", "model_verbosity", "model_auto_compact_token_limit"]) {
         expect(plan.args.join(" ")).not.toContain(setting);
       }
-      expect(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION).toContain("relevant source sections in one batched search/read");
-      expect(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION).toContain("every required check together in one shell invocation using `&&`");
-      expect(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION).toContain("repeat the affected check");
-      expect(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("at most");
       for (const capability of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false"]) {
         expect(plan.args.join(" ")).not.toContain(capability);
       }
     }
+    expect(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("at most");
+    expect(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("nl -ba");
   });
 
   it("uses current Grok controls while preserving the full feature surface", () => {

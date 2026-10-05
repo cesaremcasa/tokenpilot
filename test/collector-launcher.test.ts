@@ -483,7 +483,7 @@ exit 0
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v7",
+      optimizationProfile: "codex-balanced-v8",
       collectionState: "collected"
     });
     const summary = database.sessionSummariesSince(new Date(0).toISOString())[0];
@@ -513,8 +513,9 @@ exit 0
     expect(markdown).not.toContain("private task result");
     const launchedArguments = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
     expect(launchedArguments.slice(-args.length)).toEqual(args);
+    expect(launchedArguments.join(" ")).toContain('model_reasoning_effort="high"');
     expect(launchedArguments.join(" ")).toContain(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION);
-    for (const setting of ["model=", "model_reasoning_effort", "model_reasoning_summary", "model_verbosity", "model_auto_compact_token_limit"]) {
+    for (const setting of ["model=", "model_reasoning_summary", "model_verbosity", "model_auto_compact_token_limit"]) {
       expect(launchedArguments.join(" ")).not.toContain(setting);
     }
     expect(rawDatabase).not.toContain(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION);
