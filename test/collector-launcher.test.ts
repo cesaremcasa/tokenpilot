@@ -145,19 +145,19 @@ exit 0
     expect(allocator.allocateBalancedMode("codex", () => 0.9)).toBe("observe");
     allocator.close();
 
-    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "super-secret-command-argument"], paths))).toBe(0);
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "--model", "gpt-6-luna", "super-secret-command-argument"], paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v4",
+      optimizationProfile: "codex-balanced-v3",
       collectionState: "unavailable"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
     const markdown = reportMarkdown(buildReport(paths, 7));
-    for (const forbidden of ["super-secret-command-argument", TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION]) {
+    for (const forbidden of ["super-secret-command-argument", "gpt-6-luna", TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION]) {
       expect(rawDatabase).not.toContain(forbidden);
       expect(markdown).not.toContain(forbidden);
     }
@@ -180,7 +180,7 @@ exit 0
     expect(allocator.allocateBalancedMode("codex", () => 0.1)).toBe("balanced");
     allocator.close();
 
-    const explicit = ["exec", "observe-user"];
+    const explicit = ["exec", "--model", "gpt-5.5", "observe-user"];
     expect(await withProviderPath(originalBin, () => runProvider("codex", explicit, paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
     const run = database.recentRunsSince(new Date(0).toISOString())[0];
@@ -191,6 +191,84 @@ exit 0
     expect(observed.slice(-explicit.length)).toEqual(explicit);
     expect(observed.join(" ")).not.toContain("model_reasoning_effort");
     expect(observed.join(" ")).not.toContain(TOKEN_EFFICIENCY_INSTRUCTION);
+    cleanup(paths);
+  });
+
+  it("applies Codex v4 only to an explicit gpt-5.5 invocation", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "codex-gpt55-arguments");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+if [ "$1" = "--help" ]; then echo '-c, --config <key=value> --model <model>'; exit 0; fi
+if [ "$1" = "--version" ]; then echo 'fake-codex 1.0'; exit 0; fi
+printf '%s\\n' "$@" > '${observedArguments}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+
+    const explicit = ["exec", "--model", "gpt-5.5", "--sandbox", "workspace-write", "task"];
+    expect(await withProviderPath(originalBin, () => runProvider("codex", explicit, paths))).toBe(0);
+
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
+      mode: "reduce",
+      optimizationApplied: true,
+      optimizationProfile: "codex-balanced-v4",
+      comparisonProfile: "codex-balanced-v4"
+    });
+    database.close();
+    const launchedArguments = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(launchedArguments.slice(-explicit.length)).toEqual(explicit);
+    expect(launchedArguments.join(" ")).not.toContain("model_auto_compact_token_limit");
+    expect(launchedArguments.join(" ")).not.toContain("--model gpt-6");
+    cleanup(paths);
+  });
+
+  it("measures Codex without a treatment when model selection is config-only, profile-only, or ambiguous", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "codex-unselected-model-arguments");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+if [ "$1" = "--help" ]; then echo '--config'; exit 0; fi
+if [ "$1" = "--version" ]; then echo 'fake-codex 1.0'; exit 0; fi
+printf '%s\\n' "$*" >> '${observedArguments}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+
+    const invocations = [
+      ["exec", "--config", 'model="gpt-5.5"', "config-selected-task"],
+      ["exec", "--profile", "gpt55", "profile-selected-task"],
+      ["exec", "--model", "gpt-5.5", "--model", "gpt-6-luna", "ambiguous-task"]
+    ];
+    for (const args of invocations) {
+      expect(await withProviderPath(originalBin, () => runProvider("codex", args, paths))).toBe(0);
+    }
+
+    const database = new TelemetryDatabase(paths);
+    const runs = database.recentRunsSince(new Date(0).toISOString());
+    expect(runs).toHaveLength(invocations.length);
+    expect(runs).toEqual(expect.arrayContaining(invocations.map(() => expect.objectContaining({
+      provider: "codex",
+      mode: "reduce",
+      optimizationApplied: false,
+      optimizationProfile: null,
+      comparisonProfile: null
+    }))));
+    database.close();
+    const observed = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(observed).toHaveLength(invocations.length);
+    for (const [index, args] of invocations.entries()) {
+      expect(observed[index]).toContain(args.join(" "));
+      expect(observed[index]).not.toContain("developer_instructions");
+      expect(observed[index]).not.toContain("model_auto_compact_token_limit");
+    }
+    const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
+    expect(rawDatabase).not.toContain("gpt-5.5");
+    expect(rawDatabase).not.toContain("gpt-6-luna");
+    expect(rawDatabase).not.toContain("config-selected-task");
     cleanup(paths);
   });
 
@@ -405,7 +483,7 @@ exit 0
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v4",
+      optimizationProfile: "codex-balanced-v3",
       collectionState: "collected"
     });
     const summary = database.sessionSummariesSince(new Date(0).toISOString())[0];

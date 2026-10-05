@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
   it("uses the latency-first Claude v7 policy when every flag is advertised", () => {
@@ -36,20 +36,63 @@ describe("version-gated balanced optimization", () => {
     });
   });
 
-  it("preserves every Codex capability while bounding repeated execution", () => {
-    const plan = planFromHelp("codex", "balanced", "-c, --config <key=value> --profile <profile>");
+  it("routes only an unambiguous explicit Codex model without reading prompt or config values", () => {
+    for (const args of [
+      ["exec", "--model", "gpt-5.5"],
+      ["exec", "--model=gpt-5.5"],
+      ["exec", "-m", "gpt-5.5"],
+      ["exec", "-m=gpt-5.5"],
+      ["--model", "gpt-5.5", "exec", "--sandbox", "workspace-write"],
+      ["exec", "--sandbox", "workspace-write", "--model", "gpt-5.5"],
+      ["exec", "--enable", "feature", "--model", "gpt-5.5"],
+      ["--model", "gpt-5.5", "exec", "task --model gpt-6-luna"]
+    ]) {
+      expect(codexModelFromArgs(args)).toBe("gpt-5.5");
+    }
+    for (const args of [
+      ["exec", "--config", "model=\"gpt-5.5\""],
+      ["exec", "--config", "model_provider=custom", "--model", "gpt-5.5"],
+      ["exec", "--model", "gpt-5.5", "--config", "model_providers.openai.wire_api=chat"],
+      ["exec", "--profile", "fast"],
+      ["exec", "--oss", "--model", "gpt-5.5"],
+      ["exec", "--local-provider", "ollama", "--model", "gpt-5.5"],
+      ["exec", "--config", "developer_instructions=\"Use --model gpt-5.5\""],
+      ["exec", "--", "--model", "gpt-5.5"],
+      ["exec", "--provider-extension", "--model", "gpt-5.5"],
+      ["exec", "--model", "gpt-5.5", "--model", "gpt-6-luna"],
+      ["exec", "task --model gpt-5.5"],
+      ["exec", "exec", "--model", "gpt-5.5"],
+      ["exec", "--model", "gpt-6-luna", "task", "--model", "gpt-5.5"],
+      ["--config", "key=value", "exec", "--model", "gpt-5.5"]
+    ]) {
+      expect(codexModelFromArgs(args)).toBeUndefined();
+    }
+    expect(codexModelFromArgs(["exec", "--model", "gpt-6-luna"])).toBe("gpt-6-luna");
+    expect(codexModelFromArgs(["--model", "gpt-5.5", "exec", "task"])).toBe("gpt-5.5");
+    expect(codexModelFromArgs(["exec", "--config", 'model="gpt-6-luna"', "--model", "gpt-5.5"])).toBe("gpt-5.5");
+    expect(codexModelFromArgs(["exec", "--model", "gpt-5.5", "--config", 'model="gpt-6-luna"'])).toBe("gpt-5.5");
+  });
+
+  it("scopes Codex v4 to explicitly selected gpt-5.5 and retains v3 for other explicit models", () => {
+    const help = "-c, --config <key=value> --profile <profile>";
+    const plan = planFromHelp("codex", "balanced", help, "gpt-5.5");
     expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v4" });
-    expect(plan.args.join(" ")).toContain("model_reasoning_effort");
     expect(plan.args.join(" ")).toContain("model_reasoning_effort=\"low\"");
     expect(plan.args.join(" ")).toContain("model_reasoning_summary=\"none\"");
     expect(plan.args.join(" ")).toContain(CODEX_TOKEN_EFFICIENCY_INSTRUCTION);
     expect(plan.args.join(" ")).not.toContain("model_auto_compact_token_limit");
     expect(CODEX_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("at most three");
     expect(CODEX_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("nl -ba");
-    for (const forbidden of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false"]) {
+
+    const priorPolicy = planFromHelp("codex", "balanced", help, "gpt-6-luna");
+    expect(priorPolicy).toMatchObject({ applied: true, profile: "codex-balanced-v3" });
+    expect(priorPolicy.args.join(" ")).toContain("model_auto_compact_token_limit=32000");
+    expect(priorPolicy.args.join(" ")).toContain("model_auto_compact_token_limit_scope=\"body_after_prefix\"");
+    for (const forbidden of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false", "otel.log_user_prompt"]) {
       expect(plan.args.join(" ")).not.toContain(forbidden);
+      expect(priorPolicy.args.join(" ")).not.toContain(forbidden);
     }
-    expect(plan.args.join(" ")).not.toContain("otel.log_user_prompt");
+    expect(planFromHelp("codex", "balanced", help)).toMatchObject({ applied: false, args: [] });
   });
 
   it("uses current Grok controls while preserving the full feature surface", () => {
@@ -180,7 +223,7 @@ describe("version-gated balanced optimization", () => {
     const binary = path.join(directory, "codex");
     fs.writeFileSync(binary, "#!/bin/sh\nif [ \"$1\" = \"--help\" ]; then echo '--config'; exit 0; fi\nexit 64\n", { mode: 0o700 });
     try {
-      expect(planForInstalledCli("codex", "balanced", binary, { PATH: "/usr/bin:/bin" })).toMatchObject({
+      expect(planForInstalledCli("codex", "balanced", binary, { PATH: "/usr/bin:/bin" }, undefined, "gpt-5.5")).toMatchObject({
         applied: false,
         args: [],
         unavailableReason: expect.stringContaining("rejected the complete")

@@ -64,7 +64,11 @@ describe("doctor", () => {
     expect(report).toMatchObject({ installationReady: true, measurementReady: false });
     expect(report.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({ provider: "claude", state: "active", fix: undefined }),
-      expect.objectContaining({ provider: "codex", state: "active" }),
+      expect.objectContaining({
+        provider: "codex",
+        state: "active",
+        detail: expect.stringContaining("default, config-only, and profile-only model selection is measured without treatment")
+      }),
       expect.objectContaining({ provider: "grok", state: "active", detail: expect.stringContaining("normal TTY/TUI and headless sessions") }),
       expect.objectContaining({ provider: "kimi", state: "limited", detail: expect.stringContaining("measurement is disabled") })
     ]));
