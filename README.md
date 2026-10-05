@@ -8,7 +8,7 @@
 
 **Local-first token measurement and optimization for AI coding CLIs — without proxying traffic or storing prompts.**
 
-TokenPilot 0.5.0 is a public beta for the terminal versions of Claude Code, OpenAI Codex, Grok Build, and Kimi Code CLI. It measures provider-published numeric usage, applies version-gated efficiency treatments where supported, and reports cache-aware comparisons without reading credentials, prompts, responses, source code, tool output, command arguments, or working directories.
+TokenPilot 0.5.0 is a public beta for the terminal versions of Claude Code, OpenAI Codex, Grok Build, and Kimi Code CLI. It measures provider-published numeric usage, applies version-gated efficiency treatments where supported, and reports cache-aware comparisons without storing credentials, prompts, responses, source code, or tool output. Supported live numeric streams are parsed transiently; provider histories and credential stores are not scanned.
 
 TokenPilot is created by **Cesar Augusto / Mycellium Lab**, released under the [MIT License](LICENSE), and is not affiliated with Anthropic, OpenAI, xAI, or Moonshot AI.
 
@@ -47,8 +47,8 @@ New installations default to `reduce`. Claude, Codex, and Grok receive a version
 | Provider | Current behavior | Boundary |
 | --- | --- | --- |
 | Claude Code | Metrics-only local OTLP; low effort, stable cache prefix, core tools, and a bounded verification pass when supported. | Use `deep`, `off`, or bypass when the complete native tool surface is required. |
-| OpenAI Codex | Metrics-only local OTLP; low reasoning and verbosity, body compaction, and bounded batched execution. | Preserves agents, memories, web, apps, and the complete native tool surface. |
-| Grok Build | External OTEL or explicit JSON counters; bounded terminal workflow and reduced optional surfaces when supported. | Use `deep`, `off`, or bypass for native agents, memory, web, or plan mode. |
+| OpenAI Codex | Metrics-only local OTLP or explicit `exec --json` usage; low reasoning and verbosity, body compaction, and bounded batched execution. | Preserves agents, memories, web, apps, and the complete native tool surface. |
+| Grok Build | External OTEL or explicit JSON counters; low reasoning and concise appended guidance. | Preserves the native tools, memory, web, subagents, and plan mode. |
 | Kimi Code CLI | Original CLI passthrough. | No treatment or reduction claim until a safe correlated measurement channel exists. |
 
 ## Platform and provider support
@@ -63,18 +63,11 @@ A missing provider never disables the others. `tokenpilot doctor` separates laun
 
 ## Experimental evidence
 
-The first controlled research snapshot was recorded on August 15, 2026, on a Linux test host. These are provider-local, task-specific observed cache-aware changes, not universal promises and not formal quality-equivalence results.
+The [October 5 real-model evaluation](docs/EVALUATION-2026-10-05.md) records 24 calls across eight Codex and four Grok models, with source-qualified counters and independently checked patches.
 
-| Provider | Coverage | Observed median change | Cohort change | Median latency change |
-| --- | ---: | ---: | ---: | ---: |
-| Claude | 45/46 measured | 66.0% less | 66.3% less | 35.3% faster |
-| Codex | 49/51 measured | 54.8% less | 55.5% less | 69.0% faster |
-| Grok | 39/40 measured | 42.6% less | 50.8% less | 68.4% faster |
-| Kimi | 42/46 measured | 51.6% less, historical | 51.5% less, historical | 4.2% faster |
+Current measurements must come from real provider sessions with a known total basis and independently checked task outcomes. A single matched task is an observed comparison, not validated reduction or a general performance claim.
 
-Every percentage above is an experimental observation over the documented cohort. Under the 0.5 evidence contract it remains preliminary until formal quality-equivalence evidence exists. Kimi currently runs unchanged and cannot reproduce its historical measurement.
-
-Review the session counts, totals, limitations, and unavailable sessions in [First research snapshot](docs/RESULTS.md). The [measurement methodology](docs/MEASUREMENT.md) defines every state and formula.
+The [August 2026 research snapshot](docs/RESULTS.md) is retained as historical documentation. Its aggregate figures have not been revalidated under the current Codex/Grok counter semantics and are not current performance evidence. See the [measurement methodology](docs/MEASUREMENT.md).
 
 ## Evidence states
 

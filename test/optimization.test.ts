@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, GROK_HEADLESS_TOOLS, GROK_TOKEN_EFFICIENCY_INSTRUCTION, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
   it("uses the latency-first Claude v7 policy when every flag is advertised", () => {
@@ -51,31 +51,32 @@ describe("version-gated balanced optimization", () => {
     expect(plan.args.join(" ")).not.toContain("otel.log_user_prompt");
   });
 
-  it("uses only documented Grok CLI controls rather than API cache headers", () => {
-    const help = "--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>";
-    expect(planFromHelp("grok", "balanced", help)).toMatchObject({
-      profile: "grok-balanced-v6",
+  it("uses current Grok controls while preserving the full feature surface", () => {
+    const help = "--reasoning-effort <effort> --verbatim --rules <rules> --tools <tools> --no-subagents --disable-web-search --no-plan";
+    const plan = planFromHelp("grok", "balanced", help);
+    expect(plan).toMatchObject({
+      applied: true,
+      profile: "grok-balanced-v7",
       args: [
         "--reasoning-effort", "low",
         "--verbatim",
-        "--no-subagents",
-        "--no-memory",
-        "--disable-web-search",
-        "--no-plan",
-        "--system-prompt-override", GROK_TOKEN_EFFICIENCY_INSTRUCTION
-      ],
-      headlessArgs: ["--tools", GROK_HEADLESS_TOOLS]
+        "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION
+      ]
     });
+    for (const disabledCapability of ["--no-subagents", "--no-memory", "--disable-web-search", "--no-plan", "--tools"]) {
+      expect(plan.args).not.toContain(disabledCapability);
+    }
+    expect(plan.headlessArgs).toBeUndefined();
   });
 
-  it("leaves Grok unchanged when any complete v6 control is unavailable", () => {
-    const required = ["--reasoning-effort", "--verbatim", "--no-subagents", "--no-memory", "--disable-web-search", "--no-plan", "--system-prompt-override", "--tools"];
+  it("leaves Grok unchanged when a required v7 control is unavailable", () => {
+    const required = ["--reasoning-effort", "--verbatim", "--rules"];
     for (const missing of required) {
       const help = required.filter((flag) => flag !== missing).join(" ");
       expect(planFromHelp("grok", "balanced", help)).toMatchObject({
         applied: false,
         args: [],
-        unavailableReason: expect.stringContaining("complete token-reduction policy")
+        unavailableReason: expect.stringContaining("complete capability-preserving token-reduction policy")
       });
     }
   });
@@ -99,23 +100,23 @@ describe("version-gated balanced optimization", () => {
   });
 
   it("applies the same Grok treatment in reduce mode as in balanced mode", () => {
-    const help = "--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>";
+    const help = "--reasoning-effort <effort> --verbatim --rules <rules> --tools <tools>";
     expect(planFromHelp("grok", "reduce", help)).toEqual(planFromHelp("grok", "balanced", help));
     expect(planFromHelp("grok", "reduce", help).applied).toBe(true);
   });
 
-  it("deduplicates the exact Grok reproduction while preserving explicit argument order", () => {
-    const help = "--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>";
+  it("preserves explicit Grok feature choices under the complete-surface policy", () => {
+    const help = "--reasoning-effort <effort> --verbatim --rules <rules> --tools <tools>";
     const plan = planFromHelp("grok", "reduce", help);
     const explicit = ["--single", "Return exactly TOKENPILOT_CANARY_OK.", "--max-turns", "1", "--no-subagents", "--disable-web-search", "--no-memory", "--output-format", "json"];
     const merged = mergeTreatmentArguments("grok", explicit, [...plan.args, ...(plan.headlessArgs ?? [])]);
-    expect(merged).toMatchObject({ applied: true, deduplicated: true, conflicts: [] });
+    expect(merged).toMatchObject({ applied: true, deduplicated: false, conflicts: [] });
     const mergedArgs = merged.args;
     expect(mergedArgs.slice(-explicit.length)).toEqual(explicit);
     for (const flag of ["--no-subagents", "--disable-web-search", "--no-memory"]) {
       expect(mergedArgs.filter((argument) => argument === flag)).toHaveLength(1);
     }
-    expect(mergedArgs).toContain("--tools");
+    expect(mergedArgs).not.toContain("--tools");
   });
 
   it("lets explicit value flags win across aliases and --flag=value forms", () => {

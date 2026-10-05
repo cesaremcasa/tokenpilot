@@ -1,0 +1,1028 @@
+{
+  "date": "2026-10-05",
+  "task": "https://github.com/cesaremcasa/tokenpilot/pull/55",
+  "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+  "toolCodeCommit": "e1fa3f318cad3ae5e47635b20348a8d494be3d09",
+  "matrixId": "2dfbcc1d-6bd4-4bf8-9368-7e0cb97a5c09",
+  "protocol": {
+    "pairsPerModel": 1,
+    "concurrency": 2,
+    "timeoutSeconds": 360,
+    "totalIncludesCachedInput": true,
+    "taskAcceptance": "Independent PR55 flag-order, native argument preservation, explicit setting and fail-open checks; focused tests, typecheck, build and diff checks"
+  },
+  "notEvaluated": {
+    "claude": "Claude Code 2.1.289 was not authenticated",
+    "kimi": "Kimi 0.28.1 installed; TokenPilot has no enabled correlated numeric measurement channel"
+  },
+  "runs": [
+    {
+      "provider": "codex",
+      "model": "gpt-6-astra",
+      "mode": "observe",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "2e3c5430eacac6952f001f9e4ca2565fb82c9f8d97fd949ee6e4fac04087559f",
+      "evaluationRunId": "9a61b24f-ea0a-4c30-b775-1c958473d137",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 37284,
+        "inputCached": 120064,
+        "cacheCreated": null,
+        "output": 1164,
+        "reasoning": null,
+        "reportedTotal": 158512,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 37284,
+          "input_cached": 120064,
+          "cache_created": null,
+          "output": 1164,
+          "reasoning": null,
+          "reported_total": 158512
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-6-astra",
+      "mode": "reduce",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": true,
+      "optimizationProfile": "codex-balanced-v3",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "ea5ab125d12fccf7bf2a1179c380788d947afaddc73a70f89117707b2cc78bb5",
+      "evaluationRunId": "f74075f5-52b1-4671-9da8-157fc28c7321",
+      "comparisonProfile": "codex-balanced-v3",
+      "usage": {
+        "inputNew": 23981,
+        "inputCached": 130560,
+        "cacheCreated": null,
+        "output": 773,
+        "reasoning": null,
+        "reportedTotal": 155314,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 23981,
+          "input_cached": 130560,
+          "cache_created": null,
+          "output": 773,
+          "reasoning": null,
+          "reported_total": 155314
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-6-sol",
+      "mode": "observe",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "40360c552ddead26ff2c3bdf48ecb33bf49423928d2f505b4e2a15af856dedad",
+      "evaluationRunId": "985a0e24-bfb5-4164-af2e-1c1a5fbc2727",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 23336,
+        "inputCached": 245632,
+        "cacheCreated": null,
+        "output": 1318,
+        "reasoning": null,
+        "reportedTotal": 270286,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 23336,
+          "input_cached": 245632,
+          "cache_created": null,
+          "output": 1318,
+          "reasoning": null,
+          "reported_total": 270286
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-6-sol",
+      "mode": "reduce",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": true,
+      "optimizationProfile": "codex-balanced-v3",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "1f555dfc4e8340ab83b7bd5b97bedc2cc133964c29500ce1ad02ddff539ae45e",
+      "evaluationRunId": "e0354bcd-218b-4b14-864c-78426ce9c711",
+      "comparisonProfile": "codex-balanced-v3",
+      "usage": {
+        "inputNew": 20065,
+        "inputCached": 148352,
+        "cacheCreated": null,
+        "output": 1050,
+        "reasoning": null,
+        "reportedTotal": 169467,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 20065,
+          "input_cached": 148352,
+          "cache_created": null,
+          "output": 1050,
+          "reasoning": null,
+          "reported_total": 169467
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "mode": "observe",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "5b41e01805e8bf7458e6eb0c039802082b2ff59df136a71099de926c8d92a53f",
+      "evaluationRunId": "7a6bed24-8933-419a-8090-141cf7483656",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 37911,
+        "inputCached": 199936,
+        "cacheCreated": null,
+        "output": 1351,
+        "reasoning": null,
+        "reportedTotal": 239198,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 37911,
+          "input_cached": 199936,
+          "cache_created": null,
+          "output": 1351,
+          "reasoning": null,
+          "reported_total": 239198
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "mode": "reduce",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": true,
+      "optimizationProfile": "codex-balanced-v3",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "84c63b33ae1ce75a01d20e7dccc0bddf5e45947780b800eaaaf9526fed50ffe6",
+      "evaluationRunId": "bdce004a-d08a-4907-821a-e8ee3d1a6b4e",
+      "comparisonProfile": "codex-balanced-v3",
+      "usage": {
+        "inputNew": 24528,
+        "inputCached": 161024,
+        "cacheCreated": null,
+        "output": 1559,
+        "reasoning": null,
+        "reportedTotal": 187111,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 24528,
+          "input_cached": 161024,
+          "cache_created": null,
+          "output": 1559,
+          "reasoning": null,
+          "reported_total": 187111
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-5.6-sol",
+      "mode": "observe",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "b09b73a26740f85d94d5d61d898f54d5ad032f52b4621664686719e12446e1eb",
+      "evaluationRunId": "fdb8444c-a2cb-49ee-86ae-b90da04b15bf",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 21950,
+        "inputCached": 150784,
+        "cacheCreated": null,
+        "output": 1930,
+        "reasoning": null,
+        "reportedTotal": 174664,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 21950,
+          "input_cached": 150784,
+          "cache_created": null,
+          "output": 1930,
+          "reasoning": null,
+          "reported_total": 174664
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-5.6-sol",
+      "mode": "reduce",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": true,
+      "optimizationProfile": "codex-balanced-v3",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "b03026ef3ce015aab19eded3b1a1e27bdbe79adece8f8b76c74ae654ecf5a8d5",
+      "evaluationRunId": "f58bb187-6231-4038-9393-4fe4f0e8b57c",
+      "comparisonProfile": "codex-balanced-v3",
+      "usage": {
+        "inputNew": 19247,
+        "inputCached": 88448,
+        "cacheCreated": null,
+        "output": 1355,
+        "reasoning": null,
+        "reportedTotal": 109050,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 19247,
+          "input_cached": 88448,
+          "cache_created": null,
+          "output": 1355,
+          "reasoning": null,
+          "reported_total": 109050
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-5.6-terra",
+      "mode": "observe",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "7955eb9422d48ea1b5c7bfd47dfc0be94503c1a320bfface28af5e2960da5ac2",
+      "evaluationRunId": "b922f141-b420-46c5-8c3e-2df566eea50d",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 36496,
+        "inputCached": 171520,
+        "cacheCreated": null,
+        "output": 2008,
+        "reasoning": null,
+        "reportedTotal": 210024,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 36496,
+          "input_cached": 171520,
+          "cache_created": null,
+          "output": 2008,
+          "reasoning": null,
+          "reported_total": 210024
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-5.6-terra",
+      "mode": "reduce",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": true,
+      "optimizationProfile": "codex-balanced-v3",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "bd39fdadb8fc1ed0e028c3c21605f1c1ce0199f4f454d767b24f6c7ddd78a0b5",
+      "evaluationRunId": "74bd11a4-b809-4737-b7a3-295f58e5a14c",
+      "comparisonProfile": "codex-balanced-v3",
+      "usage": {
+        "inputNew": 27304,
+        "inputCached": 110336,
+        "cacheCreated": null,
+        "output": 1583,
+        "reasoning": null,
+        "reportedTotal": 139223,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 27304,
+          "input_cached": 110336,
+          "cache_created": null,
+          "output": 1583,
+          "reasoning": null,
+          "reported_total": 139223
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "mode": "observe",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "f69fd52109867655922971eaa15bc66db155e23bfb2cb8c5749df4234011e827",
+      "evaluationRunId": "9dfc7a2e-cfc7-41bb-b91a-f9c5190b9c9f",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 26591,
+        "inputCached": 148992,
+        "cacheCreated": null,
+        "output": 1822,
+        "reasoning": null,
+        "reportedTotal": 177405,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 26591,
+          "input_cached": 148992,
+          "cache_created": null,
+          "output": 1822,
+          "reasoning": null,
+          "reported_total": 177405
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "mode": "reduce",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": true,
+      "optimizationProfile": "codex-balanced-v3",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "f567670944f1ab00d2bcfce9d1e24a95025b68c48ea1b15f3e924a19ec5a507c",
+      "evaluationRunId": "e5793b0e-20f5-4777-8f08-c3ba713420d2",
+      "comparisonProfile": "codex-balanced-v3",
+      "usage": {
+        "inputNew": 21399,
+        "inputCached": 108288,
+        "cacheCreated": null,
+        "output": 1488,
+        "reasoning": null,
+        "reportedTotal": 131175,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 21399,
+          "input_cached": 108288,
+          "cache_created": null,
+          "output": 1488,
+          "reasoning": null,
+          "reported_total": 131175
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-daybreak-blue-latest",
+      "mode": "observe",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "c1381e7073268e45b580918cb73f720a2577570ac2c455f4c5ab34db01081092",
+      "evaluationRunId": "c74d40a1-fac6-47de-ae81-00d18a709d05",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 22380,
+        "inputCached": 179328,
+        "cacheCreated": null,
+        "output": 1886,
+        "reasoning": null,
+        "reportedTotal": 203594,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 22380,
+          "input_cached": 179328,
+          "cache_created": null,
+          "output": 1886,
+          "reasoning": null,
+          "reported_total": 203594
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-daybreak-blue-latest",
+      "mode": "reduce",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": true,
+      "optimizationProfile": "codex-balanced-v3",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "c4443f5ade458dba7e228c0a7ae9ec38bf7ae9d742100418f86b4737cdba84cc",
+      "evaluationRunId": "ce1db841-849d-461b-aac5-ce40f4257e2d",
+      "comparisonProfile": "codex-balanced-v3",
+      "usage": {
+        "inputNew": 19995,
+        "inputCached": 110848,
+        "cacheCreated": null,
+        "output": 1711,
+        "reasoning": null,
+        "reportedTotal": 132554,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 19995,
+          "input_cached": 110848,
+          "cache_created": null,
+          "output": 1711,
+          "reasoning": null,
+          "reported_total": 132554
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-5.5",
+      "mode": "observe",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "cfd25c0d8bedf49d635c620384aab9c595e8620a4538a4d375aefb47e8e80a79",
+      "evaluationRunId": "96d294e8-cade-4e9c-b28e-aadde954d72a",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 30453,
+        "inputCached": 171648,
+        "cacheCreated": null,
+        "output": 2633,
+        "reasoning": null,
+        "reportedTotal": 204734,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 30453,
+          "input_cached": 171648,
+          "cache_created": null,
+          "output": 2633,
+          "reasoning": null,
+          "reported_total": 204734
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-5.5",
+      "mode": "reduce",
+      "cliVersion": "0.155.1",
+      "optimizationApplied": true,
+      "optimizationProfile": "codex-balanced-v3",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "3f0ba226933908b254b10004e97ac36d0c8f7abfc0272de734962a56519d4bd7",
+      "evaluationRunId": "896cff1b-1414-4289-bfe4-c442d38d2b94",
+      "comparisonProfile": "codex-balanced-v3",
+      "usage": {
+        "inputNew": 26043,
+        "inputCached": 238976,
+        "cacheCreated": null,
+        "output": 2907,
+        "reasoning": null,
+        "reportedTotal": 267926,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "provider-total",
+        "categoryMetricsComplete": false
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "codex-exec-json-usage-v1",
+          "input_new": 26043,
+          "input_cached": 238976,
+          "cache_created": null,
+          "output": 2907,
+          "reasoning": null,
+          "reported_total": 267926
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.7",
+      "mode": "observe",
+      "cliVersion": "1.0.46",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "933fac2a47a0934138f572bb1e42a3583ea23f5c76bba42dd2d08d514da8669e",
+      "evaluationRunId": "a8aaee69-4367-47a4-a655-84ac60b37f1f",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 107238,
+        "inputCached": 352256,
+        "cacheCreated": 0,
+        "output": 15118,
+        "reasoning": 12539,
+        "reportedTotal": 474612,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "token-pressure",
+        "categoryMetricsComplete": true
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "grok-cli-json-usage-v1",
+          "input_new": 107238,
+          "input_cached": 352256,
+          "cache_created": 0,
+          "output": 15118,
+          "reasoning": 12539,
+          "reported_total": 474612
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.7",
+      "mode": "reduce",
+      "cliVersion": "1.0.46",
+      "optimizationApplied": true,
+      "optimizationProfile": "grok-balanced-v7",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "5bc559a7547387bc1fd63c702f44c0becddc5711e90fdd8e37e48734b80255bc",
+      "evaluationRunId": "11ba9c63-468e-4a48-95de-3311fcffc03a",
+      "comparisonProfile": "grok-balanced-v7",
+      "usage": {
+        "inputNew": 37859,
+        "inputCached": 243200,
+        "cacheCreated": 0,
+        "output": 4286,
+        "reasoning": 2567,
+        "reportedTotal": 285345,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "token-pressure",
+        "categoryMetricsComplete": true
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "grok-cli-json-usage-v1",
+          "input_new": 37859,
+          "input_cached": 243200,
+          "cache_created": 0,
+          "output": 4286,
+          "reasoning": 2567,
+          "reported_total": 285345
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.7-build-fast",
+      "mode": "observe",
+      "cliVersion": "1.0.46",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "e9b4284a5f82d143c4ae204ac1568566033aa04e7a86250b4a23710b4917f4d7",
+      "evaluationRunId": "831e8d2d-3dfa-487e-b57a-e0d42932381c",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 58460,
+        "inputCached": 467968,
+        "cacheCreated": 0,
+        "output": 14837,
+        "reasoning": 12043,
+        "reportedTotal": 541265,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "token-pressure",
+        "categoryMetricsComplete": true
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "grok-cli-json-usage-v1",
+          "input_new": 58460,
+          "input_cached": 467968,
+          "cache_created": 0,
+          "output": 14837,
+          "reasoning": 12043,
+          "reported_total": 541265
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.7-build-fast",
+      "mode": "reduce",
+      "cliVersion": "1.0.46",
+      "optimizationApplied": true,
+      "optimizationProfile": "grok-balanced-v7",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "9bc040babe21b11b5fadfa882b4f28dd9cbf80bc4da9ffe673f3c9c52163a5e7",
+      "evaluationRunId": "fb8f329c-3bc6-411e-8ff4-b4aafbb85eb7",
+      "comparisonProfile": "grok-balanced-v7",
+      "usage": {
+        "inputNew": 61098,
+        "inputCached": 238464,
+        "cacheCreated": 0,
+        "output": 4009,
+        "reasoning": 2244,
+        "reportedTotal": 303571,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "token-pressure",
+        "categoryMetricsComplete": true
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "grok-cli-json-usage-v1",
+          "input_new": 61098,
+          "input_cached": 238464,
+          "cache_created": 0,
+          "output": 4009,
+          "reasoning": 2244,
+          "reported_total": 303571
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.6",
+      "mode": "observe",
+      "cliVersion": "1.0.46",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "477d1a16a71aa9630f1c1d227778bb1a72369de299960208b5c73a0a56878b30",
+      "evaluationRunId": "bdae5459-ac97-48a9-89a3-0747dd58a957",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 44792,
+        "inputCached": 289280,
+        "cacheCreated": 0,
+        "output": 6836,
+        "reasoning": 4200,
+        "reportedTotal": 340908,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "token-pressure",
+        "categoryMetricsComplete": true
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "grok-cli-json-usage-v1",
+          "input_new": 44792,
+          "input_cached": 289280,
+          "cache_created": 0,
+          "output": 6836,
+          "reasoning": 4200,
+          "reported_total": 340908
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.6",
+      "mode": "reduce",
+      "cliVersion": "1.0.46",
+      "optimizationApplied": true,
+      "optimizationProfile": "grok-balanced-v7",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "3807921f4ed854a39968a0498dc33570261b09d907c3e6216beecf39331cdb3b",
+      "evaluationRunId": "232479c0-aaf6-4a7c-ac1f-9fb84d16240c",
+      "comparisonProfile": "grok-balanced-v7",
+      "usage": {
+        "inputNew": 38825,
+        "inputCached": 170240,
+        "cacheCreated": 0,
+        "output": 1750,
+        "reasoning": 301,
+        "reportedTotal": 210815,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "token-pressure",
+        "categoryMetricsComplete": true
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "grok-cli-json-usage-v1",
+          "input_new": 38825,
+          "input_cached": 170240,
+          "cache_created": 0,
+          "output": 1750,
+          "reasoning": 301,
+          "reported_total": 210815
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.5",
+      "mode": "observe",
+      "cliVersion": "1.0.46",
+      "optimizationApplied": false,
+      "optimizationProfile": null,
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "d32b73812f3b40c97420f0cce2ee3a95cd20aee92df9e5de9d6d296ec18896fb",
+      "evaluationRunId": "ef57b137-e26d-4944-bc7c-43125b0d1965",
+      "comparisonProfile": null,
+      "usage": {
+        "inputNew": 77519,
+        "inputCached": 376320,
+        "cacheCreated": 0,
+        "output": 4426,
+        "reasoning": 1458,
+        "reportedTotal": 458265,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "token-pressure",
+        "categoryMetricsComplete": true
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "grok-cli-json-usage-v1",
+          "input_new": 77519,
+          "input_cached": 376320,
+          "cache_created": 0,
+          "output": 4426,
+          "reasoning": 1458,
+          "reported_total": 458265
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.5",
+      "mode": "reduce",
+      "cliVersion": "1.0.46",
+      "optimizationApplied": true,
+      "optimizationProfile": "grok-balanced-v7",
+      "collectionState": "collected",
+      "status": "completed",
+      "validation": {
+        "diffCheck": "passed",
+        "focusedTests": "passed",
+        "check": "passed",
+        "build": "passed",
+        "behavior": "passed"
+      },
+      "patchSha256": "f1f666c58e8a5e0dd8285f9e66ab5125975bc964f6533e0294501fe040bc3607",
+      "evaluationRunId": "003d8c9a-138f-4b2c-98b7-42037a0b1516",
+      "comparisonProfile": "grok-balanced-v7",
+      "usage": {
+        "inputNew": 66322,
+        "inputCached": 377984,
+        "cacheCreated": 0,
+        "output": 4515,
+        "reasoning": 1133,
+        "reportedTotal": 448821,
+        "reportedTotalIncludesCachedInput": true,
+        "measurementBasis": "token-pressure",
+        "categoryMetricsComplete": true
+      },
+      "numericSourceReceipts": [
+        {
+          "source": "grok-cli-json-usage-v1",
+          "input_new": 66322,
+          "input_cached": 377984,
+          "cache_created": 0,
+          "output": 4515,
+          "reasoning": 1133,
+          "reported_total": 448821
+        }
+      ]
+    }
+  ]
+}

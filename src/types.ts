@@ -127,13 +127,13 @@ export interface AggregateRow {
   rework: number;
   abandoned: number;
   durationSeconds: number;
-  inputNew: number;
-  inputCached: number;
-  cacheCreated: number;
-  output: number;
-  reasoning: number;
-  modelCalls: number;
-  reportedTotal: number;
+  inputNew: number | null;
+  inputCached: number | null;
+  cacheCreated: number | null;
+  output: number | null;
+  reasoning: number | null;
+  modelCalls: number | null;
+  reportedTotal: number | null;
   compactions: number;
   retries: number;
 }
@@ -157,11 +157,11 @@ export interface SessionSummary {
   taskKind: TaskKind;
   outcome: TaskOutcome;
   durationSeconds: number;
-  inputNew: number;
-  inputCached: number;
-  cacheCreated: number;
-  output: number;
-  reasoning: number;
+  inputNew?: number;
+  inputCached?: number;
+  cacheCreated?: number;
+  output?: number;
+  reasoning?: number;
   reportedTotal?: number;
   reportedTotalIncludesCachedInput?: boolean;
   /** All base categories required to construct a category total are present. */

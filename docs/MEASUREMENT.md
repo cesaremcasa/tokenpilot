@@ -17,21 +17,25 @@ TokenPilot keeps these fields distinct:
 Token pressure is:
 
 ```text
-input new + cache created + output + reasoning
+input new + cache created + output + separately counted reasoning
 ```
 
-Cache reads are excluded from token pressure because they represent reuse, but they remain part of the complete cache-aware total.
+Cache reads are excluded from token pressure because they represent reuse, but they remain part of the complete cache-aware total. Codex and Grok output includes reasoning; those providers add no separate reasoning term. Missing required categories leave category-based calculations unavailable.
 
 ## Complete comparison total
 
 The comparison total is chosen in this order:
 
 1. a provider-reported total whose semantics are verified to include cache reads; otherwise
-2. `input new + cache read + cache created + output + reasoning` when every required category is available.
+2. `input new + cache read + cache created + output + separately counted reasoning` when every required category is available.
 
 A provider total is never mixed with category totals inside one comparison.
 
 Grok External OTEL publishes `input` as full input including its `cache_read` component. TokenPilot subtracts cache reads before storing new input. Reports apply the same normalization to legacy `grok-otlp-metrics-v1` rows without rewriting the local audit history.
+
+Explicit `codex exec --json` sessions use the documented `turn.completed.usage` fields: complete total is `input_tokens + output_tokens`, cached input is included in input, and new input is `input_tokens - cached_input_tokens` when both fields are available. Missing optional fields remain unavailable. This verified total can be compared without inventing category values.
+
+Codex and Grok reports retain `reasoning` as a separate detail counter while treating it as included in `output` for total, token-pressure, and API-equivalent calculations. It is not added a second time.
 
 ## Cache-shift detector
 
@@ -83,7 +87,7 @@ Latency uses the baseline and treatment median session durations. A faster resul
 
 TokenPilot never fetches prices or guesses the model. A user may manually create and select a versioned pricing profile. The complete rate snapshot is attached at session start so historical calculations remain reproducible.
 
-USD appears only when every published category has a compatible selected rate. Cache reads use the cached-input rate, cache creation uses its own rate, and reasoning is priced only when explicitly configured. A provider total without categories receives no conversion.
+USD appears only when every published category has a compatible selected rate. Cache reads use the cached-input rate, cache creation uses its own rate, and separately counted reasoning is priced only when explicitly configured. Codex/Grok reasoning is already within output and is not charged twice. A provider total without categories receives no conversion.
 
 All currency output is labeled **API-equivalent USD, not a provider bill**. Subscription use is never represented as money actually saved.
 

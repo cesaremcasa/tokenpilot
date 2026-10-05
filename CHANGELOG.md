@@ -2,6 +2,12 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## Unreleased
+
+- Add `grok-balanced-v7`, using only current CLI-supported low-effort and appended-rule controls while preserving Grok's full native prompt, tools, and optional features.
+- Preserve absent Grok usage counters as unavailable so partial exports cannot become zero-filled complete comparisons.
+- Keep Codex treatment enabled for documented valueless flags such as `--ephemeral` and `--skip-git-repo-check` in either order.
+
 ## 0.5.0 — 2026-08-21
 
 - Launch the first public npm beta as `@cesaremcasa/tokenpilot`, with a three-command install path and explicit Cesar Augusto / Mycellium Lab authorship.

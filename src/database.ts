@@ -264,12 +264,20 @@ export class TelemetryDatabase {
   }
 
   aggregateSince(since: string): AggregateRow[] {
-    const reportedTotal = this.hasReportedTotalColumn ? "SUM(COALESCE(u.reported_total, 0))" : "0";
+    const reportedTotal = this.hasReportedTotalColumn
+      ? "CASE WHEN SUM(CASE WHEN u.has_reported_total = 1 THEN 1 ELSE 0 END) = COUNT(*) THEN SUM(u.reported_total) END"
+      : "NULL";
     return this.db.prepare(`
       WITH usage AS (
         SELECT run_id, SUM(${NORMALIZED_INPUT_NEW_SQL}) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
           SUM(COALESCE(cache_created, 0)) AS cache_created, SUM(COALESCE(output, 0)) AS output,
-          SUM(COALESCE(reasoning, 0)) AS reasoning, SUM(COALESCE(model_calls, 0)) AS model_calls${this.hasReportedTotalColumn ? ", SUM(COALESCE(reported_total, 0)) AS reported_total" : ""}
+          SUM(COALESCE(reasoning, 0)) AS reasoning, SUM(COALESCE(model_calls, 0)) AS model_calls,
+          MAX(CASE WHEN input_new IS NOT NULL THEN 1 ELSE 0 END) AS has_input_new,
+          MAX(CASE WHEN input_cached IS NOT NULL THEN 1 ELSE 0 END) AS has_input_cached,
+          MAX(CASE WHEN cache_created IS NOT NULL THEN 1 ELSE 0 END) AS has_cache_created,
+          MAX(CASE WHEN output IS NOT NULL THEN 1 ELSE 0 END) AS has_output,
+          MAX(CASE WHEN reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_reasoning,
+          MAX(CASE WHEN model_calls IS NOT NULL THEN 1 ELSE 0 END) AS has_model_calls${this.hasReportedTotalColumn ? ", SUM(CASE WHEN reported_total IS NOT NULL THEN 1 ELSE 0 END) AS has_reported_total, SUM(reported_total) AS reported_total" : ""}
         FROM usage_records GROUP BY run_id
       ), events AS (
         SELECT run_id,
@@ -283,9 +291,12 @@ export class TelemetryDatabase {
         SUM(CASE WHEN r.outcome = 'rework' THEN 1 ELSE 0 END) AS rework,
         SUM(CASE WHEN r.outcome = 'abandoned' THEN 1 ELSE 0 END) AS abandoned,
         SUM(CASE WHEN r.ended_at IS NULL THEN 0 ELSE MAX(0, strftime('%s', r.ended_at) - strftime('%s', r.started_at)) END) AS durationSeconds,
-        SUM(COALESCE(u.input_new, 0)) AS inputNew, SUM(COALESCE(u.input_cached, 0)) AS inputCached,
-        SUM(COALESCE(u.cache_created, 0)) AS cacheCreated, SUM(COALESCE(u.output, 0)) AS output,
-        SUM(COALESCE(u.reasoning, 0)) AS reasoning, SUM(COALESCE(u.model_calls, 0)) AS modelCalls,
+        CASE WHEN SUM(CASE WHEN u.has_input_new = 1 THEN 1 ELSE 0 END) = COUNT(*) THEN SUM(u.input_new) END AS inputNew,
+        CASE WHEN SUM(CASE WHEN u.has_input_cached = 1 THEN 1 ELSE 0 END) = COUNT(*) THEN SUM(u.input_cached) END AS inputCached,
+        CASE WHEN SUM(CASE WHEN u.has_cache_created = 1 THEN 1 ELSE 0 END) = COUNT(*) THEN SUM(u.cache_created) END AS cacheCreated,
+        CASE WHEN SUM(CASE WHEN u.has_output = 1 THEN 1 ELSE 0 END) = COUNT(*) THEN SUM(u.output) END AS output,
+        CASE WHEN SUM(CASE WHEN u.has_reasoning = 1 THEN 1 ELSE 0 END) = COUNT(*) THEN SUM(u.reasoning) END AS reasoning,
+        CASE WHEN SUM(CASE WHEN u.has_model_calls = 1 THEN 1 ELSE 0 END) = COUNT(*) THEN SUM(u.model_calls) END AS modelCalls,
         ${reportedTotal} AS reportedTotal,
         SUM(COALESCE(e.compactions, 0)) AS compactions, SUM(COALESCE(e.retries, 0)) AS retries
       FROM runs r LEFT JOIN usage u ON u.run_id = r.id LEFT JOIN events e ON e.run_id = r.id
@@ -418,15 +429,21 @@ export class TelemetryDatabase {
     }>).map((row) => {
       const pricingProfile = this.storedPricingProfile(row.pricingProfile);
       const categoriesPresent = row.hasInputNew === 1 && row.hasInputCached === 1 && row.hasCacheCreated === 1 && row.hasOutput === 1;
-      const reasoningPresent = pricingProfile?.rates.reasoningUsdPerMillion === undefined || row.hasReasoning === 1;
+      const reasoningPresent = row.provider === "codex" || row.provider === "grok"
+        || pricingProfile?.rates.reasoningUsdPerMillion === undefined || row.hasReasoning === 1;
       return {
         ...row,
+        inputNew: row.hasInputNew === 1 ? row.inputNew : undefined,
+        inputCached: row.hasInputCached === 1 ? row.inputCached : undefined,
+        cacheCreated: row.hasCacheCreated === 1 ? row.cacheCreated : undefined,
+        output: row.hasOutput === 1 ? row.output : undefined,
+        reasoning: row.hasReasoning === 1 ? row.reasoning : undefined,
         pricingProfile,
         pricingCompatible: Boolean(pricingProfile && categoriesPresent && reasoningPresent),
         reportedTotal: row.hasReportedTotal === 1 ? row.reportedTotal : undefined,
         reportedTotalIncludesCachedInput: row.hasReportedTotal === 1 && row.reportedTotalIncludesCachedInput === 1,
         categoryMetricsComplete: categoriesPresent,
-        measurementBasis: row.hasDetailedUsage === 1 ? "token-pressure" : "provider-total",
+        measurementBasis: categoriesPresent ? "token-pressure" : "provider-total",
         optimizationApplied: Boolean(row.optimizationApplied)
       };
     });

@@ -11,7 +11,7 @@ import { pricingProfile } from "./pricing.js";
 import { hasUnsafeMacAcl } from "./acl.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
-import { CodexExecTokenParser, isCodexExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
+import { CodexExecJsonUsageParser, CodexExecTokenParser, isCodexExec, isCodexJsonExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
 import { GrokJsonUsageParser, isGrokHeadless, isGrokJsonSingle, startGrokMetricsReceiver, supportsGrokExternalOtelVersion, type GrokMetricsReceiver } from "./telemetry/grok.js";
 import type { Provider, RunMode } from "./types.js";
 
@@ -171,7 +171,7 @@ function supportsCodexSessionConfiguration(binary: string): boolean {
 }
 
 interface ChildObservation {
-  consume(chunk: Buffer): void;
+  consume(chunk: Buffer, stream: "stdout" | "stderr"): void;
 }
 
 function launchChild(binary: string, args: string[], environment?: NodeJS.ProcessEnv, observation?: ChildObservation): Promise<number | null> {
@@ -202,11 +202,11 @@ function launchChild(binary: string, args: string[], environment?: NodeJS.Proces
     process.once("SIGTERM", onTerminate);
     if (observation) {
       child.stdout?.on("data", (chunk: Buffer) => {
-        observation.consume(chunk);
+        observation.consume(chunk, "stdout");
         process.stdout.write(chunk);
       });
       child.stderr?.on("data", (chunk: Buffer) => {
-        observation.consume(chunk);
+        observation.consume(chunk, "stderr");
         process.stderr.write(chunk);
       });
     }
@@ -245,7 +245,8 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   let claudeMetrics: ClaudeMetricsReceiver | undefined;
   let codexOtelMetrics: CodexMetricsReceiver | undefined;
   let grokOtelMetrics: GrokMetricsReceiver | undefined;
-  const codexExecMetrics = provider === "codex" && isCodexExec(args) ? new CodexExecTokenParser() : undefined;
+  const codexJsonMetrics = provider === "codex" && isCodexJsonExec(args) ? new CodexExecJsonUsageParser() : undefined;
+  const codexExecMetrics = provider === "codex" && isCodexExec(args) && !codexJsonMetrics ? new CodexExecTokenParser() : undefined;
   const grokMetrics = provider === "grok" && isGrokJsonSingle(args) ? new GrokJsonUsageParser() : undefined;
   try {
     const config = ensureConfig(paths);
@@ -309,7 +310,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           claudeMetrics = await startClaudeMetricsReceiver(database, runId);
           launchEnvironment = providerEnvironment(claudeMetrics.environment, trusted);
         }
-        if (provider === "codex" && supportsCodexSessionConfiguration(trusted)) {
+        if (provider === "codex" && !codexJsonMetrics && supportsCodexSessionConfiguration(trusted)) {
           // Codex's documented OTLP configuration is per invocation. If a
           // local receiver cannot start, preserve the existing `exec` parser
           // rather than failing the provider session or touching user config.
@@ -319,7 +320,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
             codexOtelMetrics = undefined;
           }
         }
-        if (provider === "grok" && supportsGrokExternalOtelVersion(binaryVersion(trusted))) {
+        if (provider === "grok" && !grokMetrics && supportsGrokExternalOtelVersion(binaryVersion(trusted))) {
           // Grok Build 1.0.3+ documents a content-free External OTEL v1 stream
           // for normal CLI/TTY sessions. Configure it only for this child.
           try {
@@ -366,8 +367,13 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
   }
 
   try {
-    const observer = codexExecMetrics ?? grokMetrics;
-    const code = await launchChild(binary, launchArgs, launchEnvironment, observer ? { consume: (chunk) => observer.accept(chunk) } : undefined);
+    const observer = codexJsonMetrics ?? codexExecMetrics ?? grokMetrics;
+    const code = await launchChild(binary, launchArgs, launchEnvironment, observer ? {
+      consume: (chunk, stream) => {
+        if (codexJsonMetrics && stream === "stderr") return;
+        observer.accept(chunk);
+      }
+    } : undefined);
     await claudeMetrics?.close().catch(() => undefined);
     await codexOtelMetrics?.close().catch(() => undefined);
     if (provider === "grok" && grokOtelMetrics && database && runId && !database.hasUsage(runId)) {
@@ -384,6 +390,10 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           database.markCollection(runId, measured ? "collected" : "unavailable", measured ? undefined : "otlp-missing");
         }
         if (provider === "codex") {
+          const jsonUsage = codexJsonMetrics?.finish();
+          if (!database.hasUsage(runId) && jsonUsage) {
+            database.addUsage({ runId, observedAt: new Date().toISOString(), source: "codex-exec-json-usage-v1", ...jsonUsage });
+          }
           // OTLP gives interactive and exec sessions category-level metrics.
           // Preserve the old `exec` total only when the receiver did not
           // deliver a correlated sample, never double-count both sources.
