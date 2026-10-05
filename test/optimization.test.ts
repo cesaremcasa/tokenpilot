@@ -157,6 +157,15 @@ describe("version-gated balanced optimization", () => {
     expect(mergeTreatmentArguments("codex", ["--provider-extension", "--config"], ["--config", "model_verbosity=low"])).toMatchObject({ applied: false });
   });
 
+  it("keeps Codex treatment active when a valueless option precedes a known option value", () => {
+    const injected = ["--config", "model_verbosity=low"];
+    const sandboxFirst = ["exec", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check", "--cd", "/tmp/repo", "--output-last-message", "/tmp/last.txt", "prompt"];
+    const skipFirst = ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--cd", "/tmp/repo", "--output-last-message", "/tmp/last.txt", "prompt"];
+
+    expect(mergeTreatmentArguments("codex", sandboxFirst, injected).applied).toBe(true);
+    expect(mergeTreatmentArguments("codex", skipFirst, injected).applied).toBe(true);
+  });
+
   it("keeps known booleans and post-delimiter positional values unambiguous", () => {
     expect(mergeTreatmentArguments("grok", ["--no-memory", "--no-subagents"], ["--no-memory", "--no-subagents"])).toMatchObject({ applied: true, deduplicated: true });
     const delimited = mergeTreatmentArguments("grok", ["--", "--no-subagents"], ["--no-subagents"]);
