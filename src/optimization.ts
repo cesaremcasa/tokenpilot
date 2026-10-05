@@ -100,6 +100,8 @@ const TREATMENT_ARGUMENT_SCHEMAS: TreatmentArgumentSchema[] = [
   { provider: "codex", key: "profile", flags: ["--profile"], takesValue: true },
   { provider: "codex", key: "sandbox", flags: ["--sandbox"], takesValue: true },
   { provider: "codex", key: "ask-for-approval", flags: ["--ask-for-approval"], takesValue: true },
+  { provider: "codex", key: "ephemeral", flags: ["--ephemeral"], takesValue: false },
+  { provider: "codex", key: "skip-git-repo-check", flags: ["--skip-git-repo-check"], takesValue: false },
   { provider: "codex", key: "output-last-message", flags: ["--output-last-message"], takesValue: true },
   { provider: "codex", key: "output-schema", flags: ["--output-schema"], takesValue: true },
   { provider: "codex", key: "color", flags: ["--color"], takesValue: true },

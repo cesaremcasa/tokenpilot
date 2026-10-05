@@ -171,21 +171,19 @@ function deltaFromCumulative(snapshot: GrokRawUsage, current: GrokRawUsage): Gro
 
 function completeUsage(raw: GrokRawUsage): UsageMetrics | undefined {
   if (Object.keys(raw).length === 0) return undefined;
-  const inputTotal = raw.inputTotal ?? 0;
-  const inputCached = raw.inputCached ?? 0;
-  if (inputCached > inputTotal) return undefined;
+  if (raw.inputTotal !== undefined && raw.inputCached !== undefined && raw.inputCached > raw.inputTotal) return undefined;
   // External OTEL v1 defines input, cache_read, output, and reasoning as the
   // complete Grok token categories. Its input counter includes cache reads,
   // unlike the headless JSON input_tokens field, so subtract that component
   // before storing new input. Grok has no separately billed cache-write
   // category, so cacheCreated is explicitly not applicable (zero), not guessed.
-  return {
-    inputNew: inputTotal - inputCached,
-    inputCached,
-    cacheCreated: 0,
-    output: raw.output ?? 0,
-    reasoning: raw.reasoning ?? 0
-  };
+  // Missing data points stay absent so reports cannot mistake partial export for zero usage.
+  const usage: UsageMetrics = { cacheCreated: 0 };
+  if (raw.inputTotal !== undefined && raw.inputCached !== undefined) usage.inputNew = raw.inputTotal - raw.inputCached;
+  if (raw.inputCached !== undefined) usage.inputCached = raw.inputCached;
+  if (raw.output !== undefined) usage.output = raw.output;
+  if (raw.reasoning !== undefined) usage.reasoning = raw.reasoning;
+  return usage;
 }
 
 /**
