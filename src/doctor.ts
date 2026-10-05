@@ -72,7 +72,10 @@ function localHelpEnvironment(): NodeJS.ProcessEnv {
 function providerCapability(provider: Provider, binary: string): { provider: Provider; state: ProviderDoctorState; detail: string; fix?: string } {
   const adapter = getAdapter(provider);
   const helpEnvironment = localHelpEnvironment();
-  const plan = planForInstalledCli(provider, "balanced", binary, helpEnvironment);
+  // This probes the supported v3 argument surface with --help only; it does
+  // not query model access or imply the account can use the representative ID.
+  const plan = planForInstalledCli(provider, "balanced", binary, helpEnvironment, undefined,
+    provider === "codex" ? "gpt-6-astra" : undefined);
   let telemetry: string;
   if (provider === "claude") telemetry = "metrics-only local OTLP; a session must publish numeric counters before it is measured";
   else if (provider === "codex") telemetry = plan.applied
@@ -84,6 +87,8 @@ function providerCapability(provider: Provider, binary: string): { provider: Pro
   else telemetry = "session envelope only; Kimi measurement is disabled until a content-free, child-authenticated channel is available";
   const optimization = provider === "kimi"
     ? "balanced not injected (Kimi bridge disabled pending a safe measurement channel)"
+    : provider === "codex" && plan.applied
+      ? `balanced available for an unambiguous explicit --model selection (${plan.profile}); default, config-only, and profile-only model selection is measured without treatment`
     : plan.applied ? `balanced available (${plan.profile})` : `balanced not injected (${plan.unavailableReason ?? "local help probe did not confirm it"})`;
   const state: ProviderDoctorState = provider === "kimi" || (provider === "grok" && !supportsGrokExternalOtel(binary)) || (provider === "codex" && !plan.applied) ? "limited" : "active";
   return {

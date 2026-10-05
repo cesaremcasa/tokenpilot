@@ -13,12 +13,10 @@ export function appliesReductionPolicy(mode: RunMode): boolean {
  */
 export const TOKEN_EFFICIENCY_INSTRUCTION = "Minimize token use without reducing correctness. Inspect narrowly, batch independent reads, avoid rereading unchanged data or repeating context, keep intermediate explanations concise, and stop after the requested result is verified. Do not skip necessary validation or change requested scope.";
 
-/**
- * Codex v3 preserves the complete native capability surface. Its measured gain
- * comes from bounding repeated model/tool turns: locate evidence in a batch,
- * inspect only relevant ranges, verify exact values once, then stop.
- */
-export const CODEX_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve every available capability. Minimize total tokens without reducing correctness. For read-only repository work, use at most three batched shell calls: locate evidence, inspect only required ranges, then verify every exact value and citation with nl -ba. Never cite a line not present in numbered output. Answer immediately after verification. For edits, batch inspection, perform the edit, run one sufficient verification, then stop. Do not narrate routine steps, reread unchanged data, repeat context, or add unrequested work.";
+/** Codex v4 keeps native context-compaction defaults and the full capability surface. */
+export const CODEX_TOKEN_EFFICIENCY_INSTRUCTION = `Preserve every available capability. ${TOKEN_EFFICIENCY_INSTRUCTION}`;
+const CODEX_V3_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve every available capability. Minimize total tokens without reducing correctness. For read-only repository work, use at most three batched shell calls: locate evidence, inspect only required ranges, then verify every exact value and citation with nl -ba. Never cite a line not present in numbered output. Answer immediately after verification. For edits, batch inspection, perform the edit, run one sufficient verification, then stop. Do not narrate routine steps, reread unchanged data, repeat context, or add unrequested work.";
+export const CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve every available capability and requested scope. Inspect relevant source sections in one batched search/read; make the smallest complete edit. Run every required check together in one shell invocation using `&&` so a failure is visible. If a check fails, fix only its observed cause and repeat the affected check. Stop when the requested work and all checks pass; do not reread unchanged sections or repeat context.";
 
 /**
  * Claude's latency policy is deliberately shorter than the cross-provider
@@ -93,16 +91,16 @@ const TREATMENT_ARGUMENT_SCHEMAS: TreatmentArgumentSchema[] = [
   { provider: "claude", key: "permission-mode", flags: ["--permission-mode"], takesValue: true },
   { provider: "codex", key: "config", flags: ["--config", "-c"], takesValue: true },
   { provider: "codex", key: "model", flags: ["--model", "-m"], takesValue: true },
-  { provider: "codex", key: "profile", flags: ["--profile"], takesValue: true },
-  { provider: "codex", key: "sandbox", flags: ["--sandbox"], takesValue: true },
+  { provider: "codex", key: "profile", flags: ["-p", "--profile"], takesValue: true },
+  { provider: "codex", key: "sandbox", flags: ["-s", "--sandbox"], takesValue: true },
   { provider: "codex", key: "ask-for-approval", flags: ["--ask-for-approval"], takesValue: true },
   { provider: "codex", key: "ephemeral", flags: ["--ephemeral"], takesValue: false },
   { provider: "codex", key: "skip-git-repo-check", flags: ["--skip-git-repo-check"], takesValue: false },
-  { provider: "codex", key: "output-last-message", flags: ["--output-last-message"], takesValue: true },
+  { provider: "codex", key: "output-last-message", flags: ["-o", "--output-last-message"], takesValue: true },
   { provider: "codex", key: "output-schema", flags: ["--output-schema"], takesValue: true },
   { provider: "codex", key: "color", flags: ["--color"], takesValue: true },
   { provider: "codex", key: "cd", flags: ["--cd", "-C"], takesValue: true },
-  { provider: "codex", key: "image", flags: ["--image"], takesValue: true },
+  { provider: "codex", key: "image", flags: ["-i", "--image"], takesValue: true },
   { provider: "codex", key: "max-turns", flags: ["--max-turns"], takesValue: true },
   { provider: "codex", key: "output-format", flags: ["--output-format"], takesValue: true },
   { provider: "codex", key: "json", flags: ["--json"], takesValue: false },
@@ -127,6 +125,66 @@ const TREATMENT_ARGUMENT_SCHEMAS: TreatmentArgumentSchema[] = [
 
 function schemasFor(provider: Provider): TreatmentArgumentSchema[] {
   return TREATMENT_ARGUMENT_SCHEMAS.filter((schema) => schema.provider === provider);
+}
+
+/** Select a policy only from one unambiguous native model selector in argv. */
+export function codexModelFromArgs(args: readonly string[]): string | undefined {
+  const schemas = [
+    ...schemasFor("codex"),
+    { provider: "codex" as const, key: "enable", flags: ["--enable", "--disable"], takesValue: true },
+    { provider: "codex" as const, key: "local-provider", flags: ["--local-provider"], takesValue: true },
+    { provider: "codex" as const, key: "other-value", flags: ["--add-dir", "--thread-source"], takesValue: true },
+    { provider: "codex" as const, key: "oss", flags: ["--oss"], takesValue: false },
+    { provider: "codex" as const, key: "strict-config", flags: ["--strict-config", "--approve-for-me", "--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust", "--worktree", "--ignore-user-config", "--ignore-rules"], takesValue: false }
+  ];
+  let selectedModel: string | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === "--") return selectedModel;
+    if (token === "exec") {
+      if (index === 0 || selectedModel !== undefined) continue;
+      return undefined;
+    }
+
+    const match = argumentMatch(token, schemas);
+    if (!match) {
+      if (token.startsWith("-")) return undefined;
+      const hasTrailingModelOption = args.slice(index + 1).some((argument) => argumentMatch(argument, schemas)?.schema.key === "model");
+      if (hasTrailingModelOption) return undefined;
+      return selectedModel;
+    }
+
+    if (match.schema.key === "model") {
+      const value = match.inlineValue ?? args[index + 1];
+      if (!value?.trim() || value.startsWith("-") || selectedModel !== undefined) return undefined;
+      selectedModel = value;
+      if (match.inlineValue === undefined) index += 1;
+      continue;
+    }
+
+    if (match.schema.key === "oss" || match.schema.key === "local-provider") return undefined;
+
+    if (!match.schema.takesValue) {
+      if (match.inlineValue !== undefined) return undefined;
+      continue;
+    }
+
+    if (match.inlineValue === undefined) {
+      const value = args[index + 1];
+      if (value === undefined || value === "--") return undefined;
+      if (match.schema.key === "config") {
+        const key = value.slice(0, value.indexOf("="));
+        if (key === "model_provider" || key.startsWith("model_providers.")) return undefined;
+      }
+      index += 1;
+    } else if (match.schema.key === "config") {
+      const key = match.inlineValue.slice(0, match.inlineValue.indexOf("="));
+      if (key === "model_provider" || key.startsWith("model_providers.")) return undefined;
+    }
+  }
+
+  return selectedModel;
 }
 
 function argumentMatch(token: string, schemas: TreatmentArgumentSchema[]): { schema: TreatmentArgumentSchema; inlineValue?: string } | undefined {
@@ -259,7 +317,7 @@ function supports(help: string, option: string): boolean {
  * Convert a confirmed CLI capability set into a bounded, session-scoped policy.
  * Kept pure so every provider policy has a direct unit test.
  */
-export function planFromHelp(provider: Provider, mode: RunMode, help: string): OptimizationPlan {
+export function planFromHelp(provider: Provider, mode: RunMode, help: string, codexModel?: string): OptimizationPlan {
   if (!appliesReductionPolicy(mode)) return NONE;
 
   if (provider === "claude") {
@@ -300,18 +358,49 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
     if (!supports(help, "--config") && !supports(help, "-c,")) {
       return { ...NONE, unavailableReason: "this Codex CLI does not expose --config" };
     }
+    if (!codexModel) {
+      return { ...NONE, unavailableReason: "this Codex invocation has no unambiguous explicit model selector; measuring without treatment" };
+    }
+    const usesV4 = codexModel === "gpt-5.5";
+    const usesV8 = codexModel === "gpt-6-luna";
+    if (usesV8) {
+      return {
+        args: [
+          "--config", "model_reasoning_effort=\"high\"",
+          "--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`
+        ],
+        applied: true,
+        profile: "codex-balanced-v8",
+        summary: "high native reasoning with batched inspection and complete required checks"
+      };
+    }
+    const usesV7 = codexModel === "gpt-daybreak-blue-latest";
+    if (usesV7) {
+      return {
+        args: ["--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`],
+        applied: true,
+        profile: "codex-balanced-v7",
+        summary: "native model settings with batched inspection and complete required checks"
+      };
+    }
+    const instruction = usesV4 ? CODEX_TOKEN_EFFICIENCY_INSTRUCTION : CODEX_V3_TOKEN_EFFICIENCY_INSTRUCTION;
+    const args = [
+      "--config", "model_reasoning_effort=\"low\"",
+      "--config", "model_reasoning_summary=\"none\"",
+      "--config", "model_verbosity=\"low\""
+    ];
+    if (!usesV4) {
+      args.push("--config", "model_auto_compact_token_limit=32000");
+      args.push("--config", "model_auto_compact_token_limit_scope=\"body_after_prefix\"");
+    }
+    args.push("--config", `developer_instructions=${JSON.stringify(instruction)}`);
     return {
-      args: [
-        "--config", "model_reasoning_effort=\"low\"",
-        "--config", "model_reasoning_summary=\"none\"",
-        "--config", "model_verbosity=\"low\"",
-        "--config", "model_auto_compact_token_limit=32000",
-        "--config", "model_auto_compact_token_limit_scope=\"body_after_prefix\"",
-        "--config", `developer_instructions=${JSON.stringify(CODEX_TOKEN_EFFICIENCY_INSTRUCTION)}`
-      ],
+      args,
       applied: true,
-      profile: "codex-balanced-v3",
-      summary: "all capabilities preserved, low reasoning, low verbosity, 32k compaction, bounded batched execution"
+      profile: usesV4 ? "codex-balanced-v4" : "codex-balanced-v3",
+      summary: usesV4
+        ? "native compaction defaults, low reasoning and verbosity"
+        : "other explicit model: low reasoning, low verbosity, 32k compaction, bounded batched execution"
     };
   }
 
@@ -345,7 +434,8 @@ export function planForInstalledCli(
   mode: RunMode,
   binary: string,
   environment: NodeJS.ProcessEnv = process.env,
-  verifyBinary: (candidate: string) => boolean = () => true
+  verifyBinary: (candidate: string) => boolean = () => true,
+  codexModel?: string
 ): OptimizationPlan {
   if (!appliesReductionPolicy(mode)) return NONE;
   try {
@@ -359,7 +449,7 @@ export function planForInstalledCli(
     if (result.error || result.status !== 0) {
       return { ...NONE, unavailableReason: "could not verify this CLI version before applying a policy" };
     }
-    const plan = planFromHelp(provider, mode, result.stdout);
+    const plan = planFromHelp(provider, mode, result.stdout, codexModel);
     if (!plan.applied) return plan;
     // Help advertises top-level flags, but Codex configuration keys and some
     // provider option combinations can still be rejected by the exact local

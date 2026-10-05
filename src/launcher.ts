@@ -6,7 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { getAdapter } from "./adapters/index.js";
 import { ensureConfig } from "./config.js";
 import { TelemetryDatabase } from "./database.js";
-import { appliesReductionPolicy, mergeTreatmentArguments, planForInstalledCli, planFromHelp } from "./optimization.js";
+import { appliesReductionPolicy, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp } from "./optimization.js";
 import { pricingProfile } from "./pricing.js";
 import { hasUnsafeMacAcl } from "./acl.js";
 import type { TokenPilotPaths } from "./paths.js";
@@ -258,8 +258,9 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       const trusted = trustedExecutable(binary);
       if (!trusted) throw new Error("Provider executable no longer meets TokenPilot trust checks");
       const version = binaryVersion(trusted);
+      const codexModel = provider === "codex" ? codexModelFromArgs(args) : undefined;
       const reductionPlan = appliesReductionPolicy(config.defaultMode)
-        ? planForInstalledCli(provider, config.defaultMode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined)
+        ? planForInstalledCli(provider, config.defaultMode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined, codexModel)
         : undefined;
       if (mode === "balanced") {
         database = new TelemetryDatabase(paths);
@@ -272,7 +273,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
       }
       const optimization = appliesReductionPolicy(mode) && reductionPlan
         ? reductionPlan
-        : planForInstalledCli(provider, mode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined);
+        : planForInstalledCli(provider, mode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined, codexModel);
       const providerOptimizationArgs = provider === "grok" && isGrokHeadless(args)
         ? [...optimization.args, ...(optimization.headlessArgs ?? [])]
         : optimization.args;

@@ -55,6 +55,8 @@ A decrease in new input is not automatically a reduction. If cache reads rise in
 
 ## Validation requirements
 
+An increase fails reduction acceptance and is explicitly reported as a rejected policy. Keep its measured counters and investigate before retesting. Controlled repeat evaluations must declare their task, sequence and quality checks before execution; every increased-use pair remains a failure, even if another pair improves.
+
 A reduction is validated only when all of the following are true:
 
 - same provider;

@@ -25,7 +25,7 @@ tokenpilot doctor
 Open a new terminal before starting a provider session so the TokenPilot shims are first on `PATH`.
 
 ```sh
-codex
+codex --model gpt-5.5
 
 # Latest provider-local cache-aware result and evidence state.
 tokenpilot report --provider codex
@@ -47,7 +47,7 @@ New installations default to `reduce`. Claude, Codex, and Grok receive a version
 | Provider | Current behavior | Boundary |
 | --- | --- | --- |
 | Claude Code | Metrics-only local OTLP; low effort, stable cache prefix, core tools, and a bounded verification pass when supported. | Use `deep`, `off`, or bypass when the complete native tool surface is required. |
-| OpenAI Codex | Metrics-only local OTLP or explicit `exec --json` usage; low reasoning and verbosity, body compaction, and bounded batched execution. | Preserves agents, memories, web, apps, and the complete native tool surface. |
+| OpenAI Codex | Metrics-only local OTLP or explicit `exec --json` usage; model-specific, versioned treatments. | Preserves all native capabilities; explicit model selection is required for treatment. |
 | Grok Build | External OTEL or explicit JSON counters; low reasoning and concise appended guidance. | Preserves the native tools, memory, web, subagents, and plan mode. |
 | Kimi Code CLI | Original CLI passthrough. | No treatment or reduction claim until a safe correlated measurement channel exists. |
 
@@ -63,6 +63,8 @@ A missing provider never disables the others. `tokenpilot doctor` separates laun
 
 ## Experimental evidence
 
+The [reduction retest](docs/REDUCTION-RETEST-2026-10-05.md) documents the final model-specific policies and every rejected experiment. An increase rejects a policy and requires investigation and a predeclared retest.
+
 The [October 5 real-model evaluation](docs/EVALUATION-2026-10-05.md) records 24 calls across eight Codex and four Grok models, with source-qualified counters and independently checked patches.
 
 Current measurements must come from real provider sessions with a known total basis and independently checked task outcomes. A single matched task is an observed comparison, not validated reduction or a general performance claim.
@@ -73,8 +75,8 @@ The [August 2026 research snapshot](docs/RESULTS.md) is retained as historical d
 
 The concise report returns the most recent comparable provider-local result and preserves its evidence state:
 
-- `variação cache-aware medida — X% a menos (preliminar)` for a directional comparison;
-- `variação cache-aware medida — X% a menos (qualidade observada degradada)` when outcome observations worsened;
+- `variação cache-aware medida — X% a menos` retains its preliminary or degraded-quality qualification;
+- `política de redução reprovada — X% a mais` for increased consumption;
 - `redução cache-aware validada — X% a menos` only with formal quality-equivalence evidence;
 - `cache-shift — sem redução comprovada` when the complete total stayed effectively flat; and
 - `sem comparação cache-aware medida` for limited or incomparable evidence.

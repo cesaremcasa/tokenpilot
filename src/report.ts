@@ -290,7 +290,7 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const treatmentRecordedTokens = sum(treatmentTotals);
     const estimatedTokensAvoided = baselineExpectedTreatmentTokens - treatmentRecordedTokens;
     const tokenReductionPercent = baselineMedianTotal === 0 ? 0 : ((baselineMedianTotal - treatmentMedianTotal) / baselineMedianTotal) * 100;
-    const isCacheShift = cacheShift(baseline, treatment, baselineMedianTotal, treatmentMedianTotal);
+    const isCacheShift = tokenReductionPercent >= 0 && cacheShift(baseline, treatment, baselineMedianTotal, treatmentMedianTotal);
     const quality = qualityAssessment(baseline, treatment);
     const classifiedWork = taskKind !== "unknown" && taskKind !== "benchmark";
     const readiness = classifiedWork && baseline.length >= MIN_VALIDATED_SESSIONS_PER_ARM && treatment.length >= MIN_VALIDATED_SESSIONS_PER_ARM ? "ready" as const : "preliminary" as const;
@@ -373,7 +373,9 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
         ? "new input moved into cache reads while the complete total stayed flat"
         : tokenResult === "validated-reduction"
           ? undefined
-          : quality.qualityObservation === "unknown"
+          : tokenReductionPercent < 0
+            ? "increased cache-aware token use; reduction policy rejected and requires retesting"
+            : quality.qualityObservation === "unknown"
             ? "quality observation unavailable; classify every matched session as completed, rework, or abandoned"
             : quality.qualityObservation === "degraded"
               ? "observed quality degraded; treatment outcomes are worse than baseline"
@@ -458,6 +460,9 @@ function comparisonResult(comparison: TreatmentComparison): string {
   const quality = qualityObservation(comparison) === "observed-not-degraded"
     ? "quality observed not degraded"
     : qualityObservation(comparison) === "degraded" ? "quality degraded" : "quality unverified";
+  if (comparison.tokenReductionPercent !== undefined && comparison.tokenReductionPercent < 0) {
+    return `${Math.abs(comparison.tokenReductionPercent).toFixed(1)}% increased cache-aware use — reduction policy rejected (${quality})`;
+  }
   if (comparison.tokenResult === "validated-reduction") return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated cache-aware reduction (${quality})`;
   const percent = comparison.tokenReductionPercent === undefined ? "" : `${comparison.tokenReductionPercent.toFixed(1)}% `;
   return `${percent}measured cache-aware variation — preliminary, not an economy (${quality})`;
@@ -502,6 +507,7 @@ const SCOREBOARD_MISSING = "sem comparação cache-aware medida";
 
 function scoreboardPercent(value: number): string {
   const rounded = Math.round(Math.abs(value) * 10) / 10;
+  if (rounded === 0 && value !== 0) return value < 0 ? "<0,1% a mais" : "<0,1% a menos";
   const text = Number.isInteger(rounded) ? `${rounded.toFixed(0)}` : `${rounded.toFixed(1).replace(".", ",")}`;
   return value < 0 ? `${text}% a mais` : `${text}% a menos`;
 }
@@ -514,6 +520,9 @@ function providerScore(report: Report, provider: Provider): string {
   }
   if (comparison?.tokenReductionPercent !== undefined) {
     const percent = scoreboardPercent(comparison.tokenReductionPercent);
+    if (comparison.tokenReductionPercent < 0) {
+      return `política de redução reprovada — ${percent}`;
+    }
     if (comparison.tokenResult === "validated-reduction") {
       return `redução cache-aware validada — ${percent}`;
     }

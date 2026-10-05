@@ -272,6 +272,13 @@ describe("aggregate reporting", () => {
     expect(serialized).not.toContain("estimatedTokensAvoided");
     expect(serialized).not.toContain("tokenReductionPercent");
     expect(serialized).not.toContain("estimatedUsdAvoided");
+
+    const increased = sessions.map((session) => session.mode === "observe" ? session : { ...session, output: 64 });
+    const [rejected] = treatmentComparisons(increased);
+    expect(rejected.tokenResult).not.toBe("cache-shift");
+    expect(rejected.tokenReductionPercent).toBeLessThan(0);
+    expect(reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }], comparisons: [rejected] }))
+      .toContain("política de redução reprovada — <0,1% a mais");
   });
 
   it("labels a flat total with cached input replaced by new input as reverse cache-shift", () => {
@@ -694,7 +701,8 @@ describe("aggregate reporting", () => {
     });
     expect(comparison.tokenReductionPercent).toBe(-20);
     const summary = reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }], comparisons: [comparison] });
-    expect(summary).toContain("variação cache-aware medida — 20% a mais (preliminar)");
+    expect(summary).toContain("política de redução reprovada — 20% a mais");
+    expect(summary).not.toContain("variação cache-aware medida");
   });
 
   it("does not validate when aggregate use falls but the treatment median rises", () => {
