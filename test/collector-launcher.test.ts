@@ -130,7 +130,7 @@ exit 0
     expect(collectPendingRuns(paths)).toEqual({ collected: 0, unavailable: 0 });
     const after = new TelemetryDatabase(paths);
     expect(after.getRun(runId)).toMatchObject({ collectionState: "unavailable" });
-    expect(after.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ inputNew: 0, inputCached: 0, output: 0 });
+    expect(after.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ inputNew: null, inputCached: null, output: null });
     after.close();
     cleanup(paths);
   });
@@ -199,8 +199,8 @@ exit 0
     const observedArguments = path.join(paths.userHome, "grok-reduce-arguments");
     const originalBin = writeFakeGrok(paths, `#!/bin/sh
 case " $* " in
-  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
-  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
+  *" --version "*) echo 'grok 1.0.46'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --rules <rules> --system-prompt-override <prompt> --tools <tools> --no-subagents --disable-web-search --no-plan'; exit 0 ;;
 esac
 printf '%s\n' "$@" > '${observedArguments}'
 exit 0
@@ -215,30 +215,28 @@ exit 0
     expect(await withProviderPath(originalBin, () => runProvider("grok", [], paths))).toBe(0);
     const tuiArguments = fs.readFileSync(observedArguments, "utf8");
     expect(tuiArguments).toContain("--verbatim");
-    expect(tuiArguments).toContain("--no-subagents");
-    expect(tuiArguments).toContain("--no-memory");
-    expect(tuiArguments).toContain("--disable-web-search");
-    expect(tuiArguments).toContain("--no-plan");
-    expect(tuiArguments).toContain("--system-prompt-override");
-    expect(tuiArguments).not.toContain("--tools");
+    for (const flag of ["--no-subagents", "--no-memory", "--disable-web-search", "--no-plan", "--tools", "--system-prompt-override"]) {
+      expect(tuiArguments).not.toContain(flag);
+    }
+    expect(tuiArguments).toContain("--rules");
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "grok",
       mode: "reduce",
       optimizationApplied: true,
-      optimizationProfile: "grok-balanced-v6"
+      optimizationProfile: "grok-balanced-v7"
     });
     database.close();
     cleanup(paths);
   });
 
-  it("injects the complete Grok v6 policy without retaining its fixed rule", async () => {
+  it("injects Grok v7 through an appended rule while preserving native capabilities", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-arguments");
     const originalBin = writeFakeGrok(paths, `#!/bin/sh
 case " $* " in
-  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
-  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
+  *" --version "*) echo 'grok 1.0.46'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --rules <rules> --system-prompt-override <prompt> --tools <tools> --no-subagents --disable-web-search --no-plan'; exit 0 ;;
 esac
 printf '%s\n' "$@" > '${observedArguments}'
 exit 0
@@ -254,13 +252,10 @@ exit 0
     const argumentsText = fs.readFileSync(observedArguments, "utf8");
     expect(argumentsText).toContain("low");
     expect(argumentsText).toContain("--verbatim");
-    expect(argumentsText).toContain("--no-subagents");
-    expect(argumentsText).toContain("--no-memory");
-    expect(argumentsText).toContain("--disable-web-search");
-    expect(argumentsText).toContain("--no-plan");
-    expect(argumentsText).toContain("--system-prompt-override");
-    expect(argumentsText).toContain("--tools");
-    expect(argumentsText).toContain("run_terminal_cmd");
+    for (const flag of ["--no-subagents", "--no-memory", "--disable-web-search", "--no-plan", "--tools", "--system-prompt-override"]) {
+      expect(argumentsText).not.toContain(flag);
+    }
+    expect(argumentsText).toContain("--rules");
     expect(argumentsText).toContain(GROK_TOKEN_EFFICIENCY_INSTRUCTION);
 
     const database = new TelemetryDatabase(paths);
@@ -268,7 +263,7 @@ exit 0
       provider: "grok",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "grok-balanced-v6"
+      optimizationProfile: "grok-balanced-v7"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
@@ -280,17 +275,14 @@ exit 0
     cleanup(paths);
   });
 
-  it("deduplicates explicit Grok treatment flags in the real v0.4.16 reproduction", async () => {
+  it("preserves explicit Grok feature flags when applying v7", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-deduplicated-arguments.json");
     const originalBin = writeFakeGrok(paths, `#!/usr/bin/env node
 import fs from "node:fs";
 const args = process.argv.slice(2);
-const flags = ["--no-subagents", "--disable-web-search", "--no-memory"];
-if (args.includes("--version")) { console.log("grok 1.0.4"); process.exit(0); }
-if (args.includes("--help")) { console.log("--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>"); process.exit(0); }
-const duplicate = flags.find((flag) => args.filter((argument) => argument === flag).length > 1);
-if (duplicate) { console.error("argument cannot be used multiple times: " + duplicate); process.exit(64); }
+if (args.includes("--version")) { console.log("grok 1.0.46"); process.exit(0); }
+if (args.includes("--help")) { console.log("--reasoning-effort <effort> --verbatim --rules <rules> --system-prompt-override <prompt> --tools <tools> --no-subagents --disable-web-search --no-plan"); process.exit(0); }
 fs.writeFileSync("${observedArguments}", JSON.stringify(args));
 process.exit(0);
 `);
@@ -302,9 +294,7 @@ process.exit(0);
     expect(await withProviderPath(originalBin, () => runProvider("grok", explicit, paths))).toBe(0);
     const observed = JSON.parse(fs.readFileSync(observedArguments, "utf8"));
     expect(observed.slice(-explicit.length)).toEqual(explicit);
-    for (const flag of ["--no-subagents", "--disable-web-search", "--no-memory"]) {
-      expect(observed.filter((argument) => argument === flag)).toHaveLength(1);
-    }
+    for (const flag of ["--no-subagents", "--disable-web-search", "--no-memory"]) expect(observed.filter((argument) => argument === flag)).toHaveLength(1);
     cleanup(paths);
   });
 
@@ -313,8 +303,8 @@ process.exit(0);
     const invocations = path.join(paths.userHome, "grok-conflict-invocations");
     const originalBin = writeFakeGrok(paths, `#!/bin/sh
 case " $* " in
-  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
-  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
+  *" --version "*) echo 'grok 1.0.46'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --rules <rules> --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
 esac
 printf x >> '${invocations}'
 exit 0
@@ -381,7 +371,7 @@ exit 0
     const run = database.getPendingRuns();
     expect(run).toHaveLength(0);
     const aggregate = database.aggregateSince(new Date(Date.now() - 60_000).toISOString());
-    expect(aggregate[0]).toMatchObject({ provider: "codex", reportedTotal: 7675, inputNew: 0, output: 0 });
+    expect(aggregate[0]).toMatchObject({ provider: "codex", reportedTotal: 7675, inputNew: null, output: null });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
     const markdown = reportMarkdown(buildReport(paths, 7));
@@ -389,6 +379,61 @@ exit 0
       expect(rawDatabase).not.toContain(forbidden);
       expect(markdown).not.toContain(forbidden);
     }
+    cleanup(paths);
+  });
+
+  it("collects only verified usage from Codex exec JSONL mode", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "codex-json-arguments");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+case " $* " in
+  *" --version "*) echo 'codex 0.155.1'; exit 0 ;;
+  *" --help "*) echo '-c, --config <key=value> --json --model <model>'; exit 0 ;;
+esac
+printf '%s\\n' "$@" > '${observedArguments}'
+printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"private task result"}}'
+printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":15,"cache_write_input_tokens":3,"reasoning_output_tokens":10}}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+
+    const args = ["exec", "--json", "--model", "gpt-6-luna", "--ephemeral", "--skip-git-repo-check", "--sandbox", "workspace-write", "task"];
+    expect(await withProviderPath(originalBin, () => runProvider("codex", args, paths))).toBe(0);
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
+      provider: "codex",
+      optimizationApplied: true,
+      optimizationProfile: "codex-balanced-v3",
+      collectionState: "collected"
+    });
+    const summary = database.sessionSummariesSince(new Date(0).toISOString())[0];
+    expect(summary).toMatchObject({
+      inputNew: 60,
+      inputCached: 40,
+      output: 15,
+      reportedTotal: 115,
+      reportedTotalIncludesCachedInput: true,
+      categoryMetricsComplete: false,
+      hasCacheCreated: 0,
+      hasReasoning: 0
+    });
+    expect(database.aggregateSince(new Date(0).toISOString())[0]).toMatchObject({
+      inputNew: 60,
+      inputCached: 40,
+      cacheCreated: null,
+      output: 15,
+      reasoning: null,
+      reportedTotal: 115
+    });
+    database.close();
+
+    const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
+    const markdown = reportMarkdown(buildReport(paths, 7));
+    expect(rawDatabase).not.toContain("private task result");
+    expect(markdown).not.toContain("private task result");
+    expect(fs.readFileSync(observedArguments, "utf8")).toContain("--json");
     cleanup(paths);
   });
 
@@ -444,7 +489,7 @@ exit 0
     expect(fs.readFileSync(environmentFile, "utf8")).toBe("1|otlp|none|none|0|false|http/json|1000");
     const database = new TelemetryDatabase(paths);
     expect(database.getPendingRuns()).toHaveLength(0);
-    expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ provider: "claude", inputNew: 0 });
+    expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ provider: "claude", inputNew: null });
     database.close();
     cleanup(paths);
   });

@@ -39,14 +39,10 @@ export const CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION = "Finish correctly with minima
 export const CLAUDE_CORE_TOOLS = "Bash,Edit,Read,Write,Grep,Glob";
 
 /**
- * Grok v6 replaces the large native instruction prefix with a concise coding
- * contract and makes inspection/edit/verification phases explicitly bounded.
- * Headless sessions additionally expose only the terminal tool, which remains
- * capable of search, reads, edits, and verification while avoiding repeated
- * tool-schema context. Deep/off/bypass retain the complete native environment.
+ * Grok v7 keeps the provider's complete tool and feature surface while using
+ * low reasoning effort and a concise, bounded coding contract.
  */
-export const GROK_TOKEN_EFFICIENCY_INSTRUCTION = "Complete the request with minimal total context. For repository inspection, make exactly one batched terminal call combining every needed search and read, then answer without another tool call. Preserve privacy and unrelated work. If editing is requested, make one batched inspection call, one edit call, one verification call, then stop. Answer concisely.";
-export const GROK_HEADLESS_TOOLS = "run_terminal_cmd";
+export const GROK_TOKEN_EFFICIENCY_INSTRUCTION = "Complete the request correctly with concise, task-focused work. Batch independent inspections and avoid repeating unchanged context or actions. Preserve all task requirements and available tools. Verify edits with the relevant checks before stopping.";
 
 /** A plan never contains credentials or user-supplied command arguments. */
 export interface OptimizationPlan {
@@ -109,7 +105,9 @@ const TREATMENT_ARGUMENT_SCHEMAS: TreatmentArgumentSchema[] = [
   { provider: "codex", key: "image", flags: ["--image"], takesValue: true },
   { provider: "codex", key: "max-turns", flags: ["--max-turns"], takesValue: true },
   { provider: "codex", key: "output-format", flags: ["--output-format"], takesValue: true },
+  { provider: "codex", key: "json", flags: ["--json"], takesValue: false },
   { provider: "grok", key: "effort", flags: ["--effort", "--reasoning-effort"], takesValue: true },
+  { provider: "grok", key: "rules", flags: ["--rules"], takesValue: true },
   { provider: "grok", key: "tools", flags: ["--tools"], takesValue: true },
   { provider: "grok", key: "system-prompt-override", flags: ["--system-prompt-override"], takesValue: true },
   { provider: "grok", key: "verbatim", flags: ["--verbatim"], takesValue: false },
@@ -319,24 +317,18 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
 
   if (provider === "grok") {
     const effortOption = supports(help, "--reasoning-effort") ? "--reasoning-effort" : supports(help, "--effort") ? "--effort" : undefined;
-    return effortOption && supports(help, "--verbatim") && supports(help, "--no-subagents") && supports(help, "--no-memory")
-      && supports(help, "--disable-web-search") && supports(help, "--no-plan") && supports(help, "--system-prompt-override") && supports(help, "--tools")
+    return effortOption && supports(help, "--verbatim") && supports(help, "--rules")
       ? {
           args: [
             effortOption, "low",
             "--verbatim",
-            "--no-subagents",
-            "--no-memory",
-            "--disable-web-search",
-            "--no-plan",
-            "--system-prompt-override", GROK_TOKEN_EFFICIENCY_INSTRUCTION
+            "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION
           ],
-          headlessArgs: ["--tools", GROK_HEADLESS_TOOLS],
           applied: true,
-          profile: "grok-balanced-v6",
-          summary: "minimal system prefix, one batched terminal workflow, low reasoning, no subagents, memory, web, or plan mode"
+          profile: "grok-balanced-v7",
+          summary: "low reasoning with concise appended guidance; all native tools and optional features preserved"
         }
-      : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete token-reduction policy" };
+      : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete capability-preserving token-reduction policy" };
   }
 
   // Kimi remains fail-open until it offers a content-free, child-authenticated

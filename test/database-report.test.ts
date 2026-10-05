@@ -179,11 +179,11 @@ describe("aggregate reporting", () => {
       optimizationProfile: "codex-balanced-v1",
       baselineSessions: 2,
       treatmentSessions: 1,
-      treatmentRecordedTokens: 600,
-      baselineExpectedTreatmentTokens: 700,
-      estimatedTokensAvoided: 100,
-      tokenReductionPercent: 100 / 700 * 100,
-      tokenPressureDeltaPercent: -40,
+      treatmentRecordedTokens: 540,
+      baselineExpectedTreatmentTokens: 620,
+      estimatedTokensAvoided: 80,
+      tokenReductionPercent: 80 / 620 * 100,
+      tokenPressureDeltaPercent: (90 - 170) / 170 * 100,
       latencyDeltaSeconds: -5,
       latencyDeltaPercent: -(5 / 30) * 100,
       latencyResult: "faster",
@@ -359,8 +359,8 @@ describe("aggregate reporting", () => {
       tokenResult: "preliminary-signal",
       reason: expect.stringContaining("quality observation unavailable")
     });
-    expect(comparison.baselineExpectedTreatmentTokens).toBe(20_000_000);
-    expect(comparison.estimatedTokensAvoided).toBe(10_000_000);
+    expect(comparison.baselineExpectedTreatmentTokens).toBe(15_000_000);
+    expect(comparison.estimatedTokensAvoided).toBe(7_500_000);
     expect(comparison.tokenReductionPercent).toBe(50);
     expect(comparison.baselineExpectedUsd).toBeUndefined();
     expect(comparison.estimatedUsdAvoided).toBeUndefined();
@@ -395,8 +395,8 @@ describe("aggregate reporting", () => {
       tokenResult: "preliminary-signal",
       reason: expect.stringContaining("observed quality degraded")
     });
-    expect(comparison.baselineExpectedTreatmentTokens).toBe(20_000_000);
-    expect(comparison.estimatedTokensAvoided).toBe(10_000_000);
+    expect(comparison.baselineExpectedTreatmentTokens).toBe(15_000_000);
+    expect(comparison.estimatedTokensAvoided).toBe(7_500_000);
     expect(comparison.estimatedUsdAvoided).toBeUndefined();
     const serialized = JSON.stringify(comparison);
     expect(serialized).toContain("estimatedTokensAvoided");
@@ -548,9 +548,43 @@ describe("aggregate reporting", () => {
       comparisons: treatmentComparisons(sessions)
     });
     expect(summary).toContain("TokenPilot · Grok");
-    expect(summary).toContain("variação cache-aware medida — 51,1% a menos (preliminar)");
+    expect(summary).toContain("variação cache-aware medida — 52,2% a menos (preliminar)");
     expect(summary).not.toContain("tokens usados");
     expect(summary).not.toContain("235 → 115 tokens");
+  });
+
+  it("does not add Codex or Grok reasoning detail on top of output counters", () => {
+    for (const provider of ["codex", "grok"] as const) {
+      const sessions: SessionSummary[] = ([
+        { id: "observe", mode: "observe", inputNew: 100, output: 10 },
+        { id: "treatment", mode: "balanced", inputNew: 80, output: 8 }
+      ] as const).map(({ id, mode, inputNew, output }) => ({
+        id,
+        provider,
+        mode,
+        optimizationApplied: mode === "balanced",
+        optimizationProfile: mode === "balanced" ? `${provider}-balanced-v1` : undefined,
+        comparisonProfile: `${provider}-balanced-v1`,
+        taskKind: "feature",
+        outcome: "completed",
+        durationSeconds: 1,
+        inputNew,
+        inputCached: 20,
+        cacheCreated: 0,
+        output,
+        reasoning: 4,
+        categoryMetricsComplete: true,
+        compactions: 0,
+        retries: 0
+      }));
+
+      expect(treatmentComparisons(sessions)).toMatchObject([{
+        baselineMedianComparableTotal: 130,
+        treatmentMedianComparableTotal: 108,
+        baselineMedianTokenPressure: 110,
+        treatmentMedianTokenPressure: 88
+      }]);
+    }
   });
 
   it("keeps the latest measured result when a shorter window is empty", () => {

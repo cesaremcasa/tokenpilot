@@ -88,7 +88,8 @@ export function buildLatestSummaryReport(paths: TokenPilotPaths): Report {
   return buildReportSince(paths, ALL_RECORDED_DATA_SINCE);
 }
 
-function integer(value: number): string {
+function integer(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
 }
 
@@ -118,8 +119,10 @@ function latestStartedAt(sessions: SessionSummary[]): string | undefined {
   return sessions.map((session) => session.startedAt).filter((value): value is string => value !== undefined).sort().at(-1);
 }
 
-function tokenPressure(session: SessionSummary): number {
-  return session.inputNew + session.cacheCreated + session.output + session.reasoning;
+function tokenPressure(session: SessionSummary): number | undefined {
+  if (session.inputNew === undefined || session.cacheCreated === undefined || session.output === undefined) return undefined;
+  const reasoning = session.provider === "codex" || session.provider === "grok" ? 0 : session.reasoning;
+  return session.inputNew + session.cacheCreated + session.output + (reasoning ?? 0);
 }
 
 function hasCompleteCategories(session: SessionSummary): boolean {
@@ -128,7 +131,10 @@ function hasCompleteCategories(session: SessionSummary): boolean {
 
 function categoryTotal(session: SessionSummary): number | undefined {
   if (!hasCompleteCategories(session)) return undefined;
-  return session.inputNew + session.inputCached + session.cacheCreated + session.output + session.reasoning;
+  if (session.inputNew === undefined || session.inputCached === undefined || session.cacheCreated === undefined || session.output === undefined) return undefined;
+  // Codex and Grok publish reasoning as output detail; adding both double-counts it.
+  const reasoning = session.provider === "codex" || session.provider === "grok" ? 0 : session.reasoning;
+  return session.inputNew + session.inputCached + session.cacheCreated + session.output + (reasoning ?? 0);
 }
 
 function completeTotal(session: SessionSummary): { value: number; source: TreatmentComparison["totalSource"] } | undefined {
@@ -147,13 +153,14 @@ function pricingSignature(session: SessionSummary): string {
 function apiEquivalentUsd(session: SessionSummary): number | undefined {
   const profile = session.pricingProfile;
   if (!profile || !session.pricingCompatible || !hasCompleteCategories(session)) return undefined;
+  if (session.inputNew === undefined || session.inputCached === undefined || session.cacheCreated === undefined || session.output === undefined) return undefined;
   const rates = profile.rates;
   const units = 1_000_000;
   return (session.inputNew * rates.inputUsdPerMillion
     + session.inputCached * rates.cachedInputUsdPerMillion
     + session.cacheCreated * rates.cacheCreationUsdPerMillion
     + session.output * rates.outputUsdPerMillion
-    + session.reasoning * (rates.reasoningUsdPerMillion ?? 0)) / units;
+    + (session.provider === "codex" || session.provider === "grok" ? 0 : (session.reasoning ?? 0) * (rates.reasoningUsdPerMillion ?? 0))) / units;
 }
 
 type QualityAssessment = Pick<TreatmentComparison, "qualityObservation" | "qualityEvidence" | "baselineCompletionRate" | "treatmentCompletionRate" | "baselineReworkRate" | "treatmentReworkRate" | "baselineAbandonmentRate" | "treatmentAbandonmentRate">;
@@ -218,8 +225,9 @@ function qualityAssessment(baseline: SessionSummary[], treatment: SessionSummary
 
 function cacheShift(baseline: SessionSummary[], treatment: SessionSummary[], baselineTotal: number, treatmentTotal: number): boolean {
   if (baselineTotal <= 0) return false;
-  const newChange = median(treatment.map((session) => session.inputNew)) - median(baseline.map((session) => session.inputNew));
-  const cacheChange = median(treatment.map((session) => session.inputCached)) - median(baseline.map((session) => session.inputCached));
+  if ([...baseline, ...treatment].some((session) => session.inputNew === undefined || session.inputCached === undefined)) return false;
+  const newChange = median(treatment.map((session) => session.inputNew!)) - median(baseline.map((session) => session.inputNew!));
+  const cacheChange = median(treatment.map((session) => session.inputCached!)) - median(baseline.map((session) => session.inputCached!));
   const totalChange = Math.abs(treatmentTotal - baselineTotal) / baselineTotal;
   const categoriesMovedInOppositeDirections = newChange * cacheChange < 0;
   const cacheMovementExplainsNewMovement = Math.abs(cacheChange) >= Math.abs(newChange) * CACHE_SHIFT_MIN_CACHE_RECOVERY;
@@ -298,9 +306,14 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const baselineExpectedUsd = baselineMedianUsd === undefined ? undefined : baselineMedianUsd * treatment.length;
     const rawEstimatedUsdAvoided = baselineExpectedUsd === undefined || treatmentRecordedUsd === undefined ? undefined : baselineExpectedUsd - treatmentRecordedUsd;
     const usdReductionPercent = baselineMedianUsd === undefined || baselineMedianUsd === 0 || !hasComparableUsd ? undefined : ((baselineMedianUsd - median(treatmentUsd)) / baselineMedianUsd) * 100;
-    const numberMedian = (sessions: SessionSummary[], key: keyof Pick<SessionSummary, "inputNew" | "inputCached" | "cacheCreated" | "output" | "reasoning">) => median(sessions.map((session) => session[key]));
+    const numberMedian = (sessions: SessionSummary[], key: keyof Pick<SessionSummary, "inputNew" | "inputCached" | "cacheCreated" | "output" | "reasoning">): number | undefined => {
+      const values = sessions.map((session) => session[key]);
+      return values.some((value) => value === undefined) ? undefined : median(values as number[]);
+    };
     const baselinePressure = baseline.map(tokenPressure);
     const treatmentPressure = treatment.map(tokenPressure);
+    const baselineMedianTokenPressure = baselinePressure.some((value) => value === undefined) ? undefined : median(baselinePressure as number[]);
+    const treatmentMedianTokenPressure = treatmentPressure.some((value) => value === undefined) ? undefined : median(treatmentPressure as number[]);
     const baselineMedianDurationSeconds = median(baseline.map((session) => session.durationSeconds));
     const treatmentMedianDurationSeconds = median(treatment.map((session) => session.durationSeconds));
     const latencyDeltaSeconds = treatmentMedianDurationSeconds - baselineMedianDurationSeconds;
@@ -317,8 +330,8 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       baselineSessions: baseline.length,
       treatmentSessions: treatment.length,
       latestTreatmentAt: latestStartedAt(treatment),
-      baselineMedianTokenPressure: median(baselinePressure),
-      treatmentMedianTokenPressure: median(treatmentPressure),
+      baselineMedianTokenPressure,
+      treatmentMedianTokenPressure,
       baselineMedianInputNew: numberMedian(baseline, "inputNew"),
       treatmentMedianInputNew: numberMedian(treatment, "inputNew"),
       baselineMedianCachedInput: numberMedian(baseline, "inputCached"),
@@ -338,7 +351,9 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       treatmentRecordedTokens,
       estimatedTokensAvoided: isCacheShift ? undefined : estimatedTokensAvoided,
       tokenReductionPercent: isCacheShift ? undefined : tokenReductionPercent,
-      tokenPressureDeltaPercent: isCacheShift ? undefined : median(baselinePressure) === 0 ? 0 : ((median(treatmentPressure) - median(baselinePressure)) / median(baselinePressure)) * 100,
+      tokenPressureDeltaPercent: isCacheShift || baselineMedianTokenPressure === undefined || treatmentMedianTokenPressure === undefined
+        ? undefined
+        : baselineMedianTokenPressure === 0 ? 0 : ((treatmentMedianTokenPressure - baselineMedianTokenPressure) / baselineMedianTokenPressure) * 100,
       baselineIqrTokenPressure: interquartileRange(baselineTotals),
       treatmentIqrTokenPressure: interquartileRange(treatmentTotals),
       baselineMedianDurationSeconds,
@@ -449,7 +464,11 @@ function comparisonResult(comparison: TreatmentComparison): string {
 }
 
 function categoryLine(comparison: TreatmentComparison): string {
-  if (comparison.baselineMedianInputNew === undefined || comparison.treatmentMedianInputNew === undefined || comparison.baselineMedianComparableTotal === undefined || comparison.treatmentMedianComparableTotal === undefined) return "—";
+  if (comparison.baselineMedianInputNew === undefined || comparison.treatmentMedianInputNew === undefined
+    || comparison.baselineMedianCachedInput === undefined || comparison.treatmentMedianCachedInput === undefined
+    || comparison.baselineMedianCacheCreated === undefined || comparison.treatmentMedianCacheCreated === undefined
+    || comparison.baselineMedianTokenPressure === undefined || comparison.treatmentMedianTokenPressure === undefined
+    || comparison.baselineMedianComparableTotal === undefined || comparison.treatmentMedianComparableTotal === undefined) return "—";
   return `new ${integer(comparison.baselineMedianInputNew)}→${integer(comparison.treatmentMedianInputNew)}; cached ${integer(comparison.baselineMedianCachedInput!)}→${integer(comparison.treatmentMedianCachedInput!)}; created ${integer(comparison.baselineMedianCacheCreated!)}→${integer(comparison.treatmentMedianCacheCreated!)}; pressure ${integer(comparison.baselineMedianTokenPressure!)}→${integer(comparison.treatmentMedianTokenPressure!)}; total ${integer(comparison.baselineMedianComparableTotal)}→${integer(comparison.treatmentMedianComparableTotal)}`;
 }
 
