@@ -63,6 +63,8 @@ A missing provider never disables the others. `tokenpilot doctor` separates laun
 
 ## Experimental evidence
 
+The [October 5 real-model evaluation](docs/EVALUATION-2026-10-05.md) records 24 calls across eight Codex and four Grok models, with source-qualified counters and independently checked patches.
+
 Current measurements must come from real provider sessions with a known total basis and independently checked task outcomes. A single matched task is an observed comparison, not validated reduction or a general performance claim.
 
 The [August 2026 research snapshot](docs/RESULTS.md) is retained as historical documentation. Its aggregate figures have not been revalidated under the current Codex/Grok counter semantics and are not current performance evidence. See the [measurement methodology](docs/MEASUREMENT.md).
