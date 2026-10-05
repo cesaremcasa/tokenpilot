@@ -290,7 +290,7 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const treatmentRecordedTokens = sum(treatmentTotals);
     const estimatedTokensAvoided = baselineExpectedTreatmentTokens - treatmentRecordedTokens;
     const tokenReductionPercent = baselineMedianTotal === 0 ? 0 : ((baselineMedianTotal - treatmentMedianTotal) / baselineMedianTotal) * 100;
-    const isCacheShift = cacheShift(baseline, treatment, baselineMedianTotal, treatmentMedianTotal);
+    const isCacheShift = tokenReductionPercent >= 0 && cacheShift(baseline, treatment, baselineMedianTotal, treatmentMedianTotal);
     const quality = qualityAssessment(baseline, treatment);
     const classifiedWork = taskKind !== "unknown" && taskKind !== "benchmark";
     const readiness = classifiedWork && baseline.length >= MIN_VALIDATED_SESSIONS_PER_ARM && treatment.length >= MIN_VALIDATED_SESSIONS_PER_ARM ? "ready" as const : "preliminary" as const;
@@ -507,6 +507,7 @@ const SCOREBOARD_MISSING = "sem comparação cache-aware medida";
 
 function scoreboardPercent(value: number): string {
   const rounded = Math.round(Math.abs(value) * 10) / 10;
+  if (rounded === 0 && value !== 0) return value < 0 ? "<0,1% a mais" : "<0,1% a menos";
   const text = Number.isInteger(rounded) ? `${rounded.toFixed(0)}` : `${rounded.toFixed(1).replace(".", ",")}`;
   return value < 0 ? `${text}% a mais` : `${text}% a menos`;
 }
