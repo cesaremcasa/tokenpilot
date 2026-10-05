@@ -13,12 +13,8 @@ export function appliesReductionPolicy(mode: RunMode): boolean {
  */
 export const TOKEN_EFFICIENCY_INSTRUCTION = "Minimize token use without reducing correctness. Inspect narrowly, batch independent reads, avoid rereading unchanged data or repeating context, keep intermediate explanations concise, and stop after the requested result is verified. Do not skip necessary validation or change requested scope.";
 
-/**
- * Codex v3 preserves the complete native capability surface. Its measured gain
- * comes from bounding repeated model/tool turns: locate evidence in a batch,
- * inspect only relevant ranges, verify exact values once, then stop.
- */
-export const CODEX_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve every available capability. Minimize total tokens without reducing correctness. For read-only repository work, use at most three batched shell calls: locate evidence, inspect only required ranges, then verify every exact value and citation with nl -ba. Never cite a line not present in numbered output. Answer immediately after verification. For edits, batch inspection, perform the edit, run one sufficient verification, then stop. Do not narrate routine steps, reread unchanged data, repeat context, or add unrequested work.";
+/** Codex keeps its native context-compaction defaults and full capability surface. */
+export const CODEX_TOKEN_EFFICIENCY_INSTRUCTION = `Preserve every available capability. ${TOKEN_EFFICIENCY_INSTRUCTION}`;
 
 /**
  * Claude's latency policy is deliberately shorter than the cross-provider
@@ -305,13 +301,11 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string): O
         "--config", "model_reasoning_effort=\"low\"",
         "--config", "model_reasoning_summary=\"none\"",
         "--config", "model_verbosity=\"low\"",
-        "--config", "model_auto_compact_token_limit=32000",
-        "--config", "model_auto_compact_token_limit_scope=\"body_after_prefix\"",
         "--config", `developer_instructions=${JSON.stringify(CODEX_TOKEN_EFFICIENCY_INSTRUCTION)}`
       ],
       applied: true,
-      profile: "codex-balanced-v3",
-      summary: "all capabilities preserved, low reasoning, low verbosity, 32k compaction, bounded batched execution"
+      profile: "codex-balanced-v4",
+      summary: "all capabilities preserved, low reasoning, low verbosity, concise verified execution"
     };
   }
 

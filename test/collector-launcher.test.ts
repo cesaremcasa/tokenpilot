@@ -151,7 +151,7 @@ exit 0
       provider: "codex",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v3",
+      optimizationProfile: "codex-balanced-v4",
       collectionState: "unavailable"
     });
     database.close();
@@ -184,7 +184,7 @@ exit 0
     expect(await withProviderPath(originalBin, () => runProvider("codex", explicit, paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
     const run = database.recentRunsSince(new Date(0).toISOString())[0];
-    expect(run).toMatchObject({ mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v3" });
+    expect(run).toMatchObject({ mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v4" });
     expect(run?.optimizationProfile).toBeNull();
     database.close();
     const observed = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
@@ -405,7 +405,7 @@ exit 0
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v3",
+      optimizationProfile: "codex-balanced-v4",
       collectionState: "collected"
     });
     const summary = database.sessionSummariesSince(new Date(0).toISOString())[0];

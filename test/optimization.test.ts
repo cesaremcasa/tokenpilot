@@ -38,13 +38,14 @@ describe("version-gated balanced optimization", () => {
 
   it("preserves every Codex capability while bounding repeated execution", () => {
     const plan = planFromHelp("codex", "balanced", "-c, --config <key=value> --profile <profile>");
-    expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v3" });
+    expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v4" });
     expect(plan.args.join(" ")).toContain("model_reasoning_effort");
     expect(plan.args.join(" ")).toContain("model_reasoning_effort=\"low\"");
     expect(plan.args.join(" ")).toContain("model_reasoning_summary=\"none\"");
-    expect(plan.args.join(" ")).toContain("model_auto_compact_token_limit=32000");
-    expect(plan.args.join(" ")).toContain("model_auto_compact_token_limit_scope=\"body_after_prefix\"");
     expect(plan.args.join(" ")).toContain(CODEX_TOKEN_EFFICIENCY_INSTRUCTION);
+    expect(plan.args.join(" ")).not.toContain("model_auto_compact_token_limit");
+    expect(CODEX_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("at most three");
+    expect(CODEX_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("nl -ba");
     for (const forbidden of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false"]) {
       expect(plan.args.join(" ")).not.toContain(forbidden);
     }
