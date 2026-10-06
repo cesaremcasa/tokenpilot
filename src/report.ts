@@ -12,6 +12,7 @@ export interface Report {
   coverage: MeasurementCoverage[];
   comparisons: TreatmentComparison[];
   sessions?: AuditableSession[];
+  sessionUsage?: SessionSummary[];
 }
 
 /**
@@ -26,7 +27,8 @@ export function filterReportByProvider(report: Report, provider: Provider): Repo
     rows: report.rows.filter((row) => row.provider === provider),
     coverage: coverage.length > 0 ? coverage : [{ provider, sessions: 0, measuredSessions: 0, unavailableSessions: 0 }],
     comparisons: report.comparisons.filter((comparison) => comparison.provider === provider),
-    sessions: report.sessions?.filter((session) => session.provider === provider)
+    sessions: report.sessions?.filter((session) => session.provider === provider),
+    sessionUsage: report.sessionUsage?.filter((session) => session.provider === provider)
   };
 }
 
@@ -70,7 +72,8 @@ function buildReportSince(paths: TokenPilotPaths, since: string): Report {
       rows: database.aggregateSince(since),
       coverage: database.measurementCoverageSince(since),
       comparisons,
-      sessions
+      sessions,
+      sessionUsage: summaries
     };
   } finally {
     database.close();
@@ -83,7 +86,7 @@ export function buildReport(paths: TokenPilotPaths, days: number): Report {
   return buildReportSince(paths, new Date(Date.now() - days * 24 * 60 * 60 * 1_000).toISOString());
 }
 
-/** Skill summaries use the latest comparable measurement, regardless of rolling-window boundaries. */
+/** Full history for exact inherited-run lookup and technical experiment inspection. */
 export function buildLatestSummaryReport(paths: TokenPilotPaths): Report {
   return buildReportSince(paths, ALL_RECORDED_DATA_SINCE);
 }
@@ -551,10 +554,56 @@ function summaryProviders(report: Report): Provider[] {
  * cache-aware variation and its evidence state. Providers stay separate.
  * Rolling-window totals, USD, latency, and policy jargon stay out.
  */
-export function reportSummaryMarkdown(report: Report): string {
+export function reportComparisonSummaryMarkdown(report: Report): string {
   const providers = summaryProviders(report);
   if (providers.length === 0) return scoreboardBlock(undefined, report);
   return providers.map((provider) => scoreboardBlock(provider, report)).join("\n");
+}
+
+function cachePercent(session: SessionSummary): number | undefined {
+  if (session.provider === "kimi") return undefined;
+  const valid = (value: number | undefined): value is number => value !== undefined && Number.isSafeInteger(value) && value >= 0;
+  if (session.usageSourceCount !== 1 || !session.cacheReadComplete || !valid(session.inputCached)) return undefined;
+  const nativeCodexInput = session.provider === "codex" && (
+    session.usageSource === "codex-otlp-metrics-v2" || session.usageSource === "codex-exec-json-usage-v1"
+  );
+  let input: number | undefined;
+  if (session.inputNewComplete && valid(session.inputNew) && (nativeCodexInput || (session.cacheCreatedComplete && valid(session.cacheCreated)))) {
+    input = session.inputNew + session.inputCached + (nativeCodexInput ? 0 : session.cacheCreated!);
+  }
+  if ((session.provider === "codex" || session.provider === "grok") && session.reportedInputComplete && session.reportedTotalIncludesCachedInput
+    && valid(session.reportedTotal) && valid(session.output)) {
+    const verifiedInput = session.reportedTotal - session.output;
+    if (input !== undefined && input !== verifiedInput) return undefined;
+    input = verifiedInput;
+  }
+  if (input === undefined || !Number.isSafeInteger(input) || input <= 0 || session.inputCached > input) return undefined;
+  return session.inputCached / input * 100;
+}
+
+/** Session-only view; experiment history never substitutes for missing telemetry. */
+export function reportSummaryMarkdown(report: Report, currentRunId?: string): string {
+  const providers = summaryProviders(report);
+  const percent = (value: number) => `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value)}%`;
+  return (providers.length ? providers : [undefined]).map((provider) => {
+    const sessions = (report.sessions ?? []).filter((session) => session.provider === provider);
+    const selected = currentRunId
+      ? sessions.find((session) => session.id === currentRunId)
+      : [...sessions].sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id)).at(-1);
+    const usage = selected && report.sessionUsage?.find((session) => session.id === selected.id && session.provider === provider);
+    const value = usage && cachePercent(usage);
+    const lines = [provider ? `TokenPilot · ${providerName(provider)}` : "TokenPilot", ""];
+    if (selected) lines.push(`Sessão: ${selected.id} · ${selected.startedAt}`);
+    if (value === undefined) {
+      lines.push(provider === "kimi"
+        ? "percentual indisponível — Kimi sem coleta numérica de cache suportada"
+        : "percentual indisponível — sessão sem métricas de cache verificadas");
+    } else {
+      const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
+      lines.push(`cache reutilizado: ${percent(rounded)} · entrada sem cache: ${percent(100 - rounded)}`);
+    }
+    return [...lines, ""].join("\n");
+  }).join("\n");
 }
 
 /** Detailed audit view. All session identifiers are opaque local UUIDs. */
@@ -628,5 +677,5 @@ export function reportDiagnosticsMarkdown(report: Report): string {
 export function renderReportMarkdown(report: Report, view: ReportView): string {
   if (view === "summary") return reportSummaryMarkdown(report);
   if (view === "diagnostics") return reportDiagnosticsMarkdown(report);
-  return reportMarkdown(report);
+  return reportSummaryMarkdown(report);
 }

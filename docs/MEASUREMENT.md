@@ -97,7 +97,7 @@ All currency output is labeled **API-equivalent USD, not a provider bill**. Subs
 
 `tokenpilot sessions` and the detailed report expose opaque run IDs, timestamps, provider, mode, policy, task category/outcome, measurement state, total basis, price snapshot, and closed unavailability reason. They do not expose content or provider account identity.
 
-The concise report searches local history for the most recent comparable provider-local result so a quiet rolling window does not erase the last measurement. It prints the measured variation plus `preliminar` or `qualidade observada degradada`, reserves `redução cache-aware validada` for formal evidence, labels cache shifts without a percentage, and leaves limited or incomparable evidence without a numeric claim. Use:
+The concise report selects the inherited current run, or the latest session in the requested window. It reports cache-hit input divided by verified total input, plus the complementary uncached percentage. Output is excluded and cache writes are not cache hits. Missing or conflicting telemetry produces no percentage; historical A/B results never replace it. Counters and experiment history remain available in technical JSON. Use:
 
 ```sh
 tokenpilot report

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
-import { buildLatestSummaryReport, buildReport, filterReportByProvider, reportDiagnosticsMarkdown, reportMarkdown, reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
+import { buildLatestSummaryReport, buildReport, filterReportByProvider, reportDiagnosticsMarkdown, reportMarkdown, reportComparisonSummaryMarkdown as reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
 import type { PricingProfile, SessionSummary } from "../src/types.js";
 import { renderSessions } from "../src/sessions.js";
 import { cleanup, temporaryPaths } from "./helpers.js";

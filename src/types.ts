@@ -147,6 +147,12 @@ export interface MeasurementCoverage {
 
 export interface SessionSummary {
   id: string;
+  usageSourceCount?: number;
+  usageSource?: string;
+  cacheReadComplete?: boolean;
+  inputNewComplete?: boolean;
+  cacheCreatedComplete?: boolean;
+  reportedInputComplete?: boolean;
   /** Content-free ordering key used to select the latest measured comparison. */
   startedAt?: string;
   provider: Provider;

@@ -2,6 +2,11 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.5.2 — 2026-10-06
+
+- Report verified cache reuse and uncached-input percentages for the current or latest recent session; exclude output and reject missing or mixed telemetry.
+- Correlate provider skills with an opaque per-run context; retain historical experiments without using them as session percentages.
+
 ## Unreleased
 
 - Reject increased complete token use, including small increases previously hidden by cache-shift tolerance or rounding.

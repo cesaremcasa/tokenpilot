@@ -89,7 +89,7 @@ export function providerEnvironment(
   nodeExecutable = process.execPath
 ): NodeJS.ProcessEnv {
   const environment = Object.fromEntries(Object.entries(process.env)
-    .filter(([name]) => name !== "PATH" && name !== "NODE_NO_WARNINGS" && !name.startsWith("TOKENPILOT_")));
+    .filter(([name]) => name !== "PATH" && name !== "NODE_NO_WARNINGS" && name !== "TP_RUN_CONTEXT_ID" && !name.startsWith("TOKENPILOT_")));
   const directories: string[] = [];
   for (const executable of [originalBinary, nodeExecutable]) {
     if (!executable || !trustedExecutable(executable)) continue;
@@ -369,6 +369,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
 
   try {
     const observer = codexJsonMetrics ?? codexExecMetrics ?? grokMetrics;
+    if (database && runId) launchEnvironment = { ...launchEnvironment, TP_RUN_CONTEXT_ID: runId };
     const code = await launchChild(binary, launchArgs, launchEnvironment, observer ? {
       consume: (chunk, stream) => {
         if (codexJsonMetrics && stream === "stderr") return;

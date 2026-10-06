@@ -8,7 +8,7 @@
 
 **Local-first token measurement and optimization for AI coding CLIs — without proxying traffic or storing prompts.**
 
-TokenPilot 0.5.1 is a public beta for the terminal versions of Claude Code, OpenAI Codex, Grok Build, and Kimi Code CLI. It measures provider-published numeric usage, applies version-gated efficiency treatments where supported, and reports cache-aware comparisons without storing credentials, prompts, responses, source code, or tool output. Supported live numeric streams are parsed transiently; provider histories and credential stores are not scanned.
+TokenPilot 0.5.2 is a public beta for the terminal versions of Claude Code, OpenAI Codex, Grok Build, and Kimi Code CLI. It measures provider-published numeric usage, applies version-gated efficiency treatments where supported, and reports per-session cache percentages without storing credentials, prompts, responses, source code, or tool output. Supported live numeric streams are parsed transiently; provider histories and credential stores are not scanned.
 
 TokenPilot is created by **Cesar Augusto / Mycellium Lab**, released under the [MIT License](LICENSE), and is not affiliated with Anthropic, OpenAI, xAI, or Moonshot AI.
 
@@ -27,7 +27,7 @@ Open a new terminal before starting a provider session so the TokenPilot shims a
 ```sh
 codex --model gpt-5.5
 
-# Latest provider-local cache-aware result and evidence state.
+# Verified cache percentages for this session, or the latest recent session.
 tokenpilot report --provider codex
 
 # Original provider CLI, with no TokenPilot treatment or measurement.
@@ -71,17 +71,13 @@ Current measurements must come from real provider sessions with a known total ba
 
 The [August 2026 research snapshot](docs/RESULTS.md) is retained as historical documentation. Its aggregate figures have not been revalidated under the current Codex/Grok counter semantics and are not current performance evidence. See the [measurement methodology](docs/MEASUREMENT.md).
 
-## Evidence states
+## Session cache percentages
 
-The concise report returns the most recent comparable provider-local result and preserves its evidence state:
+The CLI and provider skills show `cache reutilizado: X% · entrada sem cache: Y%`, with the session ID and date. Output is excluded; cache creation is not a cache hit. Numeric counters stay internal rather than appearing in the concise display.
 
-- `variação cache-aware medida — X% a menos` retains its preliminary or degraded-quality qualification;
-- `política de redução reprovada — X% a mais` for increased consumption;
-- `redução cache-aware validada — X% a menos` only with formal quality-equivalence evidence;
-- `cache-shift — sem redução comprovada` when the complete total stayed effectively flat; and
-- `sem comparação cache-aware medida` for limited or incomparable evidence.
+Inside a wrapped agent, the opaque run context selects that exact session. Outside it, the latest session in the requested window is selected (seven days by default). Missing telemetry never falls back to an older session or an experiment result: it reports `percentual indisponível`.
 
-Providers are never combined. Raw totals, latency, USD, and policy details remain in the detailed audit view rather than the skill-facing summary.
+Cache reuse is not evidence that TokenPilot caused a reduction. Historical A/B comparisons remain in the technical JSON data. Kimi stays unavailable until a supported correlated numeric channel exists.
 
 ## Privacy and fail-open behavior
 
@@ -162,7 +158,7 @@ Focused, privacy-preserving contributions are welcome. Open an issue before addi
 
 ## Public beta status
 
-TokenPilot 0.5.1 is active research software. Provider CLIs and telemetry surfaces can change, and unsupported or uncorrelated sessions are reported as unavailable rather than estimated. Use the bypass controls whenever a task requires untouched native behavior.
+TokenPilot 0.5.2 is active research software. Provider CLIs and telemetry surfaces can change, and unsupported or uncorrelated sessions are reported as unavailable rather than estimated. Use the bypass controls whenever a task requires untouched native behavior.
 
 ## License
 
