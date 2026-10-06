@@ -75,6 +75,8 @@ The [August 2026 research snapshot](docs/RESULTS.md) is retained as historical d
 
 The [October 6 real-run results](docs/REAL_RESULTS_2026-10-06.md) report verified total-input-plus-output reductions for nine tested OpenAI models. Six reached 42%; three did not. These are controlled-task observations, not session cache percentages or a universal guarantee.
 
+The [October 6 Grok Build results](docs/GROK_RESULTS_2026-10-06.md) record real reductions across all four available models, with equivalent validated results. These CLI measurements do not establish savings for the parent Grok Bot.
+
 ## Session cache percentages
 
 The CLI and provider skills show `Approximate reduction in uncached input: X% (cache reuse) · Uncached input: Y%`, with the session ID and date. Output is excluded; cache creation is not a cache hit. Numeric counters stay internal rather than appearing in the concise display.
