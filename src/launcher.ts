@@ -369,6 +369,7 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
 
   try {
     const observer = codexJsonMetrics ?? codexExecMetrics ?? grokMetrics;
+    if (database && runId) launchEnvironment = { ...launchEnvironment, TOKENPILOT_RUN_ID: runId };
     const code = await launchChild(binary, launchArgs, launchEnvironment, observer ? {
       consume: (chunk, stream) => {
         if (codexJsonMetrics && stream === "stderr") return;

@@ -6,7 +6,7 @@ import { TelemetryDatabase } from "../src/database.js";
 import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
 import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
-import { buildReport, reportMarkdown } from "../src/report.js";
+import { buildReport, reportMarkdown, reportSummaryMarkdown } from "../src/report.js";
 import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
 describe("local launcher and collector", () => {
@@ -458,12 +458,14 @@ exit 0
   it("collects only verified usage from Codex exec JSONL mode", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "codex-json-arguments");
+    const observedRun = path.join(paths.userHome, "codex-json-run");
     const originalBin = writeFakeCodex(paths, `#!/bin/sh
 case " $* " in
   *" --version "*) echo 'codex 0.155.1'; exit 0 ;;
   *" --help "*) echo '-c, --config <key=value> --json --model <model>'; exit 0 ;;
 esac
 printf '%s\\n' "$@" > '${observedArguments}'
+printf '%s\\n' "$TOKENPILOT_RUN_ID" > '${observedRun}'
 printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"private task result"}}'
 printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":15,"cache_write_input_tokens":3,"reasoning_output_tokens":10}}'
 exit 0
@@ -482,6 +484,9 @@ exit 0
       collectionState: "collected"
     });
     const summary = database.sessionSummariesSince(new Date(0).toISOString())[0];
+    const inheritedRun = fs.readFileSync(observedRun, "utf8").trim();
+    expect(inheritedRun).toBe(summary.id);
+    expect(reportSummaryMarkdown(buildReport(paths, 7), inheritedRun)).toContain("cache reutilizado: 40%");
     expect(summary).toMatchObject({
       inputNew: 60,
       inputCached: 40,

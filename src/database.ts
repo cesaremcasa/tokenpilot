@@ -385,7 +385,12 @@ export class TelemetryDatabase {
     const reportedTotalSemantics = this.hasReportedTotalSemanticsColumn ? "u.reported_total_includes_cached_input" : "0";
     return (this.db.prepare(`
       WITH usage AS (
-        SELECT run_id, SUM(${NORMALIZED_INPUT_NEW_SQL}) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
+        SELECT run_id, COUNT(DISTINCT source) AS usageSourceCount, MIN(source) AS usageSource,
+          MIN(CASE WHEN input_cached IS NOT NULL THEN 1 ELSE 0 END) AS cacheReadComplete,
+          MIN(CASE WHEN input_new IS NOT NULL THEN 1 ELSE 0 END) AS inputNewComplete,
+          MIN(CASE WHEN cache_created IS NOT NULL THEN 1 ELSE 0 END) AS cacheCreatedComplete,
+          ${this.hasReportedTotalColumn && this.hasReportedTotalSemanticsColumn ? "MIN(CASE WHEN reported_total IS NOT NULL AND output IS NOT NULL AND (reported_total_includes_cached_input = 1 OR source = 'grok-cli-json-usage-v1') THEN 1 ELSE 0 END)" : "0"} AS reportedInputComplete,
+          SUM(${NORMALIZED_INPUT_NEW_SQL}) AS input_new, SUM(COALESCE(input_cached, 0)) AS input_cached,
           SUM(COALESCE(cache_created, 0)) AS cache_created, SUM(COALESCE(output, 0)) AS output,
           SUM(COALESCE(reasoning, 0)) AS reasoning,
           MAX(CASE WHEN input_new IS NOT NULL OR input_cached IS NOT NULL OR cache_created IS NOT NULL OR output IS NOT NULL OR reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_detailed_usage,
@@ -401,7 +406,9 @@ export class TelemetryDatabase {
           SUM(CASE WHEN type = 'retry' THEN count ELSE 0 END) AS retries
         FROM session_events GROUP BY run_id
       )
-      SELECT r.id, r.started_at AS startedAt, r.provider, r.mode, r.optimization_applied AS optimizationApplied,
+      SELECT r.id, r.started_at AS startedAt, u.usageSourceCount, u.usageSource,
+        u.cacheReadComplete, u.inputNewComplete, u.cacheCreatedComplete, u.reportedInputComplete,
+        r.provider, r.mode, r.optimization_applied AS optimizationApplied,
         r.optimization_profile AS optimizationProfile, ${this.hasComparisonProfileColumn ? "r.comparison_profile" : "NULL"} AS comparisonProfile,
         ${this.hasPricingProfileColumn ? "r.pricing_profile" : "NULL"} AS pricingProfile, r.task_kind AS taskKind, r.outcome,
         MAX(0, strftime('%s', COALESCE(r.ended_at, datetime('now'))) - strftime('%s', r.started_at)) AS durationSeconds,
@@ -433,6 +440,10 @@ export class TelemetryDatabase {
         || pricingProfile?.rates.reasoningUsdPerMillion === undefined || row.hasReasoning === 1;
       return {
         ...row,
+        cacheReadComplete: Boolean(row.cacheReadComplete),
+        inputNewComplete: Boolean(row.inputNewComplete),
+        cacheCreatedComplete: Boolean(row.cacheCreatedComplete),
+        reportedInputComplete: Boolean(row.reportedInputComplete),
         inputNew: row.hasInputNew === 1 ? row.inputNew : undefined,
         inputCached: row.hasInputCached === 1 ? row.inputCached : undefined,
         cacheCreated: row.hasCacheCreated === 1 ? row.cacheCreated : undefined,

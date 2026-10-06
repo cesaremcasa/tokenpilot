@@ -1,9 +1,7 @@
-# TokenPilot evidence-reporting invariant
+# TokenPilot session evidence invariant
 
-- Treat the latest locally measured, within-provider, cache-aware comparison and its evidence state as the primary skill result.
-- Call a directional percentage a measured cache-aware variation. Reserve validated reduction language for formal quality-equivalence evidence.
-- Never replace the live result with rolling-window emptiness, raw token-use totals, USD, latency, policy jargon, or a documentation snapshot.
-- When a short window has no comparable cohort, use the most recent comparable measured cohort in local history and preserve its preliminary, degraded, validated, or cache-shift state.
-- Count cached input in the complete comparison total. A flat cache-aware total is `0% a menos`; an increase is reported truthfully as `% a mais` and fails reduction acceptance. Investigate and retest it; never discard it or repeat runs until only favorable results remain.
-- Keep Codex, Claude, and Grok results separate and enforce the same summary contract in every provider skill and its installer tests.
-- Codex reduction policies must preserve agents, memories, web, apps, and the complete tool surface; improve token use through bounded execution, not capability removal.
+- Default CLI and skills show the current session's verified cache reuse and uncached input percentages, never raw token totals.
+- Inside a wrapped agent use its opaque run ID; outside use the latest session in the requested window. Never replace missing data with an older measurement.
+- Cached input divided by verified total input defines reuse; exclude output and do not count cache creation as a cache hit. Reject missing, inconsistent or mixed-source metrics.
+- Cache reuse is distinct from A/B reduction. Preserve historical experiment data and rejected increases; do not present them as current-session cache percentages.
+- Keep providers separate and make CLI/skills identical. Preserve native tools, memory, agents, web and apps; use focused validation, never repeated audits.

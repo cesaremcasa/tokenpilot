@@ -271,13 +271,12 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     }
     if (format !== "md" && format !== "json") throw new Error("--format must be md or json");
     if (view === "summary") {
-      // The provider skill exists to show the latest comparable cache-aware
-      // comparison. A quiet rolling window must never erase the last measured
-      // variation or its evidence state, or replace it with a raw token total.
-      const completeSummary = buildLatestSummaryReport(paths);
+      const currentRunId = process.env.TOKENPILOT_RUN_ID;
+      const days = daysArgument(args);
+      const completeSummary = currentRunId ? buildLatestSummaryReport(paths) : buildReport(paths, days);
       const report = requestedProvider === undefined ? completeSummary : filterReportByProvider(completeSummary, requestedProvider);
       if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-      else process.stdout.write(reportSummaryMarkdown(report));
+      else process.stdout.write(reportSummaryMarkdown(report, currentRunId));
       return 0;
     }
     const completeReport = buildReport(paths, daysArgument(args));
