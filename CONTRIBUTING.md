@@ -23,7 +23,7 @@ npm run test:install
 npm run test:release
 ```
 
-Node.js 22.5 or newer is required. Tests must use synthetic, content-free fixtures.
+Node.js 22.13.0 or 23.4.0 and newer is required. Tests must use synthetic, content-free fixtures.
 
 ## Pull requests
 

@@ -12,6 +12,10 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 - Preserve absent Grok usage counters as unavailable so partial exports cannot become zero-filled complete comparisons.
 - Keep Codex treatment enabled for documented valueless flags such as `--ephemeral` and `--skip-git-repo-check` in either order.
 
+## 0.5.1 — 2026-10-05
+
+- Require Node.js 22.13.0 or 23.4.0 and newer, where `node:sqlite` is available without a runtime flag.
+
 ## 0.5.0 — 2026-08-21
 
 - Launch the first public npm beta as `@cesaremcasa/tokenpilot`, with a three-command install path and explicit Cesar Augusto / Mycellium Lab authorship.

@@ -46,12 +46,12 @@ load_node() {
 
 node_supported() {
   command -v node >/dev/null 2>&1 || return 1
-  node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 5)) process.exit(1)'
+  node -e 'const [major, minor] = process.versions.node.split(".").map(Number); const supported = (major === 22 && minor >= 13) || (major === 23 && minor >= 4) || major > 23; if (!supported) process.exit(1)'
 }
 
 load_node
 if ! node_supported; then
-  echo "TokenPilot update: Node.js 22.5 or newer is required (found $(command -v node >/dev/null && node --version || echo none))." >&2
+  echo "TokenPilot update: Node.js 22.13.0 or 23.4.0 and later is required (found $(command -v node >/dev/null && node --version || echo none))." >&2
   exit 1
 fi
 

@@ -3,12 +3,12 @@
 [![CI](https://github.com/cesaremcasa/tokenpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/cesaremcasa/tokenpilot/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/%40cesaremcasa%2Ftokenpilot.svg)](https://www.npmjs.com/package/@cesaremcasa/tokenpilot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js 22.5+](https://img.shields.io/badge/Node.js-22.5%2B-339933.svg)](https://nodejs.org/)
+[![Node.js 22.13+ or 23.4+](https://img.shields.io/badge/Node.js-22.13%2B_or_23.4%2B-339933.svg)](https://nodejs.org/)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](docs/INSTALLATION.md)
 
 **Local-first token measurement and optimization for AI coding CLIs — without proxying traffic or storing prompts.**
 
-TokenPilot 0.5.0 is a public beta for the terminal versions of Claude Code, OpenAI Codex, Grok Build, and Kimi Code CLI. It measures provider-published numeric usage, applies version-gated efficiency treatments where supported, and reports cache-aware comparisons without storing credentials, prompts, responses, source code, or tool output. Supported live numeric streams are parsed transiently; provider histories and credential stores are not scanned.
+TokenPilot 0.5.1 is a public beta for the terminal versions of Claude Code, OpenAI Codex, Grok Build, and Kimi Code CLI. It measures provider-published numeric usage, applies version-gated efficiency treatments where supported, and reports cache-aware comparisons without storing credentials, prompts, responses, source code, or tool output. Supported live numeric streams are parsed transiently; provider histories and credential stores are not scanned.
 
 TokenPilot is created by **Cesar Augusto / Mycellium Lab**, released under the [MIT License](LICENSE), and is not affiliated with Anthropic, OpenAI, xAI, or Moonshot AI.
 
@@ -55,8 +55,8 @@ New installations default to `reduce`. Claude, Codex, and Grok receive a version
 
 | Platform | Status |
 | --- | --- |
-| macOS + Node.js 22.5 or newer | Supported and tested in CI |
-| Linux + Node.js 22.5 or newer | Supported and tested in CI |
+| macOS + Node.js 22.13.0 or 23.4.0+ | Supported and tested in CI |
+| Linux + Node.js 22.13.0 or 23.4.0+ | Supported and tested in CI |
 | Windows native / PowerShell | Not released |
 
 A missing provider never disables the others. `tokenpilot doctor` separates launcher readiness from measurement availability. See the [provider and platform matrix](docs/PROVIDERS.md) for modality and version details.
@@ -139,8 +139,8 @@ GitHub release artifacts are generated twice from the committed lockfile and mus
 npm ci --ignore-scripts
 npm run build
 npm run release:artifact -- --output release-artifacts
-shasum -a 256 -c release-artifacts/cesaremcasa-tokenpilot-0.5.0.tgz.sha256
-cat release-artifacts/cesaremcasa-tokenpilot-0.5.0.cdx.json
+shasum -a 256 -c release-artifacts/cesaremcasa-tokenpilot-0.5.1.tgz.sha256
+cat release-artifacts/cesaremcasa-tokenpilot-0.5.1.cdx.json
 ```
 
 The release smoke installs that exact tarball into a temporary npm consumer, executes the staged runtime after removing the consumer package, and uninstalls the temporary launchers.
@@ -162,7 +162,7 @@ Focused, privacy-preserving contributions are welcome. Open an issue before addi
 
 ## Public beta status
 
-TokenPilot 0.5.0 is active research software. Provider CLIs and telemetry surfaces can change, and unsupported or uncorrelated sessions are reported as unavailable rather than estimated. Use the bypass controls whenever a task requires untouched native behavior.
+TokenPilot 0.5.1 is active research software. Provider CLIs and telemetry surfaces can change, and unsupported or uncorrelated sessions are reported as unavailable rather than estimated. Use the bypass controls whenever a task requires untouched native behavior.
 
 ## License
 

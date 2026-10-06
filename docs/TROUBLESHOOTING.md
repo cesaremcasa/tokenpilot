@@ -38,7 +38,7 @@ TokenPilot does not share logins or credentials between machines.
 
 ## Wrong Node.js in SSH or automation
 
-TokenPilot requires Node.js 22.5+. A non-login SSH shell may resolve a system Node.js older than the version used in the terminal.
+TokenPilot requires Node.js 22.13.0 or 23.4.0 and newer. A non-login SSH shell may resolve a system Node.js older than the version used in the terminal.
 
 ```sh
 bash -ilc 'node --version; tokenpilot --version; tokenpilot doctor'

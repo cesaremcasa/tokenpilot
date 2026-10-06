@@ -17,12 +17,15 @@ describe("installation and fail-open launcher lookup", () => {
     expect(launchAgentServiceTarget("gui/501")).toBe("gui/501/com.tokenpilot.agent");
   });
 
-  it("supports only macOS/Linux with Node 22.5 or newer before any install write", () => {
-    expect(runtimeSupport("darwin", "22.5.0").supported).toBe(true);
-    expect(runtimeSupport("linux", "23.0.0").supported).toBe(true);
+  it("requires a Node release with built-in SQLite before any install write", () => {
+    for (const version of ["22.5.0", "22.12.0", "23.0.0", "23.3.0"]) {
+      expect(runtimeSupport("linux", version), version).toMatchObject({ supported: false, reason: expect.stringContaining("22.13.0") });
+    }
+    for (const version of ["22.13.0", "23.4.0", "24.0.0", "25.0.0"]) {
+      expect(runtimeSupport("darwin", version).supported, version).toBe(true);
+    }
     expect(runtimeSupport("win32", "23.0.0")).toMatchObject({ supported: false, reason: expect.stringContaining("macOS and Linux") });
-    expect(runtimeSupport("linux", "22.4.9")).toMatchObject({ supported: false, reason: expect.stringContaining("22.5") });
-    expect(() => assertRuntimeSupported("linux", "22.4.9")).toThrow("Node 22.4.9 is unsupported");
+    expect(() => assertRuntimeSupported("linux", "22.12.0")).toThrow("Node 22.12.0 is unsupported");
   });
 
   it("keeps install and uninstall dry runs read-only", () => {
