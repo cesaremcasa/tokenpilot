@@ -17,8 +17,8 @@ TokenPilot preserves the model selected by the user. It does not maintain a priv
 | Provider | Correlated measurement | Current treatment | Known limitation |
 | --- | --- | --- | --- |
 | Claude Code | Metrics-only local OTLP for sessions that publish `claude_code.token.usage`. | `claude-balanced-v7`; v6 fallback on older compatible CLIs. | Provider quota can reject a model before a complete metric arrives. Full web/MCP/agent tool surfaces require `deep`, `off`, or bypass. |
-| OpenAI Codex | Metrics-only local OTLP, or numeric `turn.completed.usage` extraction when the user requests `exec --json`. Plain `exec` may expose only a total with unverified cache semantics. | v3 for other explicit models; v4 for `gpt-5.5`; v7 for Daybreak; v8 for `gpt-6-luna`. All native capabilities preserved. | An unambiguous native `--model`/`-m` selector is required; otherwise measurement only. Policy is selected at launch. A provider total and category counters are never mixed. |
-| Grok Build | External OTEL v1 for supported TTY/TUI and headless sessions; explicit JSON single-turn fallback. | `grok-balanced-v7`; low reasoning and concise appended rules. The native system prompt, tools, memory, web, subagents, and plan mode remain available. | Older or missing counters remain unavailable. API prompt-cache keys are never assumed for the CLI. |
+| OpenAI Codex | Metrics-only local OTLP, or numeric `turn.completed.usage` extraction when the user requests `exec --json`. Plain `exec` may expose only a total with unverified cache semantics. | v18 for supported catalogue models; v23 batched guidance for Astra/6.1 on older runtimes; v25 bounded namespaces and v26 GPT-5.5 Code Mode on verified Codex 0.160.1. Other explicit models retain v3. Native capabilities are preserved. | An unambiguous native `--model`/`-m` selector is required; otherwise measurement only. Policy is selected at launch. A provider total and category counters are never mixed. Legacy snapshots can omit remote-compaction usage; complete experimental measurements use native raw-response receipts. |
+| Grok Build | External OTEL v1 for supported TTY/TUI and headless sessions; explicit JSON single-turn fallback. | `grok-balanced-v8`; low reasoning, bounded inspection and grouped verification. The native system prompt, tools, memory, web, subagents, and plan mode remain available. | Older or missing counters remain unavailable. API prompt-cache keys are never assumed for the CLI. |
 | Kimi Code CLI | No correlated measurement channel is currently enabled. | No TokenPilot treatment is injected. | Kimi runs through its original CLI and remains envelope-only pending a content-free, child-authenticated channel. |
 
 ## Historical model/reasoning compatibility check
@@ -59,3 +59,5 @@ A version string alone is insufficient. Adapter support requires:
 - [OpenAI Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
 - [xAI Grok Build CLI reference](https://docs.x.ai/build/cli/reference)
 - [Kimi Code CLI command reference](https://moonshotai.github.io/kimi-cli/en/reference/kimi-command.html)
+
+Local shared skill invocation and Grok Bot cloud scope are documented in [SKILLS.md](SKILLS.md). Current task-specific measured reductions are recorded separately for [OpenAI](REAL_RESULTS_2026-10-06.md) and [Grok Build](GROK_RESULTS_2026-10-06.md).

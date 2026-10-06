@@ -2,6 +2,12 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.5.5 — 2026-10-06
+
+- Update provider skills with bounded-task execution and verified metrics routing.
+- Package a Grok Bot skill with explicit parent-Bot telemetry requirements.
+- Document invocation, measured reductions, CI validation and publication limits.
+
 ## 0.5.4 — 2026-10-06
 
 - Add Grok v8 bounded inspection and grouped verification while retaining all native capabilities.

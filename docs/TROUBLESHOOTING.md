@@ -61,6 +61,8 @@ Common reasons include:
 
 Never repair unavailable data by scraping provider history or estimating tokens.
 
+The following cohort labels apply to historical/detail comparisons. The default summary and provider skills show current-session cache percentages, not cohort reduction estimates.
+
 ## Report says cache-shift
 
 Cache-shift means new input moved toward cache reads while the complete cache-aware total stayed effectively flat. It is not a reduction. Use the detail view to inspect new, cached, created, pressure, and total separately.

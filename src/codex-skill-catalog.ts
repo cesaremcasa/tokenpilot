@@ -98,7 +98,7 @@ export async function readCodexSkillBudget(
     });
 
     try {
-      send({ id: 1, method: "initialize", params: { clientInfo: { name: "tokenpilot", version: "0.5.4" } } });
+      send({ id: 1, method: "initialize", params: { clientInfo: { name: "tokenpilot", version: "0.5.5" } } });
     } catch {
       finish();
     }

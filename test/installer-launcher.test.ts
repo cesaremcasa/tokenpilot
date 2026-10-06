@@ -64,7 +64,7 @@ describe("installation and fail-open launcher lookup", () => {
     expect(plan.skills.map((skill) => skill.provider)).toEqual(["codex", "claude", "grok", "kimi"]);
     for (const skill of plan.skills) {
       const contents = fs.readFileSync(skill.target, "utf8");
-      expect(contents).toContain(`tokenpilot-managed-skill:v7 ${skill.provider}`);
+      expect(contents).toContain(`tokenpilot-managed-skill:v8 ${skill.provider}`);
       expect(contents).toContain(`'${plan.command}' report --provider ${skill.provider} --view summary --format md`);
       expect(contents).toContain("The primary result is the current session's cache percentage and uncached input percentage");
       expect(contents).toContain("Never replace missing metrics with zero, older sessions");

@@ -1,5 +1,7 @@
 # Reduction retest — October 5, 2026
 
+Historical ledger: these policies and legacy Codex snapshots are superseded. They are not current full-usage proof because cumulative accounting and remote-compaction coverage were corrected later. Current source-qualified results: [OpenAI](REAL_RESULTS_2026-10-06.md) and [Grok Build](GROK_RESULTS_2026-10-06.md).
+
 An increase rejects the treatment. The earlier GPT-5.5 increase and the rejected broad v4/v5/v6/v7 trials remain recorded; none were removed to improve the outcome.
 
 | Model | Policy | Valid pairs | Observed lower use |
