@@ -118,7 +118,7 @@ export function doctor(paths: TokenPilotPaths, options: { platform?: string; nod
   const support = runtimeSupport(platform, options.nodeVersion ?? process.versions.node);
   checks.push(support.supported
     ? { name: "Platform and Node", status: "ready", detail: `${platform === "darwin" ? "macOS" : platform === "linux" ? "Linux" : platform} with Node ${options.nodeVersion ?? process.versions.node}` }
-    : { name: "Platform and Node", status: "unavailable", detail: support.reason ?? "unsupported runtime", fix: "Use macOS or Linux with Node 22.5 or later." });
+    : { name: "Platform and Node", status: "unavailable", detail: support.reason ?? "unsupported runtime", fix: "Use macOS or Linux with Node 22.13.0 or 23.4.0 and later." });
 
   const shell = path.basename(process.env.SHELL ?? "");
   checks.push(["zsh", "bash"].includes(shell)

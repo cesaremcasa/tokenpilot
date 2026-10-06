@@ -1,6 +1,6 @@
 # Installation and lifecycle
 
-TokenPilot 0.5.0 public beta supports macOS and Linux with Node.js 22.5 or newer. Node 22 is the clean-machine acceptance runtime. TokenPilot runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
+TokenPilot 0.5.1 public beta supports macOS and Linux with Node.js 22.13.0 or 23.4.0 and newer. Node 22.13.0 is the minimum clean-machine acceptance runtime. TokenPilot runs entirely as the current user and does not install provider CLIs, copy provider credentials, or require root.
 
 If you opened this repository to use Grok: install **Grok Build** first. TokenPilot only wraps it.
 
@@ -63,7 +63,7 @@ For a reviewed tarball rather than a checkout, generate and verify the release a
 npm ci --ignore-scripts
 npm run build
 npm run release:artifact -- --output release-artifacts
-shasum -a 256 -c release-artifacts/cesaremcasa-tokenpilot-0.5.0.tgz.sha256
+shasum -a 256 -c release-artifacts/cesaremcasa-tokenpilot-0.5.1.tgz.sha256
 ```
 
 The generated CycloneDX file is derived from `package-lock.json`. The release script packs the tarball twice and refuses to continue if the bytes differ. The tarball smoke installs that exact file into a temporary npm consumer, executes the staged private runtime after removing the consumer copy, and uninstalls the temporary launchers. It does not use the source checkout as the runtime artifact.

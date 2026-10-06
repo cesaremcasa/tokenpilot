@@ -68,8 +68,13 @@ export function runtimeSupport(platform: string = process.platform, nodeVersion 
   const match = /^(\d+)\.(\d+)/.exec(nodeVersion);
   const major = match ? Number(match[1]) : 0;
   const minor = match ? Number(match[2]) : 0;
-  if (major < 22 || (major === 22 && minor < 5)) {
-    return { supported: false, reason: `Node ${nodeVersion} is unsupported. Install Node 22.5 or later and run tokenpilot install again.` };
+  const sqliteSupported = major === 22
+    ? minor >= 13
+    : major === 23
+      ? minor >= 4
+      : major > 23;
+  if (!sqliteSupported) {
+    return { supported: false, reason: `Node ${nodeVersion} is unsupported. Install Node 22.13.0 or 23.4.0 or later and run tokenpilot install again.` };
   }
   return { supported: true };
 }
