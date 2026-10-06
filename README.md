@@ -71,6 +71,10 @@ Current measurements must come from real provider sessions with a known total ba
 
 The [August 2026 research snapshot](docs/RESULTS.md) is retained as historical documentation. Its aggregate figures have not been revalidated under the current Codex/Grok counter semantics and are not current performance evidence. See the [measurement methodology](docs/MEASUREMENT.md).
 
+## Skills and validation
+
+See [agent skill installation and invocation](docs/SKILLS.md) and [CI versus distribution status](docs/CI_CD.md). Grok Bot cloud installation and Claude authentication are separate from local CLI installation.
+
 ## Current measured reductions
 
 The [October 6 real-run results](docs/REAL_RESULTS_2026-10-06.md) report verified total-input-plus-output reductions for nine tested OpenAI models. Six reached 42%; three did not. These are controlled-task observations, not session cache percentages or a universal guarantee.

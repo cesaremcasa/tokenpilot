@@ -1,4 +1,4 @@
-# tokenpilot-managed-skill:v7 codex
+# tokenpilot-managed-skill:v8 codex
 interface:
   display_name: "TokenPilot"
   short_description: "Show verified cache percentages for this Codex session"
