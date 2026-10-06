@@ -465,7 +465,7 @@ case " $* " in
   *" --help "*) echo '-c, --config <key=value> --json --model <model>'; exit 0 ;;
 esac
 printf '%s\\n' "$@" > '${observedArguments}'
-printf '%s\\n' "$TOKENPILOT_RUN_ID" > '${observedRun}'
+printf '%s\\n' "$TP_RUN_CONTEXT_ID" > '${observedRun}'
 printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"private task result"}}'
 printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":15,"cache_write_input_tokens":3,"reasoning_output_tokens":10}}'
 exit 0

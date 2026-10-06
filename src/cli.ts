@@ -271,7 +271,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     }
     if (format !== "md" && format !== "json") throw new Error("--format must be md or json");
     if (view === "summary") {
-      const currentRunId = process.env.TOKENPILOT_RUN_ID;
+      const currentRunId = process.env.TP_RUN_CONTEXT_ID;
       const days = daysArgument(args);
       const completeSummary = currentRunId ? buildLatestSummaryReport(paths) : buildReport(paths, days);
       const report = requestedProvider === undefined ? completeSummary : filterReportByProvider(completeSummary, requestedProvider);
