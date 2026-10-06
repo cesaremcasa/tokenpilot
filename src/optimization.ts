@@ -17,6 +17,9 @@ export const TOKEN_EFFICIENCY_INSTRUCTION = "Minimize token use without reducing
 export const CODEX_TOKEN_EFFICIENCY_INSTRUCTION = `Preserve every available capability. ${TOKEN_EFFICIENCY_INSTRUCTION}`;
 const CODEX_V3_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve every available capability. Minimize total tokens without reducing correctness. For read-only repository work, use at most three batched shell calls: locate evidence, inspect only required ranges, then verify every exact value and citation with nl -ba. Never cite a line not present in numbered output. Answer immediately after verification. For edits, batch inspection, perform the edit, run one sufficient verification, then stop. Do not narrate routine steps, reread unchanged data, repeat context, or add unrequested work.";
 export const CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve every available capability and requested scope. Inspect relevant source sections in one batched search/read; make the smallest complete edit. Run every required check together in one shell invocation using `&&` so a failure is visible. If a check fails, fix only its observed cause and repeat the affected check. Stop when the requested work and all checks pass; do not reread unchanged sections or repeat context.";
+export const CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve all capabilities, correctness and requested scope. Minimize context replay: batch independent reads in one call, search before reading, and print only relevant bounded ranges. Do not dump whole files or narrate routine actions. After inspection, batch related edits and every required check in one call with failure-visible commands. Fix observed failures only, repeat affected checks, then stop with a concise result. If an output is truncated, fetch only the missing range needed for correctness.";
+export const CODEX_V13_TOKEN_EFFICIENCY_INSTRUCTION = `${CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION} For a small edit, aim for one inspection round and one edit-and-check round; use more only when required by missing evidence or a failed check. Choose a foreground wait appropriate to command duration; avoid repeatedly polling a running command.`;
+const CODEX_V20_TOKEN_EFFICIENCY_INSTRUCTION = `${CODEX_V13_TOKEN_EFFICIENCY_INSTRUCTION} Prefer available Code Mode to batch native tool calls. After inspection, invoke apply_patch and all required verification sequentially in a single Code Mode call, awaiting each dependency. Set yield_time_ms=30000 for checks. Preserve all native tools and requirements; use direct tools if needed.`;
 
 /**
  * Claude's latency policy is deliberately shorter than the cross-provider
@@ -308,6 +311,7 @@ export function mergeTreatmentArguments(provider: Provider, explicitArgs: string
 }
 
 const NONE: OptimizationPlan = { args: [], applied: false };
+const CODEX_DEFERRED_WORLD_STATE_MODELS = new Set(["gpt-6-astra", "gpt-6.1-sol", "gpt-5.6-terra", "gpt-5.5"]);
 
 function supports(help: string, option: string): boolean {
   return help.includes(option);
@@ -317,7 +321,7 @@ function supports(help: string, option: string): boolean {
  * Convert a confirmed CLI capability set into a bounded, session-scoped policy.
  * Kept pure so every provider policy has a direct unit test.
  */
-export function planFromHelp(provider: Provider, mode: RunMode, help: string, codexModel?: string): OptimizationPlan {
+export function planFromHelp(provider: Provider, mode: RunMode, help: string, codexModel?: string, nativeCodexVersion?: string): OptimizationPlan {
   if (!appliesReductionPolicy(mode)) return NONE;
 
   if (provider === "claude") {
@@ -361,46 +365,25 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string, co
     if (!codexModel) {
       return { ...NONE, unavailableReason: "this Codex invocation has no unambiguous explicit model selector; measuring without treatment" };
     }
-    const usesV4 = codexModel === "gpt-5.5";
-    const usesV8 = codexModel === "gpt-6-luna";
-    if (usesV8) {
-      return {
-        args: [
-          "--config", "model_reasoning_effort=\"high\"",
-          "--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`
-        ],
-        applied: true,
-        profile: "codex-balanced-v8",
-        summary: "high native reasoning with batched inspection and complete required checks"
-      };
+    const catalogueModels = new Set(["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-daybreak-blue-latest", "gpt-5.5"]);
+    if (catalogueModels.has(codexModel)) {
+      const usesBatchedGuidance = codexModel === "gpt-6-astra" || codexModel === "gpt-6.1-sol";
+      const usesDeferredWorldState = nativeCodexVersion === "0.160.1" && CODEX_DEFERRED_WORLD_STATE_MODELS.has(codexModel);
+      const usesCodeMode = usesDeferredWorldState && codexModel === "gpt-5.5";
+      const args = ["--config", "skills.max_context_tokens=2000", "--config", 'model_reasoning_effort="low"'];
+      if (usesDeferredWorldState) args.push("--config", "features.deferred_tool_world_state=true");
+      if (usesCodeMode) args.push("--config", "features.code_mode=true", "--config", "features.code_mode_only=true");
+      if (codexModel === "gpt-5.5") args.push("--config", 'model_reasoning_summary="none"', "--config", 'model_verbosity="low"');
+      else args.push("--config", "model_auto_compact_token_limit=16000", "--config", 'model_auto_compact_token_limit_scope="body_after_prefix"');
+      const baseInstruction = usesBatchedGuidance || usesCodeMode ? CODEX_V20_TOKEN_EFFICIENCY_INSTRUCTION : codexModel === "gpt-6-luna" ? CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION : CODEX_V13_TOKEN_EFFICIENCY_INSTRUCTION;
+      args.push("--config", `developer_instructions=${JSON.stringify(baseInstruction)}`);
+      return { args, applied: true, profile: usesCodeMode ? "codex-balanced-v26" : usesDeferredWorldState ? "codex-balanced-v25" : usesBatchedGuidance ? "codex-balanced-v23" : "codex-balanced-v18", summary: "bounded native catalogues, low reasoning and complete required checks" };
     }
-    const usesV7 = codexModel === "gpt-daybreak-blue-latest";
-    if (usesV7) {
-      return {
-        args: ["--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`],
-        applied: true,
-        profile: "codex-balanced-v7",
-        summary: "native model settings with batched inspection and complete required checks"
-      };
-    }
-    const instruction = usesV4 ? CODEX_TOKEN_EFFICIENCY_INSTRUCTION : CODEX_V3_TOKEN_EFFICIENCY_INSTRUCTION;
-    const args = [
-      "--config", "model_reasoning_effort=\"low\"",
-      "--config", "model_reasoning_summary=\"none\"",
-      "--config", "model_verbosity=\"low\""
-    ];
-    if (!usesV4) {
-      args.push("--config", "model_auto_compact_token_limit=32000");
-      args.push("--config", "model_auto_compact_token_limit_scope=\"body_after_prefix\"");
-    }
-    args.push("--config", `developer_instructions=${JSON.stringify(instruction)}`);
     return {
-      args,
+      args: ["--config", 'model_reasoning_effort="low"', "--config", 'model_reasoning_summary="none"', "--config", 'model_verbosity="low"', "--config", "model_auto_compact_token_limit=32000", "--config", 'model_auto_compact_token_limit_scope="body_after_prefix"', "--config", `developer_instructions=${JSON.stringify(CODEX_V3_TOKEN_EFFICIENCY_INSTRUCTION)}`],
       applied: true,
-      profile: usesV4 ? "codex-balanced-v4" : "codex-balanced-v3",
-      summary: usesV4
-        ? "native compaction defaults, low reasoning and verbosity"
-        : "other explicit model: low reasoning, low verbosity, 32k compaction, bounded batched execution"
+      profile: "codex-balanced-v3",
+      summary: "other explicit model: low reasoning, low verbosity, 32k compaction, bounded batched execution"
     };
   }
 
@@ -449,7 +432,12 @@ export function planForInstalledCli(
     if (result.error || result.status !== 0) {
       return { ...NONE, unavailableReason: "could not verify this CLI version before applying a policy" };
     }
-    const plan = planFromHelp(provider, mode, result.stdout, codexModel);
+    let nativeCodexVersion: string | undefined;
+    if (provider === "codex" && codexModel && CODEX_DEFERRED_WORLD_STATE_MODELS.has(codexModel)) {
+      const version = spawnSync(binary, ["--version"], { encoding: "utf8", timeout: 4_000, stdio: ["ignore", "pipe", "ignore"], env: environment });
+      if (!version.error && version.status === 0) nativeCodexVersion = version.stdout.trim().match(/^codex(?:-cli)? (\d+\.\d+\.\d+)$/)?.[1];
+    }
+    const plan = planFromHelp(provider, mode, result.stdout, codexModel, nativeCodexVersion);
     if (!plan.applied) return plan;
     // Help advertises top-level flags, but Codex configuration keys and some
     // provider option combinations can still be rejected by the exact local

@@ -584,7 +584,7 @@ function cachePercent(session: SessionSummary): number | undefined {
 /** Session-only view; experiment history never substitutes for missing telemetry. */
 export function reportSummaryMarkdown(report: Report, currentRunId?: string): string {
   const providers = summaryProviders(report);
-  const percent = (value: number) => `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value)}%`;
+  const percent = (value: number) => `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value)}%`;
   return (providers.length ? providers : [undefined]).map((provider) => {
     const sessions = (report.sessions ?? []).filter((session) => session.provider === provider);
     const selected = currentRunId
@@ -593,14 +593,14 @@ export function reportSummaryMarkdown(report: Report, currentRunId?: string): st
     const usage = selected && report.sessionUsage?.find((session) => session.id === selected.id && session.provider === provider);
     const value = usage && cachePercent(usage);
     const lines = [provider ? `TokenPilot · ${providerName(provider)}` : "TokenPilot", ""];
-    if (selected) lines.push(`Sessão: ${selected.id} · ${selected.startedAt}`);
+    if (selected) lines.push(`Session: ${selected.id} · ${selected.startedAt}`);
     if (value === undefined) {
       lines.push(provider === "kimi"
-        ? "percentual indisponível — Kimi sem coleta numérica de cache suportada"
-        : "percentual indisponível — sessão sem métricas de cache verificadas");
+        ? "Percentage unavailable — Kimi cache telemetry is not supported"
+        : "Percentage unavailable — no verified cache metrics for this session");
     } else {
       const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
-      lines.push(`cache reutilizado: ${percent(rounded)} · entrada sem cache: ${percent(100 - rounded)}`);
+      lines.push(`Approximate reduction in uncached input: ${percent(rounded)} (cache reuse) · Uncached input: ${percent(100 - rounded)}`);
     }
     return [...lines, ""].join("\n");
   }).join("\n");

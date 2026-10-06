@@ -71,13 +71,17 @@ Current measurements must come from real provider sessions with a known total ba
 
 The [August 2026 research snapshot](docs/RESULTS.md) is retained as historical documentation. Its aggregate figures have not been revalidated under the current Codex/Grok counter semantics and are not current performance evidence. See the [measurement methodology](docs/MEASUREMENT.md).
 
+## Current measured reductions
+
+The [October 6 real-run results](docs/REAL_RESULTS_2026-10-06.md) report verified total-input-plus-output reductions for nine tested OpenAI models. Six reached 42%; three did not. These are controlled-task observations, not session cache percentages or a universal guarantee.
+
 ## Session cache percentages
 
-The CLI and provider skills show `cache reutilizado: X% · entrada sem cache: Y%`, with the session ID and date. Output is excluded; cache creation is not a cache hit. Numeric counters stay internal rather than appearing in the concise display.
+The CLI and provider skills show `Approximate reduction in uncached input: X% (cache reuse) · Uncached input: Y%`, with the session ID and date. Output is excluded; cache creation is not a cache hit. Numeric counters stay internal rather than appearing in the concise display.
 
-Inside a wrapped agent, the opaque run context selects that exact session. Outside it, the latest session in the requested window is selected (seven days by default). Missing telemetry never falls back to an older session or an experiment result: it reports `percentual indisponível`.
+Inside a wrapped agent, the opaque run context selects that exact session. Outside it, the latest session in the requested window is selected (seven days by default). Missing telemetry never falls back to an older session or an experiment result: it reports `Percentage unavailable`.
 
-Cache reuse is not evidence that TokenPilot caused a reduction. Historical A/B comparisons remain in the technical JSON data. Kimi stays unavailable until a supported correlated numeric channel exists.
+Approximate uncached-input reduction compares reused input with the same session's total input, assuming no reuse. It does not mean fewer total billed tokens or establish how much reduction TokenPilot caused. Historical A/B comparisons remain in the technical JSON data. Kimi stays unavailable until a supported correlated numeric channel exists.
 
 ## Privacy and fail-open behavior
 
