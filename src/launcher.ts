@@ -9,6 +9,7 @@ import { TelemetryDatabase } from "./database.js";
 import { appliesReductionPolicy, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp } from "./optimization.js";
 import { pricingProfile } from "./pricing.js";
 import { hasUnsafeMacAcl } from "./acl.js";
+import { readCodexSkillBudget } from "./codex-skill-catalog.js";
 import type { TokenPilotPaths } from "./paths.js";
 import { startClaudeMetricsReceiver, type ClaudeMetricsReceiver } from "./telemetry/claude.js";
 import { CodexExecJsonUsageParser, CodexExecTokenParser, isCodexExec, isCodexJsonExec, startCodexMetricsReceiver, type CodexMetricsReceiver } from "./telemetry/codex.js";
@@ -170,6 +171,45 @@ function supportsCodexSessionConfiguration(binary: string): boolean {
   return !result.error && result.status === 0 && result.stdout.includes("--config");
 }
 
+function valuesForOption(args: string[], flags: string[]): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    for (const flag of flags) {
+      if (args[index] === flag && args[index + 1] !== undefined) values.push(args[index + 1]);
+      else if (args[index].startsWith(`${flag}=`)) values.push(args[index].slice(flag.length + 1));
+    }
+  }
+  return [...new Set(values)];
+}
+
+/** Uses the Codex argv parser via mergeTreatmentArguments to avoid interpreting prompt text as options. */
+function codexSkillCatalogCwd(args: string[], cwd: string): string | undefined {
+  const flag = "--cd";
+  for (const value of valuesForOption(args, [flag, "-C"])) {
+    const parsed = mergeTreatmentArguments("codex", args, [flag, value]);
+    if (parsed.applied && parsed.deduplicated && parsed.omitted.includes("cd")) return path.resolve(cwd, value);
+  }
+  const probe = mergeTreatmentArguments("codex", args, [flag, "__tokenpilot_catalog_cwd_probe__"]);
+  if (!probe.applied) return undefined;
+  return probe.deduplicated ? path.resolve(cwd, "__tokenpilot_catalog_cwd_probe__") : cwd;
+}
+
+/** A separate app-server cannot faithfully mirror per-invocation profile/config overrides. */
+function codexSkillRosterIsUnmirrorable(args: string[]): boolean {
+  const profileProbe = mergeTreatmentArguments("codex", args, ["--profile", "__tokenpilot_profile_probe__"]);
+  if (!profileProbe.applied || profileProbe.deduplicated) return true;
+
+  const configFlag = "--config";
+  for (const value of valuesForOption(args, [configFlag, "-c"])) {
+    if (!value.includes("=")) return true;
+    const parsed = mergeTreatmentArguments("codex", args, [configFlag, value]);
+    if (parsed.deduplicated || parsed.conflicts.some((conflict) => conflict.startsWith("config:"))) return true;
+    if (!parsed.applied) return true;
+  }
+  const configProbe = mergeTreatmentArguments("codex", args, [configFlag, "tokenpilot_catalog_probe=value"]);
+  return !configProbe.applied || configProbe.deduplicated;
+}
+
 interface ChildObservation {
   consume(chunk: Buffer, stream: "stdout" | "stderr"): void;
 }
@@ -271,12 +311,27 @@ export async function runProvider(provider: Provider, args: string[], paths: Tok
           database = undefined;
         }
       }
-      const optimization = appliesReductionPolicy(mode) && reductionPlan
+      let optimization = appliesReductionPolicy(mode) && reductionPlan
         ? reductionPlan
         : planForInstalledCli(provider, mode, trusted, providerEnvironment({}, trusted), (candidate) => trustedExecutable(candidate) !== undefined, codexModel);
-      const providerOptimizationArgs = provider === "grok" && isGrokHeadless(args)
+      let providerOptimizationArgs = provider === "grok" && isGrokHeadless(args)
         ? [...optimization.args, ...(optimization.headlessArgs ?? [])]
         : optimization.args;
+      const skillLimitIndex = provider === "codex" ? providerOptimizationArgs.findIndex((argument) => argument.startsWith("skills.max_context_tokens=")) : -1;
+      if (skillLimitIndex >= 0) {
+        const catalogCwd = codexSkillCatalogCwd(args, process.cwd());
+        const mirroredContext = catalogCwd && !codexSkillRosterIsUnmirrorable(args);
+        const skillBudget = mirroredContext
+          ? await readCodexSkillBudget(trusted, catalogCwd, providerEnvironment({}, trusted))
+          : undefined;
+        if (skillBudget === undefined) {
+          optimization = { ...optimization, args: [], applied: false, unavailableReason: "Codex skills catalog or invocation context could not be verified" };
+          providerOptimizationArgs = [];
+        } else {
+          providerOptimizationArgs = [...providerOptimizationArgs];
+          providerOptimizationArgs[skillLimitIndex] = `skills.max_context_tokens=${skillBudget}`;
+        }
+      }
       const treatmentMerge = mergeTreatmentArguments(provider, args, providerOptimizationArgs);
       if (providerOptimizationArgs.length > 0 && !treatmentMerge.applied) {
         // Resolve explicit treatment conflicts before creating any telemetry

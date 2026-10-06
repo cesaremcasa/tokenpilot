@@ -369,10 +369,11 @@ export class CodexExecJsonUsageParser {
     }
 
     const turnTotal = input + output;
-    const nextInput = this.totalInput + input;
-    const nextOutput = this.totalOutput + output;
-    const nextTotal = this.reportedTotal + turnTotal;
-    if (![turnTotal, nextInput, nextOutput, nextTotal].every(Number.isSafeInteger)) {
+    // Codex exec publishes the latest thread total, not a per-turn delta.
+    const nextInput = input;
+    const nextOutput = output;
+    const nextTotal = turnTotal;
+    if (![turnTotal, nextInput, nextOutput, nextTotal].every(Number.isSafeInteger) || input < this.totalInput || output < this.totalOutput) {
       this.inputTotalsComplete = false;
       return;
     }
@@ -387,7 +388,11 @@ export class CodexExecJsonUsageParser {
     } else if (cached === null || cached > input) {
       this.cachedInputComplete = false;
     } else {
-      this.cachedInput += cached;
+      if (this.completedTurns > 1 && cached < this.cachedInput) {
+        this.inputTotalsComplete = false;
+        return;
+      }
+      this.cachedInput = cached;
       if (!Number.isSafeInteger(this.cachedInput)) this.cachedInputComplete = false;
     }
 

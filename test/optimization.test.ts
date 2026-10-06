@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
   it("uses the latency-first Claude v7 policy when every flag is advertised", () => {
@@ -73,57 +73,65 @@ describe("version-gated balanced optimization", () => {
     expect(codexModelFromArgs(["exec", "--model", "gpt-5.5", "--config", 'model="gpt-6-luna"'])).toBe("gpt-5.5");
   });
 
-  it("scopes Codex v4 to explicitly selected gpt-5.5 and retains v3 for other explicit models", () => {
+  it("bounds known Codex skill descriptions while preserving capabilities and model-specific compaction", () => {
     const help = "-c, --config <key=value> --profile <profile>";
-    const plan = planFromHelp("codex", "balanced", help, "gpt-5.5");
-    expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v4" });
-    expect(plan.args.join(" ")).toContain("model_reasoning_effort=\"low\"");
-    expect(plan.args.join(" ")).toContain("model_reasoning_summary=\"none\"");
-    expect(plan.args.join(" ")).toContain(CODEX_TOKEN_EFFICIENCY_INSTRUCTION);
-    expect(plan.args.join(" ")).not.toContain("model_auto_compact_token_limit");
-    expect(CODEX_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("at most three");
-    expect(CODEX_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("nl -ba");
-
-    const priorPolicy = planFromHelp("codex", "balanced", help, "gpt-6-astra");
-    expect(priorPolicy).toMatchObject({ applied: true, profile: "codex-balanced-v3" });
-    expect(priorPolicy.args.join(" ")).toContain("model_auto_compact_token_limit=32000");
-    expect(priorPolicy.args.join(" ")).toContain("model_auto_compact_token_limit_scope=\"body_after_prefix\"");
-    for (const forbidden of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false", "otel.log_user_prompt"]) {
-      expect(plan.args.join(" ")).not.toContain(forbidden);
-      expect(priorPolicy.args.join(" ")).not.toContain(forbidden);
+    for (const model of ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-daybreak-blue-latest", "gpt-5.5"]) {
+      const plan = planFromHelp("codex", "balanced", help, model);
+      expect(plan).toMatchObject({ applied: true, profile: ["gpt-6-astra", "gpt-6.1-sol"].includes(model) ? "codex-balanced-v23" : "codex-balanced-v18" });
+      expect(plan.args.join(" ")).toContain("skills.max_context_tokens=2000");
+      expect(plan.args.join(" ")).toContain('model_reasoning_effort="low"');
+      if (model === "gpt-5.5") expect(plan.args.join(" ")).not.toContain("model_auto_compact_token_limit");
+      else expect(plan.args.join(" ")).toContain("model_auto_compact_token_limit=16000");
+      for (const forbidden of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false", "otel.log_user_prompt"]) expect(plan.args.join(" ")).not.toContain(forbidden);
     }
     expect(planFromHelp("codex", "balanced", help)).toMatchObject({ applied: false, args: [] });
+    expect(planFromHelp("codex", "balanced", help, "unknown-model")).toMatchObject({ applied: true, profile: "codex-balanced-v3" });
   });
 
-  it("routes Luna through v8 and Daybreak through v7 with native settings preserved", () => {
+  it("enables deferred tool world state only for the four models on native Codex 0.160.1", () => {
     const help = "-c, --config <key=value> --profile <profile>";
-    const v8 = planFromHelp("codex", "balanced", help, "gpt-6-luna");
-    expect(v8).toMatchObject({ applied: true, profile: "codex-balanced-v8" });
-    expect(v8.args).toEqual([
-      "--config", "model_reasoning_effort=\"high\"",
-      "--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`
-    ]);
-    const explicit = ["exec", "--model", "gpt-6-luna", "--config", "model_reasoning_effort=\"low\"", "task"];
-    expect(mergeTreatmentArguments("codex", explicit, v8.args)).toMatchObject({
-      args: explicit,
-      applied: false,
-      conflicts: ["config:model_reasoning_effort"]
-    });
-
-    const daybreak = planFromHelp("codex", "balanced", help, "gpt-daybreak-blue-latest");
-    expect(daybreak).toMatchObject({ applied: true, profile: "codex-balanced-v7" });
-    expect(daybreak.args).toEqual(["--config", `developer_instructions=${JSON.stringify(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION)}`]);
-
-    for (const plan of [v8, daybreak]) {
-      for (const setting of ["model=", "model_reasoning_summary", "model_verbosity", "model_auto_compact_token_limit"]) {
-        expect(plan.args.join(" ")).not.toContain(setting);
-      }
-      for (const capability of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false"]) {
-        expect(plan.args.join(" ")).not.toContain(capability);
-      }
+    const targets = ["gpt-6-astra", "gpt-6.1-sol", "gpt-5.6-terra", "gpt-5.5"];
+    for (const model of targets) {
+      const plan = planFromHelp("codex", "reduce", help, model, "0.160.1");
+      expect(plan).toMatchObject({ applied: true, profile: model === "gpt-5.5" ? "codex-balanced-v26" : "codex-balanced-v25" });
+      expect(plan.args).toContain("features.deferred_tool_world_state=true");
+      expect(plan.args).toContain("skills.max_context_tokens=2000");
+      const previous = planFromHelp("codex", "reduce", help, model);
+      expect(previous.profile).toBe(model === "gpt-6-astra" || model === "gpt-6.1-sol" ? "codex-balanced-v23" : "codex-balanced-v18");
+      expect(previous.args).not.toContain("features.deferred_tool_world_state=true");
+      expect(planFromHelp("codex", "reduce", help, model, "0.160.2").profile).toBe(previous.profile);
     }
-    expect(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("at most");
-    expect(CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION).not.toContain("nl -ba");
+    expect(planFromHelp("codex", "reduce", help, "gpt-6-sol", "0.160.1").profile).toBe("codex-balanced-v18");
+  });
+
+  it("reads a fixed native Codex version before applying v25", () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "tokenpilot-native-version-"));
+    const binary = path.join(directory, "codex");
+    fs.writeFileSync(binary, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'codex-cli 0.160.1'; exit 0; fi\necho '--config <key=value>'\nexit 0\n", { mode: 0o700 });
+    try {
+      expect(planForInstalledCli("codex", "reduce", binary, { PATH: "/usr/bin:/bin" }, undefined, "gpt-6-astra").profile).toBe("codex-balanced-v25");
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the full Code Mode surface only for GPT-5.5 on the verified native version", () => {
+    const plan = planFromHelp("codex", "reduce", "--config", "gpt-5.5", "0.160.1");
+    expect(plan.profile).toBe("codex-balanced-v26");
+    expect(plan.args).toContain("features.code_mode=true");
+    expect(plan.args).toContain("features.code_mode_only=true");
+    expect(plan.args.join(" ")).not.toContain("excluded_tool_namespaces");
+    expect(planFromHelp("codex", "reduce", "--config", "gpt-5.5", "0.155.1").args.join(" ")).not.toContain("features.code_mode");
+    expect(planFromHelp("codex", "reduce", "--config", "gpt-6-astra", "0.160.1").args.join(" ")).not.toContain("features.code_mode");
+  });
+
+  it("preserves explicit Codex reasoning and catalogue budget choices", () => {
+    const help = "-c, --config <key=value> --profile <profile>";
+    const plan = planFromHelp("codex", "balanced", help, "gpt-6-luna");
+    for (const [key, value] of [["model_reasoning_effort", '"high"'], ["skills.max_context_tokens", "8000"]]) {
+      const explicit = ["exec", "--model", "gpt-6-luna", "--config", `${key}=${value}`, "task"];
+      expect(mergeTreatmentArguments("codex", explicit, plan.args)).toMatchObject({ args: explicit, applied: false, conflicts: [`config:${key}`] });
+    }
   });
 
   it("uses current Grok controls while preserving the full feature surface", () => {

@@ -2,6 +2,13 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.5.3 — 2026-10-06
+
+- Correct cumulative Codex snapshot accounting and reject decreasing counters.
+- Guard native skill budgets through the live catalogue; preserve user overrides and fail open on unavailable metadata.
+- Add pinned Codex 0.160.1 catalogue policies and GPT-5.5 Code Mode, preserving native tool handlers.
+- Publish real numeric A/B evidence: six of nine tested OpenAI models reached 42%; three remain below target.
+
 ## 0.5.2 — 2026-10-06
 
 - Report verified cache reuse and uncached-input percentages for the current or latest recent session; exclude output and reject missing or mixed telemetry.
@@ -10,7 +17,7 @@ All notable changes to TokenPilot are recorded here. Version numbers follow sema
 ## Unreleased
 
 - Reject increased complete token use, including small increases previously hidden by cache-shift tolerance or rounding.
-- Select Codex policy from an explicit native model: v4 for GPT-5.5, v7 for Daybreak, v8 for Luna, and retained v3 for other explicit models. Ambiguous/default selection remains measurement-only.
+- Select Codex policies only from an explicit native model; pin newer catalogue and Code Mode settings to verified runtime 0.160.1. Ambiguous/default selection remains measurement-only.
 - Record real repeated reduction trials, preserve all failed experiments, and keep native capabilities and explicit argument precedence.
 
 - Add `grok-balanced-v7`, using only current CLI-supported low-effort and appended-rule controls while preserving Grok's full native prompt, tools, and optional features.

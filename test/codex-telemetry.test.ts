@@ -56,6 +56,30 @@ describe("Codex non-interactive token total", () => {
     });
   });
 
+  it("uses the latest cumulative JSON receipt without summing repeated totals", () => {
+    const parser = new CodexExecJsonUsageParser();
+    for (const usage of [
+      { input_tokens: 100, cached_input_tokens: 40, output_tokens: 15 },
+      { input_tokens: 100, cached_input_tokens: 40, output_tokens: 15 },
+      { input_tokens: 200, cached_input_tokens: 90, output_tokens: 25 }
+    ]) parser.accept(JSON.stringify({ type: "turn.completed", usage }) + "\n");
+    expect(parser.finish()).toEqual({ inputNew: 110, inputCached: 90, output: 25, reportedTotal: 225, reportedTotalIncludesCachedInput: true });
+  });
+
+  it("rejects cumulative JSON counters that decrease", () => {
+    const parser = new CodexExecJsonUsageParser();
+    parser.accept('{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":15}}\n');
+    parser.accept('{"type":"turn.completed","usage":{"input_tokens":90,"output_tokens":15}}\n');
+    expect(parser.finish()).toBeUndefined();
+  });
+
+  it("rejects decreasing cumulative cache counters", () => {
+    const parser = new CodexExecJsonUsageParser();
+    parser.accept('{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":15}}\n');
+    parser.accept('{"type":"turn.completed","usage":{"input_tokens":200,"cached_input_tokens":30,"output_tokens":25}}\n');
+    expect(parser.finish()).toBeUndefined();
+  });
+
   it("keeps the provider total when category details are absent without filling zeros", () => {
     const parser = new CodexExecJsonUsageParser();
     parser.accept('{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":15}}\n');
