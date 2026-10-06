@@ -40,10 +40,10 @@ export const CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION = "Finish correctly with minima
 export const CLAUDE_CORE_TOOLS = "Bash,Edit,Read,Write,Grep,Glob";
 
 /**
- * Grok v7 keeps the provider's complete tool and feature surface while using
+ * Grok v8 keeps the provider's complete tool and feature surface while using
  * low reasoning effort and a concise, bounded coding contract.
  */
-export const GROK_TOKEN_EFFICIENCY_INSTRUCTION = "Complete the request correctly with concise, task-focused work. Batch independent inspections and avoid repeating unchanged context or actions. Preserve all task requirements and available tools. Verify edits with the relevant checks before stopping.";
+export const GROK_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve every native tool, memory, agent, web/app capability, safety rule and task requirement. Minimize repeated context: locate the relevant symbol with a bounded search, read only the required source and test ranges, and batch independent inspections. Make the smallest complete edit; reproduce a focused regression before fixing when practical. Group related edits and all required checks in a failure-visible command. Wait for checks to finish in the foreground when supported; fix only observed failures, repeat affected checks, and stop with a concise result. Retrieve any missing evidence if output was truncated.";
 
 /** A plan never contains credentials or user-supplied command arguments. */
 export interface OptimizationPlan {
@@ -397,8 +397,8 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string, co
             "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION
           ],
           applied: true,
-          profile: "grok-balanced-v7",
-          summary: "low reasoning with concise appended guidance; all native tools and optional features preserved"
+          profile: "grok-balanced-v8",
+          summary: "low reasoning, bounded inspection and grouped checks; native capabilities preserved"
         }
       : { ...NONE, unavailableReason: "this Grok CLI does not expose the complete capability-preserving token-reduction policy" };
   }

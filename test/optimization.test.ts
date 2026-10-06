@@ -139,7 +139,7 @@ describe("version-gated balanced optimization", () => {
     const plan = planFromHelp("grok", "balanced", help);
     expect(plan).toMatchObject({
       applied: true,
-      profile: "grok-balanced-v7",
+      profile: "grok-balanced-v8",
       args: [
         "--reasoning-effort", "low",
         "--verbatim",

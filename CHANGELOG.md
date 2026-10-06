@@ -2,6 +2,11 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.5.4 — 2026-10-06
+
+- Add Grok v8 bounded inspection and grouped verification while retaining all native capabilities.
+- Record real A/B reductions for all four available Grok models; distinguish CLI savings from Grok Bot usage.
+
 ## 0.5.3 — 2026-10-06
 
 - Correct cumulative Codex snapshot accounting and reject decreasing counters.

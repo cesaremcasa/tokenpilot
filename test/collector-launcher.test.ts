@@ -319,7 +319,7 @@ exit 0
       provider: "grok",
       mode: "reduce",
       optimizationApplied: true,
-      optimizationProfile: "grok-balanced-v7"
+      optimizationProfile: "grok-balanced-v8"
     });
     database.close();
     cleanup(paths);
@@ -358,7 +358,7 @@ exit 0
       provider: "grok",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "grok-balanced-v7"
+      optimizationProfile: "grok-balanced-v8"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
