@@ -2,6 +2,13 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.5.6 — 2026-10-07
+
+- Label session percentages as cache reuse, distinct from measured A/B reduction.
+- Preserve Claude native tools and browser choices rather than restricting the catalogue.
+- Rewrite newcomer installation and troubleshooting with current requirements.
+- Present all 13 recorded model results with source-linked visual evidence.
+
 ## 0.5.5 — 2026-10-06
 
 - Update provider skills with bounded-task execution and verified metrics routing.

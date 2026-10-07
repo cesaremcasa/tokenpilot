@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with:
+Start with the installation and diagnostic summary:
 
 ```sh
 tokenpilot --version
@@ -8,19 +8,16 @@ tokenpilot doctor
 tokenpilot report --view diagnostics
 ```
 
-`doctor` separates installation from measurement. `Installation: ready` can coexist with `Measurement: limited` when a provider modality does not publish correlated counters.
+## A provider command skips TokenPilot
 
-## The provider bypasses TokenPilot
+Check which executables your current shell finds:
 
 ```sh
 command -v tokenpilot
-command -v claude
-command -v codex
-command -v grok
-command -v kimi
+command -v codex # substitute your provider command
 ```
 
-The expected launchers are under `~/.tokenpilot/bin`. Reinstall and start a new login shell:
+The TokenPilot launcher should resolve from `~/.tokenpilot/bin`. If it does not, reinstall and open a new terminal so the managed PATH update takes effect:
 
 ```sh
 tokenpilot install
@@ -28,73 +25,47 @@ exec "$SHELL" -l
 tokenpilot doctor
 ```
 
-Do not manually copy launchers or reorder the managed PATH block.
+Do not copy launchers by hand. If the provider command still resolves elsewhere, inspect your shell startup files for PATH entries that appear after TokenPilot's managed block.
 
-## Provider CLI not found
+## The original provider CLI is missing
 
-The TokenPilot launcher may exist even when the original provider CLI is absent. Install and authenticate the original provider CLI as the same OS user, then rerun `tokenpilot install`.
+TokenPilot wraps provider programs already installed and authenticated for the same OS user. Install and sign in to the provider using its own instructions, then run `tokenpilot install` and `tokenpilot doctor` again. Only the providers you plan to use are required.
 
-TokenPilot does not share logins or credentials between machines.
+## Node.js is unsupported
 
-## Wrong Node.js in SSH or automation
-
-TokenPilot requires Node.js 22.13.0 or 23.4.0 and newer. A non-login SSH shell may resolve a system Node.js older than the version used in the terminal.
+TokenPilot requires Node.js 22.13.0+ in the 22.x line, or 23.4.0 and later. A shell opened through SSH or automation may find a different Node version than your interactive terminal:
 
 ```sh
+node --version
+command -v node
 bash -ilc 'node --version; tokenpilot --version; tokenpilot doctor'
 ```
 
-Run build/install automation in the user's login environment or configure an explicit supported Node.js runtime.
+Configure the supported Node.js version in the environment that starts TokenPilot, then reinstall if `doctor` requests it.
 
-## Sessions exist but are unavailable
+## Measurement is limited or a session is unavailable
 
-Unavailable means the session envelope exists but the provider did not publish a complete correlated numeric sample. It is not zero usage and not zero savings.
+`Installation: ready` can coexist with limited measurement. The provider may not expose a supported numeric usage source, or the session may lack complete correlated counters. `Unavailable` does not mean zero usage or zero reduction. Kimi currently runs without a TokenPilot treatment or reduction claim; Claude, Codex, and Grok capabilities depend on their CLI version and measurement mode.
 
-Common reasons include:
+The default report's `Cache reuse` and `Uncached input` percentages describe current-session input counters. They do not show total-token reduction or prove that TokenPilot caused a change. Paired-task reduction results are separate observations; see the [measurement methodology](MEASUREMENT.md).
 
-- provider quota or service error before complete counters;
-- an older CLI without the documented telemetry surface;
-- Grok without correlated External OTEL/JSON counters;
-- Kimi, which is currently envelope-only while a safe correlated channel is unavailable;
-- a collector that started but received no accepted metric; or
-- an old total-only Codex path that cannot provide categories.
+## Bypass TokenPilot
 
-Never repair unavailable data by scraping provider history or estimating tokens.
-
-The following cohort labels apply to historical/detail comparisons. The default summary and provider skills show current-session cache percentages, not cohort reduction estimates.
-
-## Report says cache-shift
-
-Cache-shift means new input moved toward cache reads while the complete cache-aware total stayed effectively flat. It is not a reduction. Use the detail view to inspect new, cached, created, pressure, and total separately.
-
-## Report says preliminary
-
-The cohort is directionally comparable but lacks a validation requirement, commonly 3+3 measured sessions, a known non-benchmark task type, or formal quality evidence. The concise report may show the measured cache-aware variation, but it labels it `preliminar` and makes no validated-reduction or economy claim. Continue normal use and classify only sessions you can categorize without entering task content.
-
-## Kimi
-
-Kimi launches through its original CLI without a TokenPilot REST/WebSocket bridge. It remains envelope-only until a content-free, child-authenticated measurement channel is available.
-
-## Provider quota errors
-
-A provider can reject a model even when TokenPilot is working. For example, the first Claude matrix reached the provider but Fable was blocked by the account limit. TokenPilot preserves the provider's exit status and output; it does not bypass subscriptions or quotas.
-
-## Emergency bypass
+For one session, invoke the provider with the bypass variable:
 
 ```sh
-TOKENPILOT_BYPASS=1 <provider>
-tokenpilot mode off
+TOKENPILOT_BYPASS=1 codex
 ```
 
-The process bypass records nothing. `off` applies to future sessions until the mode changes.
+This runs the original provider without TokenPilot treatment or measurement. `tokenpilot mode off` disables TokenPilot measurement and treatment for future sessions until the mode changes.
 
-## Safe upgrade or reinstall
+## Reinstall safely
 
-Reinstalling preserves the database. Check the dry run first if the shell or skill directories were manually modified:
+If `doctor` reports an installation problem, preview and then apply a repair:
 
 ```sh
 tokenpilot install --dry-run
 tokenpilot install
 ```
 
-The installer refuses to overwrite foreign launchers, modified managed blocks, unsafe directories, or third-party skills.
+The installer refuses to overwrite foreign launchers, modified managed shell blocks, unsafe directories, or third-party skills. Reinstallation preserves the local telemetry database.

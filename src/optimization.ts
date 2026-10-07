@@ -22,20 +22,15 @@ export const CODEX_V13_TOKEN_EFFICIENCY_INSTRUCTION = `${CODEX_V10_TOKEN_EFFICIE
 const CODEX_V20_TOKEN_EFFICIENCY_INSTRUCTION = `${CODEX_V13_TOKEN_EFFICIENCY_INSTRUCTION} Prefer available Code Mode to batch native tool calls. After inspection, invoke apply_patch and all required verification sequentially in a single Code Mode call, awaiting each dependency. Set yield_time_ms=30000 for checks. Preserve all native tools and requirements; use direct tools if needed.`;
 
 /**
- * Claude's latency policy is deliberately shorter than the cross-provider
- * instruction above. It tells Claude to batch independent work and perform a
- * single sufficient verification pass, while the CLI flags below remove
- * optional browser startup and keep dynamic machine data out of the reusable
- * system-prompt prefix. The text is fixed product code and is never persisted.
+ * Claude's latency policy keeps its native tools, browser, and other
+ * capabilities available while bounding repeated inspection. The text is
+ * fixed product code and is never persisted.
  */
-export const CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION = "Finish correctly with minimal latency and tokens: inspect narrowly, batch independent reads, avoid rereading or narrating, verify once, and stop. Do not skip required validation or change scope.";
+export const CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION = "Preserve all native tools, browser, agents, integrations, safety rules, and requested scope. Finish correctly with minimal latency and tokens: inspect narrowly, batch independent reads, avoid rereading or narrating, verify once, and stop. Do not skip required validation or change scope.";
 
 /**
- * Claude's default tool catalog is useful but expensive to send on every
- * request. Balanced v6 keeps the local coding primitives required to inspect,
- * search, create, and edit a repository while leaving the full native catalog
- * available through `deep` or the immediate bypass. The value is fixed product
- * code and is never derived from a project or stored in telemetry.
+ * Historical v6/v7 catalogue retained for consumers of this exported constant.
+ * Current policies preserve the native catalogue and do not inject this value.
  */
 export const CLAUDE_CORE_TOOLS = "Bash,Edit,Read,Write,Grep,Glob";
 
@@ -325,36 +320,14 @@ export function planFromHelp(provider: Provider, mode: RunMode, help: string, co
   if (!appliesReductionPolicy(mode)) return NONE;
 
   if (provider === "claude") {
-    if (!supports(help, "--effort") || !supports(help, "--tools") || !supports(help, "--append-system-prompt")) {
+    if (!supports(help, "--effort") || !supports(help, "--append-system-prompt")) {
       return { ...NONE, unavailableReason: "this Claude CLI does not expose the complete token-reduction policy" };
     }
-    // v7 keeps v6's proven core-tool bound, removes optional Chrome startup,
-    // preserves a more reusable system-prompt prefix, and uses a shorter
-    // latency-first instruction. Older compatible CLIs retain the measured v6
-    // policy rather than receiving flags they did not advertise.
-    if (supports(help, "--no-chrome") && supports(help, "--exclude-dynamic-system-prompt-sections")) {
-      return {
-        args: [
-          "--effort", "low",
-          "--tools", CLAUDE_CORE_TOOLS,
-          "--no-chrome",
-          "--exclude-dynamic-system-prompt-sections",
-          "--append-system-prompt", CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION
-        ],
-        applied: true,
-        profile: "claude-balanced-v7",
-        summary: "low effort, core coding tools, no Chrome startup, stable cache prefix, one verification pass"
-      };
-    }
     return {
-      args: [
-        "--effort", "low",
-        "--tools", CLAUDE_CORE_TOOLS,
-        "--append-system-prompt", TOKEN_EFFICIENCY_INSTRUCTION
-      ],
+      args: ["--effort", "low", "--append-system-prompt", CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION],
       applied: true,
-      profile: "claude-balanced-v6",
-      summary: "low effort, core coding tools, concise verified execution"
+      profile: "claude-balanced-v8",
+      summary: "low effort and concise guidance with native capabilities preserved"
     };
   }
 

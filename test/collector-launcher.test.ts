@@ -5,7 +5,7 @@ import { collectPendingRuns } from "../src/collector.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 import { buildReport, reportMarkdown, reportSummaryMarkdown } from "../src/report.js";
 import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
@@ -414,7 +414,7 @@ exit 0
     cleanup(paths);
   });
 
-  it("injects the complete Claude v7 latency policy without retaining its fixed instruction", async () => {
+  it("preserves Claude's original tools and browser flags with the v8 policy", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "claude-arguments");
     const originalBin = writeFakeClaude(paths, `#!/bin/sh
@@ -426,26 +426,24 @@ printf '%s\n' "$@" > '${observedArguments}'
 exit 0
 `);
     const config = ensureConfig(paths);
-    config.defaultMode = "balanced";
+    config.defaultMode = "reduce";
     writeConfig(paths, config);
-    const allocator = new TelemetryDatabase(paths);
-    expect(allocator.allocateBalancedMode("claude", () => 0.9)).toBe("observe");
-    allocator.close();
 
-    expect(await withProviderPath(originalBin, () => runProvider("claude", ["-p", "private-task"], paths))).toBe(0);
+    expect(await withProviderPath(originalBin, () => runProvider("claude", ["-p", "private-task", "--tools", "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch", "--chrome"], paths))).toBe(0);
     const argumentsText = fs.readFileSync(observedArguments, "utf8");
     expect(argumentsText).toContain("low");
-    expect(argumentsText).toContain(CLAUDE_CORE_TOOLS);
-    expect(argumentsText).toContain("--no-chrome");
-    expect(argumentsText).toContain("--exclude-dynamic-system-prompt-sections");
+    expect(argumentsText).toContain("Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch");
+    expect(argumentsText).toContain("--chrome");
+    expect(argumentsText).not.toContain("--no-chrome");
+    expect(argumentsText).not.toContain("--exclude-dynamic-system-prompt-sections");
     expect(argumentsText).toContain(CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION);
 
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "claude",
-      mode: "balanced",
+      mode: "reduce",
       optimizationApplied: true,
-      optimizationProfile: "claude-balanced-v7"
+      optimizationProfile: "claude-balanced-v8"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
@@ -508,7 +506,7 @@ exit 0
     const summary = database.sessionSummariesSince(new Date(0).toISOString())[0];
     const inheritedRun = fs.readFileSync(observedRun, "utf8").trim();
     expect(inheritedRun).toBe(summary.id);
-    expect(reportSummaryMarkdown(buildReport(paths, 7), inheritedRun)).toContain("Approximate reduction in uncached input: 40%");
+    expect(reportSummaryMarkdown(buildReport(paths, 7), inheritedRun)).toContain("Cache reuse: 40%");
     expect(summary).toMatchObject({
       inputNew: 60,
       inputCached: 40,
