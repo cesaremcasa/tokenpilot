@@ -2,30 +2,18 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
-  it("uses the latency-first Claude v7 policy when every flag is advertised", () => {
-    const plan = planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt> --tools <tools> --no-chrome --exclude-dynamic-system-prompt-sections");
+  it("keeps Claude's complete native capabilities in the v8 policy", () => {
+    const plan = planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt>");
     expect(plan).toMatchObject({
       applied: true,
-      profile: "claude-balanced-v7",
-      args: [
-        "--effort", "low",
-        "--tools", CLAUDE_CORE_TOOLS,
-        "--no-chrome",
-        "--exclude-dynamic-system-prompt-sections",
-        "--append-system-prompt", CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION
-      ]
+      profile: "claude-balanced-v8",
+      args: ["--effort", "low", "--append-system-prompt", expect.stringContaining("Preserve all native tools")]
     });
-  });
-
-  it("retains the measured Claude v6 policy on older compatible CLIs", () => {
-    expect(planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt> --tools <tools>")).toMatchObject({
-      applied: true,
-      profile: "claude-balanced-v6",
-      args: ["--effort", "low", "--tools", CLAUDE_CORE_TOOLS, "--append-system-prompt", TOKEN_EFFICIENCY_INSTRUCTION]
-    });
+    expect(plan.args).not.toContain("--tools");
+    expect(plan.args).not.toContain("--no-chrome");
   });
 
   it("leaves Claude unchanged when the complete v6 policy is unavailable", () => {
@@ -218,7 +206,7 @@ describe("version-gated balanced optimization", () => {
     const merged = mergeTreatmentArguments("claude", explicit, plan.args);
     expect(merged.applied).toBe(false);
     expect(merged.args).toEqual(explicit);
-    expect(merged).toMatchObject({ conflicts: ["tools", "append-system-prompt"] });
+    expect(merged).toMatchObject({ conflicts: ["append-system-prompt"] });
   });
 
   it("does not mistake a prompt value that resembles a flag for an explicit boolean", () => {

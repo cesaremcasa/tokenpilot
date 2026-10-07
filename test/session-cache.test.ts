@@ -23,15 +23,15 @@ describe("session cache percentages", () => {
   it("excludes output and treats cache creation as non-reused input", () => scenario((_db, report, add) => {
     add({ inputNew: 50, inputCached: 50, cacheCreated: 25, output: 900 }, 0, "codex-otlp-metrics-v2");
     const text = reportSummaryMarkdown(report());
-    expect(text).toContain("Approximate reduction in uncached input: 50%");
+    expect(text).toContain("Cache reuse: 50%");
     expect(text).toContain("Uncached input: 50%");
     expect(text).not.toContain("900");
-    expect(text).not.toContain("redução");
+    expect(text.toLowerCase()).not.toContain("reduction");
   }));
 
   it("accepts explicit zero cache but not zero total input", () => scenario((_db, report, add) => {
     add({ inputNew: 100, inputCached: 0, cacheCreated: 0 });
-    expect(reportSummaryMarkdown(report())).toContain("Approximate reduction in uncached input: 0%");
+    expect(reportSummaryMarkdown(report())).toContain("Cache reuse: 0%");
     add({ inputNew: 0, inputCached: 0, cacheCreated: 0 }, 1);
     expect(reportSummaryMarkdown(report())).toContain("Percentage unavailable");
   }));
@@ -46,13 +46,13 @@ describe("session cache percentages", () => {
   it("uses the exact inherited run rather than a concurrent newer run", () => scenario((_db, report, add) => {
     const current = add({ inputNew: 75, inputCached: 25, cacheCreated: 0 });
     add({ inputNew: 10, inputCached: 90, cacheCreated: 0 }, 1);
-    expect(reportSummaryMarkdown(report(), current)).toContain("Approximate reduction in uncached input: 25%");
+    expect(reportSummaryMarkdown(report(), current)).toContain("Cache reuse: 25%");
     expect(reportSummaryMarkdown(report(), randomUUID())).toContain("Percentage unavailable");
   }));
 
   it("uses verified provider totals when optional cache-write counters are absent", () => scenario((_db, report, add) => {
     add({ inputNew: 17582, inputCached: 6912, output: 21, reportedTotal: 24515, reportedTotalIncludesCachedInput: true });
-    expect(reportSummaryMarkdown(report())).toContain("Approximate reduction in uncached input: 28.2%");
+    expect(reportSummaryMarkdown(report())).toContain("Cache reuse: 28.2%");
     expect(reportSummaryMarkdown(report())).toContain("Uncached input: 71.8%");
   }));
 
@@ -78,7 +78,7 @@ describe("session cache percentages", () => {
   it("rounds complementary percentages to exactly one hundred", () => scenario((_db, report, add) => {
     add({ inputNew: 6665, inputCached: 3335, cacheCreated: 0 });
     const text = reportSummaryMarkdown(report());
-    expect(text).toContain("Approximate reduction in uncached input: 33.4%");
+    expect(text).toContain("Cache reuse: 33.4%");
     expect(text).toContain("Uncached input: 66.6%");
   }));
 
@@ -93,6 +93,6 @@ describe("session cache percentages", () => {
     const now = new Date().toISOString();
     db.createRun({ id, provider, mode: "observe", startedAt: now, optimizationApplied: false, collectionState: "collected", taskKind: "unknown", outcome: "unknown" });
     db.addUsage({ runId: id, observedAt: now, source: `${provider}-otlp-metrics-v2`, inputNew: 25, inputCached: 50, cacheCreated: 25, output: 900 });
-    expect(reportSummaryMarkdown(report(provider))).toContain("Approximate reduction in uncached input: 50%");
+    expect(reportSummaryMarkdown(report(provider))).toContain("Cache reuse: 50%");
   }));
 });

@@ -1,6 +1,6 @@
 # Measurement methodology
 
-TokenPilot measures cache-aware token variation, not provider billing and not control of the provider's cache. Provider caches remain provider-side. The experiment changes documented session settings and measures the resulting provider-published counters. Reduction language is reserved for comparisons backed by formal quality-equivalence evidence.
+The default report shows session cache reuse, not reduction caused by TokenPilot. Paired-task results report the observed change in verified input plus output, including cached input, after equivalent task checks. A single pair is not a statistical or universal guarantee. The technical cohort label `validated-reduction` requires formal quality-equivalence evidence; it is separate from an observed paired-task reduction. Provider caches remain provider-side, and token usage is distinct from billing.
 
 ## Categories
 

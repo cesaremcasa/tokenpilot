@@ -600,7 +600,7 @@ export function reportSummaryMarkdown(report: Report, currentRunId?: string): st
         : "Percentage unavailable — no verified cache metrics for this session");
     } else {
       const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
-      lines.push(`Approximate reduction in uncached input: ${percent(rounded)} (cache reuse) · Uncached input: ${percent(100 - rounded)}`);
+      lines.push(`Cache reuse: ${percent(rounded)} · Uncached input: ${percent(100 - rounded)}`);
     }
     return [...lines, ""].join("\n");
   }).join("\n");

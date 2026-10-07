@@ -1,0 +1,3 @@
+TokenPilot installation smoke (real CLI output; not token savings)
+$ node dist/cli.js --version
+tokenpilot 0.5.6
