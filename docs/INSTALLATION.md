@@ -9,12 +9,12 @@ node --version
 codex --version # or claude --version, grok --version, or kimi --version
 ```
 
-## Install the verified release
+## Install from npm
 
-The verified GitHub release is 0.5.6. The npm registry remains at 0.5.5 until its security-key publication confirmation completes. Use the exact release artifact to obtain the current fixes.
+Install the published 0.5.6 package from npm:
 
 ```sh
-npm install -g https://github.com/cesaremcasa/tokenpilot/releases/download/v0.5.6/cesaremcasa-tokenpilot-0.5.6.tgz
+npm install -g @cesaremcasa/tokenpilot@0.5.6
 tokenpilot install
 tokenpilot doctor
 ```
@@ -22,7 +22,7 @@ tokenpilot doctor
 If npm global installation fails with `EACCES`, use a user-owned Node/npm installation or this no-global alternative instead of sudo:
 
 ```sh
-npm exec --yes --package=https://github.com/cesaremcasa/tokenpilot/releases/download/v0.5.6/cesaremcasa-tokenpilot-0.5.6.tgz -- tokenpilot install
+npm exec --yes --package=@cesaremcasa/tokenpilot@0.5.6 -- tokenpilot install
 ```
 
 The installer copies its runtime into user-owned state, so the npm cache is not required afterward.
@@ -60,7 +60,7 @@ tokenpilot report --provider codex # substitute your provider
 
 `doctor` reports installation readiness separately from measurement availability. `Measurement: limited` can mean the provider is installed but does not expose a supported correlated usage source. A provider you do not use may be unavailable without affecting the providers you installed.
 
-To update an npm installation, run `npm install -g https://github.com/cesaremcasa/tokenpilot/releases/download/v0.5.6/cesaremcasa-tokenpilot-0.5.6.tgz` and then `tokenpilot install`. The installer refreshes TokenPilot-owned launchers and runtime files and preserves local measurements.
+To update an npm installation, run `npm install -g @cesaremcasa/tokenpilot@0.5.6` and then `tokenpilot install`. The installer refreshes TokenPilot-owned launchers and runtime files and preserves local measurements.
 
 ## Bypass and uninstall
 
