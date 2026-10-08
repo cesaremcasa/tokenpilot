@@ -2,6 +2,50 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## 0.5.6 — 2026-10-07
+
+- Label session percentages as cache reuse, distinct from measured A/B reduction.
+- Preserve Claude native tools and browser choices rather than restricting the catalogue.
+- Rewrite newcomer installation and troubleshooting with current requirements.
+- Present all 13 recorded model results with source-linked visual evidence.
+
+## 0.5.5 — 2026-10-06
+
+- Update provider skills with bounded-task execution and verified metrics routing.
+- Package a Grok Bot skill with explicit parent-Bot telemetry requirements.
+- Document invocation, measured reductions, CI validation and publication limits.
+
+## 0.5.4 — 2026-10-06
+
+- Add Grok v8 bounded inspection and grouped verification while retaining all native capabilities.
+- Record real A/B reductions for all four available Grok models; distinguish CLI savings from Grok Bot usage.
+
+## 0.5.3 — 2026-10-06
+
+- Correct cumulative Codex snapshot accounting and reject decreasing counters.
+- Guard native skill budgets through the live catalogue; preserve user overrides and fail open on unavailable metadata.
+- Add pinned Codex 0.160.1 catalogue policies and GPT-5.5 Code Mode, preserving native tool handlers.
+- Publish real numeric A/B evidence: six of nine tested OpenAI models reached 42%; three remain below target.
+
+## 0.5.2 — 2026-10-06
+
+- Report verified cache reuse and uncached-input percentages for the current or latest recent session; exclude output and reject missing or mixed telemetry.
+- Correlate provider skills with an opaque per-run context; retain historical experiments without using them as session percentages.
+
+## Unreleased
+
+- Reject increased complete token use, including small increases previously hidden by cache-shift tolerance or rounding.
+- Select Codex policies only from an explicit native model; pin newer catalogue and Code Mode settings to verified runtime 0.160.1. Ambiguous/default selection remains measurement-only.
+- Record real repeated reduction trials, preserve all failed experiments, and keep native capabilities and explicit argument precedence.
+
+- Add `grok-balanced-v7`, using only current CLI-supported low-effort and appended-rule controls while preserving Grok's full native prompt, tools, and optional features.
+- Preserve absent Grok usage counters as unavailable so partial exports cannot become zero-filled complete comparisons.
+- Keep Codex treatment enabled for documented valueless flags such as `--ephemeral` and `--skip-git-repo-check` in either order.
+
+## 0.5.1 — 2026-10-05
+
+- Require Node.js 22.13.0 or 23.4.0 and newer, where `node:sqlite` is available without a runtime flag.
+
 ## 0.5.0 — 2026-08-21
 
 - Launch the first public npm beta as `@cesaremcasa/tokenpilot`, with a three-command install path and explicit Cesar Augusto / Mycellium Lab authorship.

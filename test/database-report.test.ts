@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
-import { buildLatestSummaryReport, buildReport, filterReportByProvider, reportDiagnosticsMarkdown, reportMarkdown, reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
+import { buildLatestSummaryReport, buildReport, filterReportByProvider, reportDiagnosticsMarkdown, reportMarkdown, reportComparisonSummaryMarkdown as reportSummaryMarkdown, treatmentComparisons } from "../src/report.js";
 import type { PricingProfile, SessionSummary } from "../src/types.js";
 import { renderSessions } from "../src/sessions.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
@@ -179,11 +179,11 @@ describe("aggregate reporting", () => {
       optimizationProfile: "codex-balanced-v1",
       baselineSessions: 2,
       treatmentSessions: 1,
-      treatmentRecordedTokens: 600,
-      baselineExpectedTreatmentTokens: 700,
-      estimatedTokensAvoided: 100,
-      tokenReductionPercent: 100 / 700 * 100,
-      tokenPressureDeltaPercent: -40,
+      treatmentRecordedTokens: 540,
+      baselineExpectedTreatmentTokens: 620,
+      estimatedTokensAvoided: 80,
+      tokenReductionPercent: 80 / 620 * 100,
+      tokenPressureDeltaPercent: (90 - 170) / 170 * 100,
       latencyDeltaSeconds: -5,
       latencyDeltaPercent: -(5 / 30) * 100,
       latencyResult: "faster",
@@ -272,6 +272,13 @@ describe("aggregate reporting", () => {
     expect(serialized).not.toContain("estimatedTokensAvoided");
     expect(serialized).not.toContain("tokenReductionPercent");
     expect(serialized).not.toContain("estimatedUsdAvoided");
+
+    const increased = sessions.map((session) => session.mode === "observe" ? session : { ...session, output: 64 });
+    const [rejected] = treatmentComparisons(increased);
+    expect(rejected.tokenResult).not.toBe("cache-shift");
+    expect(rejected.tokenReductionPercent).toBeLessThan(0);
+    expect(reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }], comparisons: [rejected] }))
+      .toContain("política de redução reprovada — <0,1% a mais");
   });
 
   it("labels a flat total with cached input replaced by new input as reverse cache-shift", () => {
@@ -359,8 +366,8 @@ describe("aggregate reporting", () => {
       tokenResult: "preliminary-signal",
       reason: expect.stringContaining("quality observation unavailable")
     });
-    expect(comparison.baselineExpectedTreatmentTokens).toBe(20_000_000);
-    expect(comparison.estimatedTokensAvoided).toBe(10_000_000);
+    expect(comparison.baselineExpectedTreatmentTokens).toBe(15_000_000);
+    expect(comparison.estimatedTokensAvoided).toBe(7_500_000);
     expect(comparison.tokenReductionPercent).toBe(50);
     expect(comparison.baselineExpectedUsd).toBeUndefined();
     expect(comparison.estimatedUsdAvoided).toBeUndefined();
@@ -395,8 +402,8 @@ describe("aggregate reporting", () => {
       tokenResult: "preliminary-signal",
       reason: expect.stringContaining("observed quality degraded")
     });
-    expect(comparison.baselineExpectedTreatmentTokens).toBe(20_000_000);
-    expect(comparison.estimatedTokensAvoided).toBe(10_000_000);
+    expect(comparison.baselineExpectedTreatmentTokens).toBe(15_000_000);
+    expect(comparison.estimatedTokensAvoided).toBe(7_500_000);
     expect(comparison.estimatedUsdAvoided).toBeUndefined();
     const serialized = JSON.stringify(comparison);
     expect(serialized).toContain("estimatedTokensAvoided");
@@ -548,9 +555,43 @@ describe("aggregate reporting", () => {
       comparisons: treatmentComparisons(sessions)
     });
     expect(summary).toContain("TokenPilot · Grok");
-    expect(summary).toContain("variação cache-aware medida — 51,1% a menos (preliminar)");
+    expect(summary).toContain("variação cache-aware medida — 52,2% a menos (preliminar)");
     expect(summary).not.toContain("tokens usados");
     expect(summary).not.toContain("235 → 115 tokens");
+  });
+
+  it("does not add Codex or Grok reasoning detail on top of output counters", () => {
+    for (const provider of ["codex", "grok"] as const) {
+      const sessions: SessionSummary[] = ([
+        { id: "observe", mode: "observe", inputNew: 100, output: 10 },
+        { id: "treatment", mode: "balanced", inputNew: 80, output: 8 }
+      ] as const).map(({ id, mode, inputNew, output }) => ({
+        id,
+        provider,
+        mode,
+        optimizationApplied: mode === "balanced",
+        optimizationProfile: mode === "balanced" ? `${provider}-balanced-v1` : undefined,
+        comparisonProfile: `${provider}-balanced-v1`,
+        taskKind: "feature",
+        outcome: "completed",
+        durationSeconds: 1,
+        inputNew,
+        inputCached: 20,
+        cacheCreated: 0,
+        output,
+        reasoning: 4,
+        categoryMetricsComplete: true,
+        compactions: 0,
+        retries: 0
+      }));
+
+      expect(treatmentComparisons(sessions)).toMatchObject([{
+        baselineMedianComparableTotal: 130,
+        treatmentMedianComparableTotal: 108,
+        baselineMedianTokenPressure: 110,
+        treatmentMedianTokenPressure: 88
+      }]);
+    }
   });
 
   it("keeps the latest measured result when a shorter window is empty", () => {
@@ -660,7 +701,8 @@ describe("aggregate reporting", () => {
     });
     expect(comparison.tokenReductionPercent).toBe(-20);
     const summary = reportSummaryMarkdown({ generatedAt: "now", since: "then", rows: [], coverage: [{ provider: "claude", sessions: 10, measuredSessions: 10, unavailableSessions: 0 }], comparisons: [comparison] });
-    expect(summary).toContain("variação cache-aware medida — 20% a mais (preliminar)");
+    expect(summary).toContain("política de redução reprovada — 20% a mais");
+    expect(summary).not.toContain("variação cache-aware medida");
   });
 
   it("does not validate when aggregate use falls but the treatment median rises", () => {

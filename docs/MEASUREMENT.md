@@ -1,6 +1,6 @@
 # Measurement methodology
 
-TokenPilot measures cache-aware token variation, not provider billing and not control of the provider's cache. Provider caches remain provider-side. The experiment changes documented session settings and measures the resulting provider-published counters. Reduction language is reserved for comparisons backed by formal quality-equivalence evidence.
+The default report shows session cache reuse, not reduction caused by TokenPilot. Paired-task results report the observed change in verified input plus output, including cached input, after equivalent task checks. A single pair is not a statistical or universal guarantee. The technical cohort label `validated-reduction` requires formal quality-equivalence evidence; it is separate from an observed paired-task reduction. Provider caches remain provider-side, and token usage is distinct from billing.
 
 ## Categories
 
@@ -17,21 +17,25 @@ TokenPilot keeps these fields distinct:
 Token pressure is:
 
 ```text
-input new + cache created + output + reasoning
+input new + cache created + output + separately counted reasoning
 ```
 
-Cache reads are excluded from token pressure because they represent reuse, but they remain part of the complete cache-aware total.
+Cache reads are excluded from token pressure because they represent reuse, but they remain part of the complete cache-aware total. Codex and Grok output includes reasoning; those providers add no separate reasoning term. Missing required categories leave category-based calculations unavailable.
 
 ## Complete comparison total
 
 The comparison total is chosen in this order:
 
 1. a provider-reported total whose semantics are verified to include cache reads; otherwise
-2. `input new + cache read + cache created + output + reasoning` when every required category is available.
+2. `input new + cache read + cache created + output + separately counted reasoning` when every required category is available.
 
 A provider total is never mixed with category totals inside one comparison.
 
 Grok External OTEL publishes `input` as full input including its `cache_read` component. TokenPilot subtracts cache reads before storing new input. Reports apply the same normalization to legacy `grok-otlp-metrics-v1` rows without rewriting the local audit history.
+
+Explicit `codex exec --json` sessions use the documented `turn.completed.usage` fields: complete total is `input_tokens + output_tokens`, cached input is included in input, and new input is `input_tokens - cached_input_tokens` when both fields are available. Missing optional fields remain unavailable. This verified total can be compared without inventing category values.
+
+Codex and Grok reports retain `reasoning` as a separate detail counter while treating it as included in `output` for total, token-pressure, and API-equivalent calculations. It is not added a second time.
 
 ## Cache-shift detector
 
@@ -50,6 +54,8 @@ A decrease in new input is not automatically a reduction. If cache reads rise in
 | `validated-reduction` | Complete matched cohort satisfies every validation rule and avoided tokens are positive. | May report reduction and avoided tokens. |
 
 ## Validation requirements
+
+An increase fails reduction acceptance and is explicitly reported as a rejected policy. Keep its measured counters and investigate before retesting. Controlled repeat evaluations must declare their task, sequence and quality checks before execution; every increased-use pair remains a failure, even if another pair improves.
 
 A reduction is validated only when all of the following are true:
 
@@ -83,7 +89,7 @@ Latency uses the baseline and treatment median session durations. A faster resul
 
 TokenPilot never fetches prices or guesses the model. A user may manually create and select a versioned pricing profile. The complete rate snapshot is attached at session start so historical calculations remain reproducible.
 
-USD appears only when every published category has a compatible selected rate. Cache reads use the cached-input rate, cache creation uses its own rate, and reasoning is priced only when explicitly configured. A provider total without categories receives no conversion.
+USD appears only when every published category has a compatible selected rate. Cache reads use the cached-input rate, cache creation uses its own rate, and separately counted reasoning is priced only when explicitly configured. Codex/Grok reasoning is already within output and is not charged twice. A provider total without categories receives no conversion.
 
 All currency output is labeled **API-equivalent USD, not a provider bill**. Subscription use is never represented as money actually saved.
 
@@ -91,7 +97,7 @@ All currency output is labeled **API-equivalent USD, not a provider bill**. Subs
 
 `tokenpilot sessions` and the detailed report expose opaque run IDs, timestamps, provider, mode, policy, task category/outcome, measurement state, total basis, price snapshot, and closed unavailability reason. They do not expose content or provider account identity.
 
-The concise report searches local history for the most recent comparable provider-local result so a quiet rolling window does not erase the last measurement. It prints the measured variation plus `preliminar` or `qualidade observada degradada`, reserves `redução cache-aware validada` for formal evidence, labels cache shifts without a percentage, and leaves limited or incomparable evidence without a numeric claim. Use:
+The concise report selects the inherited current run, or the latest session in the requested window. It reports cache-hit input divided by verified total input, plus the complementary uncached percentage. Output is excluded and cache writes are not cache hits. Missing or conflicting telemetry produces no percentage; historical A/B results never replace it. Counters and experiment history remain available in technical JSON. Use:
 
 ```sh
 tokenpilot report

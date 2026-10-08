@@ -12,6 +12,7 @@ export interface Report {
   coverage: MeasurementCoverage[];
   comparisons: TreatmentComparison[];
   sessions?: AuditableSession[];
+  sessionUsage?: SessionSummary[];
 }
 
 /**
@@ -26,7 +27,8 @@ export function filterReportByProvider(report: Report, provider: Provider): Repo
     rows: report.rows.filter((row) => row.provider === provider),
     coverage: coverage.length > 0 ? coverage : [{ provider, sessions: 0, measuredSessions: 0, unavailableSessions: 0 }],
     comparisons: report.comparisons.filter((comparison) => comparison.provider === provider),
-    sessions: report.sessions?.filter((session) => session.provider === provider)
+    sessions: report.sessions?.filter((session) => session.provider === provider),
+    sessionUsage: report.sessionUsage?.filter((session) => session.provider === provider)
   };
 }
 
@@ -70,7 +72,8 @@ function buildReportSince(paths: TokenPilotPaths, since: string): Report {
       rows: database.aggregateSince(since),
       coverage: database.measurementCoverageSince(since),
       comparisons,
-      sessions
+      sessions,
+      sessionUsage: summaries
     };
   } finally {
     database.close();
@@ -83,12 +86,13 @@ export function buildReport(paths: TokenPilotPaths, days: number): Report {
   return buildReportSince(paths, new Date(Date.now() - days * 24 * 60 * 60 * 1_000).toISOString());
 }
 
-/** Skill summaries use the latest comparable measurement, regardless of rolling-window boundaries. */
+/** Full history for exact inherited-run lookup and technical experiment inspection. */
 export function buildLatestSummaryReport(paths: TokenPilotPaths): Report {
   return buildReportSince(paths, ALL_RECORDED_DATA_SINCE);
 }
 
-function integer(value: number): string {
+function integer(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
 }
 
@@ -118,8 +122,10 @@ function latestStartedAt(sessions: SessionSummary[]): string | undefined {
   return sessions.map((session) => session.startedAt).filter((value): value is string => value !== undefined).sort().at(-1);
 }
 
-function tokenPressure(session: SessionSummary): number {
-  return session.inputNew + session.cacheCreated + session.output + session.reasoning;
+function tokenPressure(session: SessionSummary): number | undefined {
+  if (session.inputNew === undefined || session.cacheCreated === undefined || session.output === undefined) return undefined;
+  const reasoning = session.provider === "codex" || session.provider === "grok" ? 0 : session.reasoning;
+  return session.inputNew + session.cacheCreated + session.output + (reasoning ?? 0);
 }
 
 function hasCompleteCategories(session: SessionSummary): boolean {
@@ -128,7 +134,10 @@ function hasCompleteCategories(session: SessionSummary): boolean {
 
 function categoryTotal(session: SessionSummary): number | undefined {
   if (!hasCompleteCategories(session)) return undefined;
-  return session.inputNew + session.inputCached + session.cacheCreated + session.output + session.reasoning;
+  if (session.inputNew === undefined || session.inputCached === undefined || session.cacheCreated === undefined || session.output === undefined) return undefined;
+  // Codex and Grok publish reasoning as output detail; adding both double-counts it.
+  const reasoning = session.provider === "codex" || session.provider === "grok" ? 0 : session.reasoning;
+  return session.inputNew + session.inputCached + session.cacheCreated + session.output + (reasoning ?? 0);
 }
 
 function completeTotal(session: SessionSummary): { value: number; source: TreatmentComparison["totalSource"] } | undefined {
@@ -147,13 +156,14 @@ function pricingSignature(session: SessionSummary): string {
 function apiEquivalentUsd(session: SessionSummary): number | undefined {
   const profile = session.pricingProfile;
   if (!profile || !session.pricingCompatible || !hasCompleteCategories(session)) return undefined;
+  if (session.inputNew === undefined || session.inputCached === undefined || session.cacheCreated === undefined || session.output === undefined) return undefined;
   const rates = profile.rates;
   const units = 1_000_000;
   return (session.inputNew * rates.inputUsdPerMillion
     + session.inputCached * rates.cachedInputUsdPerMillion
     + session.cacheCreated * rates.cacheCreationUsdPerMillion
     + session.output * rates.outputUsdPerMillion
-    + session.reasoning * (rates.reasoningUsdPerMillion ?? 0)) / units;
+    + (session.provider === "codex" || session.provider === "grok" ? 0 : (session.reasoning ?? 0) * (rates.reasoningUsdPerMillion ?? 0))) / units;
 }
 
 type QualityAssessment = Pick<TreatmentComparison, "qualityObservation" | "qualityEvidence" | "baselineCompletionRate" | "treatmentCompletionRate" | "baselineReworkRate" | "treatmentReworkRate" | "baselineAbandonmentRate" | "treatmentAbandonmentRate">;
@@ -218,8 +228,9 @@ function qualityAssessment(baseline: SessionSummary[], treatment: SessionSummary
 
 function cacheShift(baseline: SessionSummary[], treatment: SessionSummary[], baselineTotal: number, treatmentTotal: number): boolean {
   if (baselineTotal <= 0) return false;
-  const newChange = median(treatment.map((session) => session.inputNew)) - median(baseline.map((session) => session.inputNew));
-  const cacheChange = median(treatment.map((session) => session.inputCached)) - median(baseline.map((session) => session.inputCached));
+  if ([...baseline, ...treatment].some((session) => session.inputNew === undefined || session.inputCached === undefined)) return false;
+  const newChange = median(treatment.map((session) => session.inputNew!)) - median(baseline.map((session) => session.inputNew!));
+  const cacheChange = median(treatment.map((session) => session.inputCached!)) - median(baseline.map((session) => session.inputCached!));
   const totalChange = Math.abs(treatmentTotal - baselineTotal) / baselineTotal;
   const categoriesMovedInOppositeDirections = newChange * cacheChange < 0;
   const cacheMovementExplainsNewMovement = Math.abs(cacheChange) >= Math.abs(newChange) * CACHE_SHIFT_MIN_CACHE_RECOVERY;
@@ -282,7 +293,7 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const treatmentRecordedTokens = sum(treatmentTotals);
     const estimatedTokensAvoided = baselineExpectedTreatmentTokens - treatmentRecordedTokens;
     const tokenReductionPercent = baselineMedianTotal === 0 ? 0 : ((baselineMedianTotal - treatmentMedianTotal) / baselineMedianTotal) * 100;
-    const isCacheShift = cacheShift(baseline, treatment, baselineMedianTotal, treatmentMedianTotal);
+    const isCacheShift = tokenReductionPercent >= 0 && cacheShift(baseline, treatment, baselineMedianTotal, treatmentMedianTotal);
     const quality = qualityAssessment(baseline, treatment);
     const classifiedWork = taskKind !== "unknown" && taskKind !== "benchmark";
     const readiness = classifiedWork && baseline.length >= MIN_VALIDATED_SESSIONS_PER_ARM && treatment.length >= MIN_VALIDATED_SESSIONS_PER_ARM ? "ready" as const : "preliminary" as const;
@@ -298,9 +309,14 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
     const baselineExpectedUsd = baselineMedianUsd === undefined ? undefined : baselineMedianUsd * treatment.length;
     const rawEstimatedUsdAvoided = baselineExpectedUsd === undefined || treatmentRecordedUsd === undefined ? undefined : baselineExpectedUsd - treatmentRecordedUsd;
     const usdReductionPercent = baselineMedianUsd === undefined || baselineMedianUsd === 0 || !hasComparableUsd ? undefined : ((baselineMedianUsd - median(treatmentUsd)) / baselineMedianUsd) * 100;
-    const numberMedian = (sessions: SessionSummary[], key: keyof Pick<SessionSummary, "inputNew" | "inputCached" | "cacheCreated" | "output" | "reasoning">) => median(sessions.map((session) => session[key]));
+    const numberMedian = (sessions: SessionSummary[], key: keyof Pick<SessionSummary, "inputNew" | "inputCached" | "cacheCreated" | "output" | "reasoning">): number | undefined => {
+      const values = sessions.map((session) => session[key]);
+      return values.some((value) => value === undefined) ? undefined : median(values as number[]);
+    };
     const baselinePressure = baseline.map(tokenPressure);
     const treatmentPressure = treatment.map(tokenPressure);
+    const baselineMedianTokenPressure = baselinePressure.some((value) => value === undefined) ? undefined : median(baselinePressure as number[]);
+    const treatmentMedianTokenPressure = treatmentPressure.some((value) => value === undefined) ? undefined : median(treatmentPressure as number[]);
     const baselineMedianDurationSeconds = median(baseline.map((session) => session.durationSeconds));
     const treatmentMedianDurationSeconds = median(treatment.map((session) => session.durationSeconds));
     const latencyDeltaSeconds = treatmentMedianDurationSeconds - baselineMedianDurationSeconds;
@@ -317,8 +333,8 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       baselineSessions: baseline.length,
       treatmentSessions: treatment.length,
       latestTreatmentAt: latestStartedAt(treatment),
-      baselineMedianTokenPressure: median(baselinePressure),
-      treatmentMedianTokenPressure: median(treatmentPressure),
+      baselineMedianTokenPressure,
+      treatmentMedianTokenPressure,
       baselineMedianInputNew: numberMedian(baseline, "inputNew"),
       treatmentMedianInputNew: numberMedian(treatment, "inputNew"),
       baselineMedianCachedInput: numberMedian(baseline, "inputCached"),
@@ -338,7 +354,9 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
       treatmentRecordedTokens,
       estimatedTokensAvoided: isCacheShift ? undefined : estimatedTokensAvoided,
       tokenReductionPercent: isCacheShift ? undefined : tokenReductionPercent,
-      tokenPressureDeltaPercent: isCacheShift ? undefined : median(baselinePressure) === 0 ? 0 : ((median(treatmentPressure) - median(baselinePressure)) / median(baselinePressure)) * 100,
+      tokenPressureDeltaPercent: isCacheShift || baselineMedianTokenPressure === undefined || treatmentMedianTokenPressure === undefined
+        ? undefined
+        : baselineMedianTokenPressure === 0 ? 0 : ((treatmentMedianTokenPressure - baselineMedianTokenPressure) / baselineMedianTokenPressure) * 100,
       baselineIqrTokenPressure: interquartileRange(baselineTotals),
       treatmentIqrTokenPressure: interquartileRange(treatmentTotals),
       baselineMedianDurationSeconds,
@@ -358,7 +376,9 @@ export function treatmentComparisons(summaries: SessionSummary[]): TreatmentComp
         ? "new input moved into cache reads while the complete total stayed flat"
         : tokenResult === "validated-reduction"
           ? undefined
-          : quality.qualityObservation === "unknown"
+          : tokenReductionPercent < 0
+            ? "increased cache-aware token use; reduction policy rejected and requires retesting"
+            : quality.qualityObservation === "unknown"
             ? "quality observation unavailable; classify every matched session as completed, rework, or abandoned"
             : quality.qualityObservation === "degraded"
               ? "observed quality degraded; treatment outcomes are worse than baseline"
@@ -443,13 +463,20 @@ function comparisonResult(comparison: TreatmentComparison): string {
   const quality = qualityObservation(comparison) === "observed-not-degraded"
     ? "quality observed not degraded"
     : qualityObservation(comparison) === "degraded" ? "quality degraded" : "quality unverified";
+  if (comparison.tokenReductionPercent !== undefined && comparison.tokenReductionPercent < 0) {
+    return `${Math.abs(comparison.tokenReductionPercent).toFixed(1)}% increased cache-aware use — reduction policy rejected (${quality})`;
+  }
   if (comparison.tokenResult === "validated-reduction") return `${(comparison.tokenReductionPercent ?? 0).toFixed(1)}% validated cache-aware reduction (${quality})`;
   const percent = comparison.tokenReductionPercent === undefined ? "" : `${comparison.tokenReductionPercent.toFixed(1)}% `;
   return `${percent}measured cache-aware variation — preliminary, not an economy (${quality})`;
 }
 
 function categoryLine(comparison: TreatmentComparison): string {
-  if (comparison.baselineMedianInputNew === undefined || comparison.treatmentMedianInputNew === undefined || comparison.baselineMedianComparableTotal === undefined || comparison.treatmentMedianComparableTotal === undefined) return "—";
+  if (comparison.baselineMedianInputNew === undefined || comparison.treatmentMedianInputNew === undefined
+    || comparison.baselineMedianCachedInput === undefined || comparison.treatmentMedianCachedInput === undefined
+    || comparison.baselineMedianCacheCreated === undefined || comparison.treatmentMedianCacheCreated === undefined
+    || comparison.baselineMedianTokenPressure === undefined || comparison.treatmentMedianTokenPressure === undefined
+    || comparison.baselineMedianComparableTotal === undefined || comparison.treatmentMedianComparableTotal === undefined) return "—";
   return `new ${integer(comparison.baselineMedianInputNew)}→${integer(comparison.treatmentMedianInputNew)}; cached ${integer(comparison.baselineMedianCachedInput!)}→${integer(comparison.treatmentMedianCachedInput!)}; created ${integer(comparison.baselineMedianCacheCreated!)}→${integer(comparison.treatmentMedianCacheCreated!)}; pressure ${integer(comparison.baselineMedianTokenPressure!)}→${integer(comparison.treatmentMedianTokenPressure!)}; total ${integer(comparison.baselineMedianComparableTotal)}→${integer(comparison.treatmentMedianComparableTotal)}`;
 }
 
@@ -483,6 +510,7 @@ const SCOREBOARD_MISSING = "sem comparação cache-aware medida";
 
 function scoreboardPercent(value: number): string {
   const rounded = Math.round(Math.abs(value) * 10) / 10;
+  if (rounded === 0 && value !== 0) return value < 0 ? "<0,1% a mais" : "<0,1% a menos";
   const text = Number.isInteger(rounded) ? `${rounded.toFixed(0)}` : `${rounded.toFixed(1).replace(".", ",")}`;
   return value < 0 ? `${text}% a mais` : `${text}% a menos`;
 }
@@ -495,6 +523,9 @@ function providerScore(report: Report, provider: Provider): string {
   }
   if (comparison?.tokenReductionPercent !== undefined) {
     const percent = scoreboardPercent(comparison.tokenReductionPercent);
+    if (comparison.tokenReductionPercent < 0) {
+      return `política de redução reprovada — ${percent}`;
+    }
     if (comparison.tokenResult === "validated-reduction") {
       return `redução cache-aware validada — ${percent}`;
     }
@@ -523,10 +554,56 @@ function summaryProviders(report: Report): Provider[] {
  * cache-aware variation and its evidence state. Providers stay separate.
  * Rolling-window totals, USD, latency, and policy jargon stay out.
  */
-export function reportSummaryMarkdown(report: Report): string {
+export function reportComparisonSummaryMarkdown(report: Report): string {
   const providers = summaryProviders(report);
   if (providers.length === 0) return scoreboardBlock(undefined, report);
   return providers.map((provider) => scoreboardBlock(provider, report)).join("\n");
+}
+
+function cachePercent(session: SessionSummary): number | undefined {
+  if (session.provider === "kimi") return undefined;
+  const valid = (value: number | undefined): value is number => value !== undefined && Number.isSafeInteger(value) && value >= 0;
+  if (session.usageSourceCount !== 1 || !session.cacheReadComplete || !valid(session.inputCached)) return undefined;
+  const nativeCodexInput = session.provider === "codex" && (
+    session.usageSource === "codex-otlp-metrics-v2" || session.usageSource === "codex-exec-json-usage-v1"
+  );
+  let input: number | undefined;
+  if (session.inputNewComplete && valid(session.inputNew) && (nativeCodexInput || (session.cacheCreatedComplete && valid(session.cacheCreated)))) {
+    input = session.inputNew + session.inputCached + (nativeCodexInput ? 0 : session.cacheCreated!);
+  }
+  if ((session.provider === "codex" || session.provider === "grok") && session.reportedInputComplete && session.reportedTotalIncludesCachedInput
+    && valid(session.reportedTotal) && valid(session.output)) {
+    const verifiedInput = session.reportedTotal - session.output;
+    if (input !== undefined && input !== verifiedInput) return undefined;
+    input = verifiedInput;
+  }
+  if (input === undefined || !Number.isSafeInteger(input) || input <= 0 || session.inputCached > input) return undefined;
+  return session.inputCached / input * 100;
+}
+
+/** Session-only view; experiment history never substitutes for missing telemetry. */
+export function reportSummaryMarkdown(report: Report, currentRunId?: string): string {
+  const providers = summaryProviders(report);
+  const percent = (value: number) => `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value)}%`;
+  return (providers.length ? providers : [undefined]).map((provider) => {
+    const sessions = (report.sessions ?? []).filter((session) => session.provider === provider);
+    const selected = currentRunId
+      ? sessions.find((session) => session.id === currentRunId)
+      : [...sessions].sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id)).at(-1);
+    const usage = selected && report.sessionUsage?.find((session) => session.id === selected.id && session.provider === provider);
+    const value = usage && cachePercent(usage);
+    const lines = [provider ? `TokenPilot · ${providerName(provider)}` : "TokenPilot", ""];
+    if (selected) lines.push(`Session: ${selected.id} · ${selected.startedAt}`);
+    if (value === undefined) {
+      lines.push(provider === "kimi"
+        ? "Percentage unavailable — Kimi cache telemetry is not supported"
+        : "Percentage unavailable — no verified cache metrics for this session");
+    } else {
+      const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
+      lines.push(`Cache reuse: ${percent(rounded)} · Uncached input: ${percent(100 - rounded)}`);
+    }
+    return [...lines, ""].join("\n");
+  }).join("\n");
 }
 
 /** Detailed audit view. All session identifiers are opaque local UUIDs. */
@@ -600,5 +677,5 @@ export function reportDiagnosticsMarkdown(report: Report): string {
 export function renderReportMarkdown(report: Report, view: ReportView): string {
   if (view === "summary") return reportSummaryMarkdown(report);
   if (view === "diagnostics") return reportDiagnosticsMarkdown(report);
-  return reportMarkdown(report);
+  return reportSummaryMarkdown(report);
 }

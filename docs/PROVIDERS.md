@@ -16,14 +16,14 @@ TokenPilot preserves the model selected by the user. It does not maintain a priv
 
 | Provider | Correlated measurement | Current treatment | Known limitation |
 | --- | --- | --- | --- |
-| Claude Code | Metrics-only local OTLP for sessions that publish `claude_code.token.usage`. | `claude-balanced-v7`; v6 fallback on older compatible CLIs. | Provider quota can reject a model before a complete metric arrives. Full web/MCP/agent tool surfaces require `deep`, `off`, or bypass. |
-| OpenAI Codex | Metrics-only local OTLP for current interactive and `exec` sessions; older `exec` may expose only its final published total. | `codex-balanced-v3`; all native capabilities preserved, with low reasoning/verbosity, 32k body compaction, and bounded batched inspection/edit/verification phases. | A provider total and category counters are never mixed. |
-| Grok Build | External OTEL v1 for supported TTY/TUI and headless sessions; explicit JSON single-turn fallback. | `grok-balanced-v6`; minimal system prefix, bounded tool phases, low reasoning, and no subagents, memory, web, or plan mode. Headless runs expose only the terminal tool. | Older or missing counters remain unavailable. API prompt-cache keys are never assumed for the CLI. Use `deep`, `off`, or bypass for the complete native prompt, tools, web, agents, memory, or plan mode. |
-| Kimi Code CLI | No correlated measurement channel is currently enabled. | No TokenPilot treatment is injected. | Kimi runs through its original CLI and remains envelope-only pending a content-free, child-authenticated channel. |
+| Claude Code | Metrics-only local OTLP for sessions that publish `claude_code.token.usage`. | `claude-balanced-v8`; low effort and capability-preserving appended guidance when supported. | Provider quota can reject a model before a complete metric arrives. Native tool, browser, MCP and agent selections are preserved. No current paired Claude reduction is claimed. |
+| OpenAI Codex | Metrics-only local OTLP, or numeric `turn.completed.usage` extraction when the user requests `exec --json`. Plain `exec` may expose only a total with unverified cache semantics. | v18 for supported catalogue models; v23 batched guidance for Astra/6.1 on older runtimes; v25 bounded namespaces and v26 GPT-5.5 Code Mode on verified Codex 0.160.1. Other explicit models retain v3. Native capabilities are preserved. | An unambiguous native `--model`/`-m` selector is required; otherwise measurement only. Policy is selected at launch. A provider total and category counters are never mixed. Legacy snapshots can omit remote-compaction usage; complete experimental measurements use native raw-response receipts. |
+| Grok Build | External OTEL v1 for supported TTY/TUI and headless sessions; explicit JSON single-turn fallback. | `grok-balanced-v8`; low reasoning, bounded inspection and grouped verification. The native system prompt, tools, memory, web, subagents, and plan mode remain available. | Older or missing counters remain unavailable. API prompt-cache keys are never assumed for the CLI. |
+| Kimi Code CLI | Official Wire mode documents per-step numeric `StatusUpdate.token_usage` records with a `message_id`, including cached input; no collector is enabled. | No TokenPilot treatment is injected. | Installed Kimi 0.28.1 rejects `--wire`. A later Wire-capable version needs runtime verification of coverage and deduplication before measurement is enabled; current runs remain envelope-only. |
 
-## Advertised model/reasoning compatibility check
+## Historical model/reasoning compatibility check
 
-The first compatibility matrix was executed on August 15, 2026, using the models and effort levels advertised by the locally installed CLIs. These runs were classified as benchmarks and did not contribute to the observed research cohorts.
+This historical matrix is not evidence of current account access or current model performance. The first compatibility matrix was executed on August 15, 2026, using the models and effort levels advertised by the locally installed CLIs. These runs were classified as benchmarks and did not contribute to the observed research cohorts.
 
 | Provider | Advertised matrix exercised | Result |
 | --- | --- | --- |
@@ -55,6 +55,10 @@ A version string alone is insufficient. Adapter support requires:
 
 - [Claude Code monitoring and OpenTelemetry](https://code.claude.com/docs/en/monitoring-usage)
 - [Claude Code prompt caching](https://code.claude.com/docs/en/prompt-caching)
+- [OpenAI Codex JSONL event schema](https://github.com/openai/codex/blob/main/sdk/typescript/src/events.ts)
 - [OpenAI Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
 - [xAI Grok Build CLI reference](https://docs.x.ai/build/cli/reference)
 - [Kimi Code CLI command reference](https://moonshotai.github.io/kimi-cli/en/reference/kimi-command.html)
+- [Kimi Code CLI Wire mode](https://moonshotai.github.io/kimi-cli/en/customization/wire-mode.html)
+
+Local shared skill invocation and Grok Bot cloud scope are documented in [SKILLS.md](SKILLS.md). Current task-specific measured reductions are recorded separately for [OpenAI](REAL_RESULTS_2026-10-06.md) and [Grok Build](GROK_RESULTS_2026-10-06.md).

@@ -127,13 +127,13 @@ export interface AggregateRow {
   rework: number;
   abandoned: number;
   durationSeconds: number;
-  inputNew: number;
-  inputCached: number;
-  cacheCreated: number;
-  output: number;
-  reasoning: number;
-  modelCalls: number;
-  reportedTotal: number;
+  inputNew: number | null;
+  inputCached: number | null;
+  cacheCreated: number | null;
+  output: number | null;
+  reasoning: number | null;
+  modelCalls: number | null;
+  reportedTotal: number | null;
   compactions: number;
   retries: number;
 }
@@ -147,6 +147,12 @@ export interface MeasurementCoverage {
 
 export interface SessionSummary {
   id: string;
+  usageSourceCount?: number;
+  usageSource?: string;
+  cacheReadComplete?: boolean;
+  inputNewComplete?: boolean;
+  cacheCreatedComplete?: boolean;
+  reportedInputComplete?: boolean;
   /** Content-free ordering key used to select the latest measured comparison. */
   startedAt?: string;
   provider: Provider;
@@ -157,11 +163,11 @@ export interface SessionSummary {
   taskKind: TaskKind;
   outcome: TaskOutcome;
   durationSeconds: number;
-  inputNew: number;
-  inputCached: number;
-  cacheCreated: number;
-  output: number;
-  reasoning: number;
+  inputNew?: number;
+  inputCached?: number;
+  cacheCreated?: number;
+  output?: number;
+  reasoning?: number;
   reportedTotal?: number;
   reportedTotalIncludesCachedInput?: boolean;
   /** All base categories required to construct a category total are present. */

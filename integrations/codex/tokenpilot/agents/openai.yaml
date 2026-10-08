@@ -1,5 +1,5 @@
-# tokenpilot-managed-skill:v6 codex
+# tokenpilot-managed-skill:v8 codex
 interface:
   display_name: "TokenPilot"
-  short_description: "Show the latest cache-aware Codex evidence"
-  default_prompt: "Use $tokenpilot to show the latest measured cache-aware Codex result and evidence state."
+  short_description: "Show verified cache percentages for this Codex session"
+  default_prompt: "Use $tokenpilot to show this session's verified cache reuse and uncached-input percentages. Preserve unavailable states."
