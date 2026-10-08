@@ -1,0 +1,363 @@
+{
+  "date": "2026-10-06",
+  "method": "One predeclared real pair per available model; same public task and baseline. Reduction compares complete native CLI reported input-plus-output usage, including cached input. Reasoning is an output subset.",
+  "scope": "Grok Build CLI only. Does not measure parent Grok Bot consumption or establish universal savings.",
+  "models": [
+    {
+      "model": "grok-4.7",
+      "reductionPercent": 65.48639686850488,
+      "profile": "grok-balanced-v8",
+      "source": "native Grok CLI JSON usage",
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "ce735eb66c90f6dc7df7b78464de185e0538483ec553c7fc86e3a2acbc3a2ce2",
+      "originalManifestSha256": "b5b824676c01786e9bed0091c0ef82bd6e1304827ccbaa14c50e5930a80a659c",
+      "arms": {
+        "observe": {
+          "usage": {
+            "inputNew": 61997,
+            "inputCached": 553472,
+            "cacheCreated": 0,
+            "output": 27802,
+            "reasoning": 25069,
+            "reportedTotal": 643271,
+            "reportedTotalIncludesCachedInput": true,
+            "measurementBasis": "token-pressure",
+            "categoryMetricsComplete": true
+          },
+          "cliVersion": "1.0.46",
+          "optimizationApplied": false,
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true
+        },
+        "reduce": {
+          "usage": {
+            "inputNew": 36326,
+            "inputCached": 181248,
+            "cacheCreated": 0,
+            "output": 4442,
+            "reasoning": 2913,
+            "reportedTotal": 222016,
+            "reportedTotalIncludesCachedInput": true,
+            "measurementBasis": "token-pressure",
+            "categoryMetricsComplete": true
+          },
+          "cliVersion": "1.0.46",
+          "optimizationApplied": true,
+          "profile": "grok-balanced-v8",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true
+        }
+      }
+    },
+    {
+      "model": "grok-4.7-build-fast",
+      "reductionPercent": 76.50139374960149,
+      "profile": "grok-balanced-v8",
+      "source": "native Grok CLI JSON usage",
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "ce735eb66c90f6dc7df7b78464de185e0538483ec553c7fc86e3a2acbc3a2ce2",
+      "originalManifestSha256": "d29b0021905d69b4cbcc9cfd0637a4a9ae19fc259a3d187dc5e56105aa359855",
+      "arms": {
+        "observe": {
+          "usage": {
+            "inputNew": 72379,
+            "inputCached": 736128,
+            "cacheCreated": 0,
+            "output": 22704,
+            "reasoning": 20068,
+            "reportedTotal": 831211,
+            "reportedTotalIncludesCachedInput": true,
+            "measurementBasis": "token-pressure",
+            "categoryMetricsComplete": true
+          },
+          "cliVersion": "1.0.46",
+          "optimizationApplied": false,
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true
+        },
+        "reduce": {
+          "usage": {
+            "inputNew": 36833,
+            "inputCached": 153728,
+            "cacheCreated": 0,
+            "output": 4762,
+            "reasoning": 3317,
+            "reportedTotal": 195323,
+            "reportedTotalIncludesCachedInput": true,
+            "measurementBasis": "token-pressure",
+            "categoryMetricsComplete": true
+          },
+          "cliVersion": "1.0.46",
+          "optimizationApplied": true,
+          "profile": "grok-balanced-v8",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true
+        }
+      }
+    },
+    {
+      "model": "grok-4.6",
+      "reductionPercent": 57.885871767309936,
+      "profile": "grok-balanced-v8",
+      "source": "native Grok CLI JSON usage",
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "ce735eb66c90f6dc7df7b78464de185e0538483ec553c7fc86e3a2acbc3a2ce2",
+      "originalManifestSha256": "d52d67e3bedd8c416b61204767e8d57963cc2cbcca59b37fbc7525e1376212ba",
+      "arms": {
+        "observe": {
+          "usage": {
+            "inputNew": 35386,
+            "inputCached": 253696,
+            "cacheCreated": 0,
+            "output": 9547,
+            "reasoning": 7435,
+            "reportedTotal": 298629,
+            "reportedTotalIncludesCachedInput": true,
+            "measurementBasis": "token-pressure",
+            "categoryMetricsComplete": true
+          },
+          "cliVersion": "1.0.46",
+          "optimizationApplied": false,
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true
+        },
+        "reduce": {
+          "usage": {
+            "inputNew": 34797,
+            "inputCached": 89088,
+            "cacheCreated": 0,
+            "output": 1880,
+            "reasoning": 211,
+            "reportedTotal": 125765,
+            "reportedTotalIncludesCachedInput": true,
+            "measurementBasis": "token-pressure",
+            "categoryMetricsComplete": true
+          },
+          "cliVersion": "1.0.46",
+          "optimizationApplied": true,
+          "profile": "grok-balanced-v8",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true
+        }
+      }
+    },
+    {
+      "model": "grok-4.5",
+      "reductionPercent": 57.09821785811177,
+      "profile": "grok-balanced-v8",
+      "source": "native Grok CLI JSON usage",
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "ce735eb66c90f6dc7df7b78464de185e0538483ec553c7fc86e3a2acbc3a2ce2",
+      "originalManifestSha256": "dffc4b4395d69a0dd6b09879d754c583e61ee1c88732e773255164a9928c74de",
+      "arms": {
+        "observe": {
+          "usage": {
+            "inputNew": 37400,
+            "inputCached": 470400,
+            "cacheCreated": 0,
+            "output": 4561,
+            "reasoning": 1029,
+            "reportedTotal": 512361,
+            "reportedTotalIncludesCachedInput": true,
+            "measurementBasis": "token-pressure",
+            "categoryMetricsComplete": true
+          },
+          "cliVersion": "1.0.46",
+          "optimizationApplied": false,
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true
+        },
+        "reduce": {
+          "usage": {
+            "inputNew": 78230,
+            "inputCached": 137984,
+            "cacheCreated": 0,
+            "output": 3598,
+            "reasoning": 787,
+            "reportedTotal": 219812,
+            "reportedTotalIncludesCachedInput": true,
+            "measurementBasis": "token-pressure",
+            "categoryMetricsComplete": true
+          },
+          "cliVersion": "1.0.46",
+          "optimizationApplied": true,
+          "profile": "grok-balanced-v8",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true
+        }
+      }
+    }
+  ]
+}

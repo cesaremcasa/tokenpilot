@@ -2,30 +2,18 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, GROK_HEADLESS_TOOLS, GROK_TOKEN_EFFICIENCY_INSTRUCTION, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V7_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, codexModelFromArgs, mergeTreatmentArguments, planForInstalledCli, planFromHelp, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
 
 describe("version-gated balanced optimization", () => {
-  it("uses the latency-first Claude v7 policy when every flag is advertised", () => {
-    const plan = planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt> --tools <tools> --no-chrome --exclude-dynamic-system-prompt-sections");
+  it("keeps Claude's complete native capabilities in the v8 policy", () => {
+    const plan = planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt>");
     expect(plan).toMatchObject({
       applied: true,
-      profile: "claude-balanced-v7",
-      args: [
-        "--effort", "low",
-        "--tools", CLAUDE_CORE_TOOLS,
-        "--no-chrome",
-        "--exclude-dynamic-system-prompt-sections",
-        "--append-system-prompt", CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION
-      ]
+      profile: "claude-balanced-v8",
+      args: ["--effort", "low", "--append-system-prompt", expect.stringContaining("Preserve all native tools")]
     });
-  });
-
-  it("retains the measured Claude v6 policy on older compatible CLIs", () => {
-    expect(planFromHelp("claude", "balanced", "--effort <level> --append-system-prompt <prompt> --tools <tools>")).toMatchObject({
-      applied: true,
-      profile: "claude-balanced-v6",
-      args: ["--effort", "low", "--tools", CLAUDE_CORE_TOOLS, "--append-system-prompt", TOKEN_EFFICIENCY_INSTRUCTION]
-    });
+    expect(plan.args).not.toContain("--tools");
+    expect(plan.args).not.toContain("--no-chrome");
   });
 
   it("leaves Claude unchanged when the complete v6 policy is unavailable", () => {
@@ -36,46 +24,130 @@ describe("version-gated balanced optimization", () => {
     });
   });
 
-  it("preserves every Codex capability while bounding repeated execution", () => {
-    const plan = planFromHelp("codex", "balanced", "-c, --config <key=value> --profile <profile>");
-    expect(plan).toMatchObject({ applied: true, profile: "codex-balanced-v3" });
-    expect(plan.args.join(" ")).toContain("model_reasoning_effort");
-    expect(plan.args.join(" ")).toContain("model_reasoning_effort=\"low\"");
-    expect(plan.args.join(" ")).toContain("model_reasoning_summary=\"none\"");
-    expect(plan.args.join(" ")).toContain("model_auto_compact_token_limit=32000");
-    expect(plan.args.join(" ")).toContain("model_auto_compact_token_limit_scope=\"body_after_prefix\"");
-    expect(plan.args.join(" ")).toContain(CODEX_TOKEN_EFFICIENCY_INSTRUCTION);
-    for (const forbidden of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false"]) {
-      expect(plan.args.join(" ")).not.toContain(forbidden);
+  it("routes only an unambiguous explicit Codex model without reading prompt or config values", () => {
+    for (const args of [
+      ["exec", "--model", "gpt-5.5"],
+      ["exec", "--model=gpt-5.5"],
+      ["exec", "-m", "gpt-5.5"],
+      ["exec", "-m=gpt-5.5"],
+      ["--model", "gpt-5.5", "exec", "--sandbox", "workspace-write"],
+      ["exec", "--sandbox", "workspace-write", "--model", "gpt-5.5"],
+      ["exec", "--enable", "feature", "--model", "gpt-5.5"],
+      ["--model", "gpt-5.5", "exec", "task --model gpt-6-luna"]
+    ]) {
+      expect(codexModelFromArgs(args)).toBe("gpt-5.5");
     }
-    expect(plan.args.join(" ")).not.toContain("otel.log_user_prompt");
+    for (const args of [
+      ["exec", "--config", "model=\"gpt-5.5\""],
+      ["exec", "--config", "model_provider=custom", "--model", "gpt-5.5"],
+      ["exec", "--model", "gpt-5.5", "--config", "model_providers.openai.wire_api=chat"],
+      ["exec", "--profile", "fast"],
+      ["exec", "--oss", "--model", "gpt-5.5"],
+      ["exec", "--local-provider", "ollama", "--model", "gpt-5.5"],
+      ["exec", "--config", "developer_instructions=\"Use --model gpt-5.5\""],
+      ["exec", "--", "--model", "gpt-5.5"],
+      ["exec", "--provider-extension", "--model", "gpt-5.5"],
+      ["exec", "--model", "gpt-5.5", "--model", "gpt-6-luna"],
+      ["exec", "task --model gpt-5.5"],
+      ["exec", "exec", "--model", "gpt-5.5"],
+      ["exec", "--model", "gpt-6-luna", "task", "--model", "gpt-5.5"],
+      ["--config", "key=value", "exec", "--model", "gpt-5.5"]
+    ]) {
+      expect(codexModelFromArgs(args)).toBeUndefined();
+    }
+    expect(codexModelFromArgs(["exec", "--model", "gpt-6-luna"])).toBe("gpt-6-luna");
+    expect(codexModelFromArgs(["--model", "gpt-5.5", "exec", "task"])).toBe("gpt-5.5");
+    expect(codexModelFromArgs(["exec", "--config", 'model="gpt-6-luna"', "--model", "gpt-5.5"])).toBe("gpt-5.5");
+    expect(codexModelFromArgs(["exec", "--model", "gpt-5.5", "--config", 'model="gpt-6-luna"'])).toBe("gpt-5.5");
   });
 
-  it("uses only documented Grok CLI controls rather than API cache headers", () => {
-    const help = "--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>";
-    expect(planFromHelp("grok", "balanced", help)).toMatchObject({
-      profile: "grok-balanced-v6",
+  it("bounds known Codex skill descriptions while preserving capabilities and model-specific compaction", () => {
+    const help = "-c, --config <key=value> --profile <profile>";
+    for (const model of ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-daybreak-blue-latest", "gpt-5.5"]) {
+      const plan = planFromHelp("codex", "balanced", help, model);
+      expect(plan).toMatchObject({ applied: true, profile: ["gpt-6-astra", "gpt-6.1-sol"].includes(model) ? "codex-balanced-v23" : "codex-balanced-v18" });
+      expect(plan.args.join(" ")).toContain("skills.max_context_tokens=2000");
+      expect(plan.args.join(" ")).toContain('model_reasoning_effort="low"');
+      if (model === "gpt-5.5") expect(plan.args.join(" ")).not.toContain("model_auto_compact_token_limit");
+      else expect(plan.args.join(" ")).toContain("model_auto_compact_token_limit=16000");
+      for (const forbidden of ["agents.enabled=false", "memories.use_memories=false", "tools.web_search=false", "features.apps=false", "otel.log_user_prompt"]) expect(plan.args.join(" ")).not.toContain(forbidden);
+    }
+    expect(planFromHelp("codex", "balanced", help)).toMatchObject({ applied: false, args: [] });
+    expect(planFromHelp("codex", "balanced", help, "unknown-model")).toMatchObject({ applied: true, profile: "codex-balanced-v3" });
+  });
+
+  it("enables deferred tool world state only for the four models on native Codex 0.160.1", () => {
+    const help = "-c, --config <key=value> --profile <profile>";
+    const targets = ["gpt-6-astra", "gpt-6.1-sol", "gpt-5.6-terra", "gpt-5.5"];
+    for (const model of targets) {
+      const plan = planFromHelp("codex", "reduce", help, model, "0.160.1");
+      expect(plan).toMatchObject({ applied: true, profile: model === "gpt-5.5" ? "codex-balanced-v26" : "codex-balanced-v25" });
+      expect(plan.args).toContain("features.deferred_tool_world_state=true");
+      expect(plan.args).toContain("skills.max_context_tokens=2000");
+      const previous = planFromHelp("codex", "reduce", help, model);
+      expect(previous.profile).toBe(model === "gpt-6-astra" || model === "gpt-6.1-sol" ? "codex-balanced-v23" : "codex-balanced-v18");
+      expect(previous.args).not.toContain("features.deferred_tool_world_state=true");
+      expect(planFromHelp("codex", "reduce", help, model, "0.160.2").profile).toBe(previous.profile);
+    }
+    expect(planFromHelp("codex", "reduce", help, "gpt-6-sol", "0.160.1").profile).toBe("codex-balanced-v18");
+  });
+
+  it("reads a fixed native Codex version before applying v25", () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "tokenpilot-native-version-"));
+    const binary = path.join(directory, "codex");
+    fs.writeFileSync(binary, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'codex-cli 0.160.1'; exit 0; fi\necho '--config <key=value>'\nexit 0\n", { mode: 0o700 });
+    try {
+      expect(planForInstalledCli("codex", "reduce", binary, { PATH: "/usr/bin:/bin" }, undefined, "gpt-6-astra").profile).toBe("codex-balanced-v25");
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the full Code Mode surface only for GPT-5.5 on the verified native version", () => {
+    const plan = planFromHelp("codex", "reduce", "--config", "gpt-5.5", "0.160.1");
+    expect(plan.profile).toBe("codex-balanced-v26");
+    expect(plan.args).toContain("features.code_mode=true");
+    expect(plan.args).toContain("features.code_mode_only=true");
+    expect(plan.args.join(" ")).not.toContain("excluded_tool_namespaces");
+    expect(planFromHelp("codex", "reduce", "--config", "gpt-5.5", "0.155.1").args.join(" ")).not.toContain("features.code_mode");
+    expect(planFromHelp("codex", "reduce", "--config", "gpt-6-astra", "0.160.1").args.join(" ")).not.toContain("features.code_mode");
+  });
+
+  it("preserves explicit Codex reasoning and catalogue budget choices", () => {
+    const help = "-c, --config <key=value> --profile <profile>";
+    const plan = planFromHelp("codex", "balanced", help, "gpt-6-luna");
+    for (const [key, value] of [["model_reasoning_effort", '"high"'], ["skills.max_context_tokens", "8000"]]) {
+      const explicit = ["exec", "--model", "gpt-6-luna", "--config", `${key}=${value}`, "task"];
+      expect(mergeTreatmentArguments("codex", explicit, plan.args)).toMatchObject({ args: explicit, applied: false, conflicts: [`config:${key}`] });
+    }
+  });
+
+  it("uses current Grok controls while preserving the full feature surface", () => {
+    const help = "--reasoning-effort <effort> --verbatim --rules <rules> --tools <tools> --no-subagents --disable-web-search --no-plan";
+    const plan = planFromHelp("grok", "balanced", help);
+    expect(plan).toMatchObject({
+      applied: true,
+      profile: "grok-balanced-v8",
       args: [
         "--reasoning-effort", "low",
         "--verbatim",
-        "--no-subagents",
-        "--no-memory",
-        "--disable-web-search",
-        "--no-plan",
-        "--system-prompt-override", GROK_TOKEN_EFFICIENCY_INSTRUCTION
-      ],
-      headlessArgs: ["--tools", GROK_HEADLESS_TOOLS]
+        "--rules", GROK_TOKEN_EFFICIENCY_INSTRUCTION
+      ]
     });
+    for (const disabledCapability of ["--no-subagents", "--no-memory", "--disable-web-search", "--no-plan", "--tools"]) {
+      expect(plan.args).not.toContain(disabledCapability);
+    }
+    expect(plan.headlessArgs).toBeUndefined();
   });
 
-  it("leaves Grok unchanged when any complete v6 control is unavailable", () => {
-    const required = ["--reasoning-effort", "--verbatim", "--no-subagents", "--no-memory", "--disable-web-search", "--no-plan", "--system-prompt-override", "--tools"];
+  it("leaves Grok unchanged when a required v7 control is unavailable", () => {
+    const required = ["--reasoning-effort", "--verbatim", "--rules"];
     for (const missing of required) {
       const help = required.filter((flag) => flag !== missing).join(" ");
       expect(planFromHelp("grok", "balanced", help)).toMatchObject({
         applied: false,
         args: [],
-        unavailableReason: expect.stringContaining("complete token-reduction policy")
+        unavailableReason: expect.stringContaining("complete capability-preserving token-reduction policy")
       });
     }
   });
@@ -99,23 +171,23 @@ describe("version-gated balanced optimization", () => {
   });
 
   it("applies the same Grok treatment in reduce mode as in balanced mode", () => {
-    const help = "--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>";
+    const help = "--reasoning-effort <effort> --verbatim --rules <rules> --tools <tools>";
     expect(planFromHelp("grok", "reduce", help)).toEqual(planFromHelp("grok", "balanced", help));
     expect(planFromHelp("grok", "reduce", help).applied).toBe(true);
   });
 
-  it("deduplicates the exact Grok reproduction while preserving explicit argument order", () => {
-    const help = "--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>";
+  it("preserves explicit Grok feature choices under the complete-surface policy", () => {
+    const help = "--reasoning-effort <effort> --verbatim --rules <rules> --tools <tools>";
     const plan = planFromHelp("grok", "reduce", help);
     const explicit = ["--single", "Return exactly TOKENPILOT_CANARY_OK.", "--max-turns", "1", "--no-subagents", "--disable-web-search", "--no-memory", "--output-format", "json"];
     const merged = mergeTreatmentArguments("grok", explicit, [...plan.args, ...(plan.headlessArgs ?? [])]);
-    expect(merged).toMatchObject({ applied: true, deduplicated: true, conflicts: [] });
+    expect(merged).toMatchObject({ applied: true, deduplicated: false, conflicts: [] });
     const mergedArgs = merged.args;
     expect(mergedArgs.slice(-explicit.length)).toEqual(explicit);
     for (const flag of ["--no-subagents", "--disable-web-search", "--no-memory"]) {
       expect(mergedArgs.filter((argument) => argument === flag)).toHaveLength(1);
     }
-    expect(mergedArgs).toContain("--tools");
+    expect(mergedArgs).not.toContain("--tools");
   });
 
   it("lets explicit value flags win across aliases and --flag=value forms", () => {
@@ -134,7 +206,7 @@ describe("version-gated balanced optimization", () => {
     const merged = mergeTreatmentArguments("claude", explicit, plan.args);
     expect(merged.applied).toBe(false);
     expect(merged.args).toEqual(explicit);
-    expect(merged).toMatchObject({ conflicts: ["tools", "append-system-prompt"] });
+    expect(merged).toMatchObject({ conflicts: ["append-system-prompt"] });
   });
 
   it("does not mistake a prompt value that resembles a flag for an explicit boolean", () => {
@@ -157,6 +229,15 @@ describe("version-gated balanced optimization", () => {
     expect(mergeTreatmentArguments("codex", ["--provider-extension", "--config"], ["--config", "model_verbosity=low"])).toMatchObject({ applied: false });
   });
 
+  it("keeps Codex treatment active when a valueless option precedes a known option value", () => {
+    const injected = ["--config", "model_verbosity=low"];
+    const sandboxFirst = ["exec", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check", "--cd", "/tmp/repo", "--output-last-message", "/tmp/last.txt", "prompt"];
+    const skipFirst = ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--cd", "/tmp/repo", "--output-last-message", "/tmp/last.txt", "prompt"];
+
+    expect(mergeTreatmentArguments("codex", sandboxFirst, injected).applied).toBe(true);
+    expect(mergeTreatmentArguments("codex", skipFirst, injected).applied).toBe(true);
+  });
+
   it("keeps known booleans and post-delimiter positional values unambiguous", () => {
     expect(mergeTreatmentArguments("grok", ["--no-memory", "--no-subagents"], ["--no-memory", "--no-subagents"])).toMatchObject({ applied: true, deduplicated: true });
     const delimited = mergeTreatmentArguments("grok", ["--", "--no-subagents"], ["--no-subagents"]);
@@ -169,7 +250,7 @@ describe("version-gated balanced optimization", () => {
     const binary = path.join(directory, "codex");
     fs.writeFileSync(binary, "#!/bin/sh\nif [ \"$1\" = \"--help\" ]; then echo '--config'; exit 0; fi\nexit 64\n", { mode: 0o700 });
     try {
-      expect(planForInstalledCli("codex", "balanced", binary, { PATH: "/usr/bin:/bin" })).toMatchObject({
+      expect(planForInstalledCli("codex", "balanced", binary, { PATH: "/usr/bin:/bin" }, undefined, "gpt-5.5")).toMatchObject({
         applied: false,
         args: [],
         unavailableReason: expect.stringContaining("rejected the complete")

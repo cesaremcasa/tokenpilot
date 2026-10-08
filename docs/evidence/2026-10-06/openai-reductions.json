@@ -1,0 +1,1951 @@
+{
+  "date": "2026-10-06",
+  "method": "One predeclared pair per listed policy/model. Reduction = (observe input+output - reduce input+output) / observe input+output *100. Cached input included; reasoning is an output subset. All upstream numeric receipts, including compaction, are counted.",
+  "scope": "Real public Codex flag-order maintenance task; not a universal savings guarantee. Prompt revisions differ between recorded runs.",
+  "models": [
+    {
+      "model": "gpt-6-astra",
+      "reductionPercent": 19.78239657665495,
+      "nativeVersion": "codex-cli 0.160.1",
+      "source": "native rawResponse/completed",
+      "promptRevision": 2,
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "9ff22f5d7e3b3d856e1ee079886dfb24d9853403e54d8ebdd804029489e5b7ee",
+      "originalManifestSha256": "6320f65b0eee3933942c6abe37fae91001117b8f8a73bbffd426fb09f89c087c",
+      "arms": {
+        "observe": {
+          "usage": {
+            "totalTokens": 170126,
+            "inputTokens": 169065,
+            "cachedInputTokens": 137088,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1061,
+            "reasoningOutputTokens": 0
+          },
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "78a8cdf585d8e0f90182e44109c898905ba70633dcc950066726f2cbd3a28e72",
+              "usage": {
+                "totalTokens": 27196,
+                "inputTokens": 27109,
+                "cachedInputTokens": 8064,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 87,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "cbbaf559cfa1e6c8b51185747af61719da95a50a64a62184cb5fe200f16d6995",
+              "usage": {
+                "totalTokens": 27378,
+                "inputTokens": 27331,
+                "cachedInputTokens": 26880,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 47,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "c336d59a3a5eaf6486b34f2c46d56d853450d8a6d5774de1851ed17d10fa0fa8",
+              "usage": {
+                "totalTokens": 37302,
+                "inputTokens": 36757,
+                "cachedInputTokens": 27136,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 545,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "7cbfd20d7e11cfea8e2f43a63877f11f400b1b86fcea9bdc327e1b837796bd1b",
+              "usage": {
+                "totalTokens": 38853,
+                "inputTokens": 38552,
+                "cachedInputTokens": 36608,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 301,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "545c12e44e6fc0fc5812061a522a95e423ada081c2c42a8aaa788d79fe5af904",
+              "usage": {
+                "totalTokens": 39397,
+                "inputTokens": 39316,
+                "cachedInputTokens": 38400,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 81,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        },
+        "reduce": {
+          "usage": {
+            "totalTokens": 136471,
+            "inputTokens": 135387,
+            "cachedInputTokens": 116224,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1084,
+            "reasoningOutputTokens": 0
+          },
+          "profile": "codex-balanced-v25",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "d92d962b8057d2c6809f2ced7bafde03a85ff9c43331eadfd8f63ff16b239225",
+              "usage": {
+                "totalTokens": 21412,
+                "inputTokens": 21299,
+                "cachedInputTokens": 13056,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 113,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "98031970f55643ce3c9b96e1dd740681fbb0657790bba69a38b449e8be868ef5",
+              "usage": {
+                "totalTokens": 23557,
+                "inputTokens": 23475,
+                "cachedInputTokens": 21120,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 82,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "7e7feb602faa2f35b48d52c7af197e49c5a934ec1a1753c10a66a050ed6b3d4e",
+              "usage": {
+                "totalTokens": 29209,
+                "inputTokens": 28675,
+                "cachedInputTokens": 23296,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 534,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "25d83f62fe0f74262ed55448686d9cbdd55437b079a08459dfe2e212be27367a",
+              "usage": {
+                "totalTokens": 30714,
+                "inputTokens": 30449,
+                "cachedInputTokens": 28544,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 265,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "1124295ffa6f640149a9a8cd101ec1cca0676d9dd4e64e727287cf244b5ec600",
+              "usage": {
+                "totalTokens": 31579,
+                "inputTokens": 31489,
+                "cachedInputTokens": 30208,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 90,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "gpt-6-sol",
+      "reductionPercent": 61.620008983526155,
+      "nativeVersion": "codex-cli 0.160.1",
+      "source": "native rawResponse/completed",
+      "promptRevision": 1,
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "96285c25b7ce695ca9f19533e92dcafb6576335e7f1527edd8011eed680a48af",
+      "originalManifestSha256": "4c0413614e7e6b80c7b69df9ad8039c6b8e0ef1be5055016caee73ad5df8ea3d",
+      "arms": {
+        "observe": {
+          "usage": {
+            "totalTokens": 329492,
+            "inputTokens": 328235,
+            "cachedInputTokens": 300416,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1257,
+            "reasoningOutputTokens": 62
+          },
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "9f46f3ea63ea2b1a418a556e171438a896c0e0931040244b4e6bb657de505c3d",
+              "usage": {
+                "totalTokens": 26787,
+                "inputTokens": 26602,
+                "cachedInputTokens": 12672,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 185,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "e25b987cb2914e5801ba68d65d8d51da316efbebfabb8f9016a6221ffc59e8a5",
+              "usage": {
+                "totalTokens": 36234,
+                "inputTokens": 36179,
+                "cachedInputTokens": 26368,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 55,
+                "reasoningOutputTokens": 17
+              }
+            },
+            {
+              "responseIdSha256": "dc63e78588af174b71edb9567bf03166ac3eae968442c6e6df0176ac63a398ef",
+              "usage": {
+                "totalTokens": 36781,
+                "inputTokens": 36466,
+                "cachedInputTokens": 35968,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 315,
+                "reasoningOutputTokens": 38
+              }
+            },
+            {
+              "responseIdSha256": "dd194d270245768ecaba4d14a6a6c3bcd2d51444258d49cf2c8e7463eda95be3",
+              "usage": {
+                "totalTokens": 36853,
+                "inputTokens": 36805,
+                "cachedInputTokens": 36224,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 48,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "c6fc517a049959cde24b5ff648b59bdb8814496219a41e406978f6ce9328bce3",
+              "usage": {
+                "totalTokens": 38175,
+                "inputTokens": 37954,
+                "cachedInputTokens": 36608,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 221,
+                "reasoningOutputTokens": 7
+              }
+            },
+            {
+              "responseIdSha256": "80d8fdc907f78e5012d0f5a1604e3ec992542c17c46f04c9e643e15d1d799992",
+              "usage": {
+                "totalTokens": 38247,
+                "inputTokens": 38199,
+                "cachedInputTokens": 37760,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 48,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "744f84d62560937f0683b7291a857ef754ee60921fe1c6b418d9f34b68623efc",
+              "usage": {
+                "totalTokens": 38555,
+                "inputTokens": 38458,
+                "cachedInputTokens": 38016,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 97,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "8727a631b7ef6667f278b4b475461b94200cd98de3193d010f0f7f3ae64be6cb",
+              "usage": {
+                "totalTokens": 38774,
+                "inputTokens": 38728,
+                "cachedInputTokens": 38272,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 46,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "ec2a052ae8294192c04bc3003a2715d0a1db0ba730c89c75c12727067fa4c5de",
+              "usage": {
+                "totalTokens": 39086,
+                "inputTokens": 38844,
+                "cachedInputTokens": 38528,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 242,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        },
+        "reduce": {
+          "usage": {
+            "totalTokens": 126459,
+            "inputTokens": 125397,
+            "cachedInputTokens": 83072,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1062,
+            "reasoningOutputTokens": 20
+          },
+          "profile": "codex-balanced-v18",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "08082e592e9dcb79ad73c1e017de35d88a33177a9058b38afcb41ae1c0406cf9",
+              "usage": {
+                "totalTokens": 19911,
+                "inputTokens": 19796,
+                "cachedInputTokens": 7168,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 115,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "5aa1ae92a046cdd723303c3b28be873d4eeae2bb1e419440261ed71fd0bec341",
+              "usage": {
+                "totalTokens": 20628,
+                "inputTokens": 20531,
+                "cachedInputTokens": 0,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 97,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "502db68ced7166010dbac23720df989bf0c913311713cff23578866fadbadbe7",
+              "usage": {
+                "totalTokens": 27654,
+                "inputTokens": 27249,
+                "cachedInputTokens": 20352,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 405,
+                "reasoningOutputTokens": 20
+              }
+            },
+            {
+              "responseIdSha256": "4c15dcc2b1102f1ffb648c70b1594bc7e65d4bd0cb2525ac4dff6d2af7c7b40b",
+              "usage": {
+                "totalTokens": 28891,
+                "inputTokens": 28677,
+                "cachedInputTokens": 27008,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 214,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "d02ff8b766ae924fe33a5d2dea125c68112d9701344b288ee7e3d204aa938f64",
+              "usage": {
+                "totalTokens": 29375,
+                "inputTokens": 29144,
+                "cachedInputTokens": 28544,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 231,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "reductionPercent": 26.34113088404133,
+      "nativeVersion": "codex-cli 0.160.1",
+      "source": "native rawResponse/completed",
+      "promptRevision": 2,
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "f09f8ca330de0df2c91f1ee538d579d9ff5e7c16a30757178032b903169c26fd",
+      "originalManifestSha256": "27aa1eb4f9655746e3b5ef0aa051daee7bb64573a3bc73462b33c19cf8960968",
+      "arms": {
+        "observe": {
+          "usage": {
+            "totalTokens": 139360,
+            "inputTokens": 138191,
+            "cachedInputTokens": 112000,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1169,
+            "reasoningOutputTokens": 8
+          },
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "7d7894d0cb4ecd10f4b23f203af0dfcde9a2ce8daddf43974d4dd2c25c379bcc",
+              "usage": {
+                "totalTokens": 27297,
+                "inputTokens": 27164,
+                "cachedInputTokens": 13184,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 133,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "0419791eabfb1c42666a8382c3cb47fe078fd0fbbe44585d9454ad07a51987b8",
+              "usage": {
+                "totalTokens": 35652,
+                "inputTokens": 35068,
+                "cachedInputTokens": 27008,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 584,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "3b54fd1d4727d932f3befa85899356d6131bbdf56f4bae2be0e46171d3a4afad",
+              "usage": {
+                "totalTokens": 37423,
+                "inputTokens": 37058,
+                "cachedInputTokens": 34944,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 365,
+                "reasoningOutputTokens": 8
+              }
+            },
+            {
+              "responseIdSha256": "a845a27216cb010ffdad7f173915b058615dd77c82ac5ccc089c921c7d1c5c5a",
+              "usage": {
+                "totalTokens": 38988,
+                "inputTokens": 38901,
+                "cachedInputTokens": 36864,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 87,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        },
+        "reduce": {
+          "usage": {
+            "totalTokens": 102651,
+            "inputTokens": 101728,
+            "cachedInputTokens": 84736,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 923,
+            "reasoningOutputTokens": 0
+          },
+          "profile": "codex-balanced-v25",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "6957d59950a4892d13b49788d42ed9368b494330d2ad621cbb00fee645d06c9c",
+              "usage": {
+                "totalTokens": 21035,
+                "inputTokens": 20923,
+                "cachedInputTokens": 13184,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 112,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "7af86ee4fb3ac18ab9c64e47d82a8967d03f7bbb40b0a62bb90cba0adbc9a54c",
+              "usage": {
+                "totalTokens": 23935,
+                "inputTokens": 23847,
+                "cachedInputTokens": 20736,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 88,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "214b1a039fc583c0d4a1ada361ea6433958c6550f6ad599e96aed0a581947674",
+              "usage": {
+                "totalTokens": 27957,
+                "inputTokens": 27336,
+                "cachedInputTokens": 23680,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 621,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "679c36d53e310af02d224cdc1722e82d84ad8a00bbbd45c3b22686841c9869f0",
+              "usage": {
+                "totalTokens": 29724,
+                "inputTokens": 29622,
+                "cachedInputTokens": 27136,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 102,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "gpt-daybreak-blue-latest",
+      "reductionPercent": 62.239251679768124,
+      "nativeVersion": "codex-cli 0.160.1",
+      "source": "native rawResponse/completed",
+      "promptRevision": 1,
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "886b4955338a8b3ee93d3fa353afe953a95b3318341341cc684d02a4d72773b7",
+      "originalManifestSha256": "f6f6225db196391e569e08d1beb5e02830c6f1df56d1e305cb07e92d496e78ff",
+      "arms": {
+        "observe": {
+          "usage": {
+            "totalTokens": 273252,
+            "inputTokens": 271160,
+            "cachedInputTokens": 242688,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 2092,
+            "reasoningOutputTokens": 245
+          },
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "bfbe6eb39dac8dab8831f762be6959df3648e3d20f7a54e028cfb293d371d2ab",
+              "usage": {
+                "totalTokens": 23114,
+                "inputTokens": 22914,
+                "cachedInputTokens": 6784,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 200,
+                "reasoningOutputTokens": 15
+              }
+            },
+            {
+              "responseIdSha256": "fc27e9a92b8c06c1dd73ce47aad734725d7209f5c5fbe4e48c22ea10fe5918b2",
+              "usage": {
+                "totalTokens": 23540,
+                "inputTokens": 23390,
+                "cachedInputTokens": 22784,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 150,
+                "reasoningOutputTokens": 8
+              }
+            },
+            {
+              "responseIdSha256": "74bab3f3c5ef58f59c1366ae2b31097599ce1cc72a28ff3f7b3f08d8de81b24a",
+              "usage": {
+                "totalTokens": 30795,
+                "inputTokens": 30209,
+                "cachedInputTokens": 23168,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 586,
+                "reasoningOutputTokens": 94
+              }
+            },
+            {
+              "responseIdSha256": "489163350de32efe8404fecf4657c2e91a335121fdd8e53beff44fa8ae546969",
+              "usage": {
+                "totalTokens": 30975,
+                "inputTokens": 30819,
+                "cachedInputTokens": 30080,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 156,
+                "reasoningOutputTokens": 16
+              }
+            },
+            {
+              "responseIdSha256": "96be05af661df99bbc6f97347304660b393a534d692539f1f67cdbb79c9bdc49",
+              "usage": {
+                "totalTokens": 32266,
+                "inputTokens": 31968,
+                "cachedInputTokens": 30592,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 298,
+                "reasoningOutputTokens": 8
+              }
+            },
+            {
+              "responseIdSha256": "8cc983b9c4906412f7ee5b2566b374046c584a17369dc129f44805b81de5ec5c",
+              "usage": {
+                "totalTokens": 32531,
+                "inputTokens": 32290,
+                "cachedInputTokens": 31744,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 241,
+                "reasoningOutputTokens": 73
+              }
+            },
+            {
+              "responseIdSha256": "3ba177866fb670e20b99cd3e74976c1a61d4b747aa1fd428872c6e38f324e604",
+              "usage": {
+                "totalTokens": 32943,
+                "inputTokens": 32700,
+                "cachedInputTokens": 32128,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 243,
+                "reasoningOutputTokens": 14
+              }
+            },
+            {
+              "responseIdSha256": "d3a6c1cca7288ca34f7fea152e53d7140bdf7d1c02fcfdfd2c123a90426502b3",
+              "usage": {
+                "totalTokens": 33165,
+                "inputTokens": 33029,
+                "cachedInputTokens": 32512,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 136,
+                "reasoningOutputTokens": 17
+              }
+            },
+            {
+              "responseIdSha256": "e62cb68e9ece6a94102dda315e54af00149c4bbbcd723e082e3cbbcd0519d297",
+              "usage": {
+                "totalTokens": 33923,
+                "inputTokens": 33841,
+                "cachedInputTokens": 32896,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 82,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        },
+        "reduce": {
+          "usage": {
+            "totalTokens": 103182,
+            "inputTokens": 101688,
+            "cachedInputTokens": 78976,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1494,
+            "reasoningOutputTokens": 93
+          },
+          "profile": "codex-balanced-v18",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "87cafb07441b98288cf24ec5218a13f12f60d036298dcd594abfacd2cfc6d351",
+              "usage": {
+                "totalTokens": 19575,
+                "inputTokens": 19366,
+                "cachedInputTokens": 6784,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 209,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "c680cb5a5f559bb8cd23b92219be69814b91ab13beeb231909b2d31cc7112a28",
+              "usage": {
+                "totalTokens": 26468,
+                "inputTokens": 25807,
+                "cachedInputTokens": 19200,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 661,
+                "reasoningOutputTokens": 66
+              }
+            },
+            {
+              "responseIdSha256": "bb3956c13508f1f2203c1b88279bbca96b59c4fb4bfdabb6b0fa4725e82c8b8d",
+              "usage": {
+                "totalTokens": 28076,
+                "inputTokens": 27524,
+                "cachedInputTokens": 25600,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 552,
+                "reasoningOutputTokens": 27
+              }
+            },
+            {
+              "responseIdSha256": "ab2347adc0eac2ff082210fd4a45b0aa064509441484a6e62a1e0022f076a29c",
+              "usage": {
+                "totalTokens": 29063,
+                "inputTokens": 28991,
+                "cachedInputTokens": 27392,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 72,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "gpt-5.6-terra",
+      "reductionPercent": 24.141987791280027,
+      "nativeVersion": "codex-cli 0.160.1",
+      "source": "native rawResponse/completed",
+      "promptRevision": 2,
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "f09f8ca330de0df2c91f1ee538d579d9ff5e7c16a30757178032b903169c26fd",
+      "originalManifestSha256": "7b2358f5b6d57fdf96caf82012e2ea49c878004026d27ee30146263cc0173c3d",
+      "arms": {
+        "observe": {
+          "usage": {
+            "totalTokens": 211652,
+            "inputTokens": 209567,
+            "cachedInputTokens": 178432,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 2085,
+            "reasoningOutputTokens": 264
+          },
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "8a2fb48bbf1980d4435c2f67cc492584905eb7313c95a12768eb24e803517f49",
+              "usage": {
+                "totalTokens": 23199,
+                "inputTokens": 22999,
+                "cachedInputTokens": 6912,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 200,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "f3305b535cccc9f3c9f790a342dacf792c53e96f6ae2e71ecbc09a5fd069bd5e",
+              "usage": {
+                "totalTokens": 23505,
+                "inputTokens": 23302,
+                "cachedInputTokens": 22272,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 203,
+                "reasoningOutputTokens": 45
+              }
+            },
+            {
+              "responseIdSha256": "d532abde498ab22afcc98e2b4493c3ca7a5b2198812f98defcd4fe5868feb95c",
+              "usage": {
+                "totalTokens": 30778,
+                "inputTokens": 30632,
+                "cachedInputTokens": 22272,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 146,
+                "reasoningOutputTokens": 10
+              }
+            },
+            {
+              "responseIdSha256": "8a58ab35e9e1506a1d0ff61b53b9e1aa9e65606ede93bae525b1693428f80d3f",
+              "usage": {
+                "totalTokens": 32987,
+                "inputTokens": 31867,
+                "cachedInputTokens": 30464,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 1120,
+                "reasoningOutputTokens": 187
+              }
+            },
+            {
+              "responseIdSha256": "d35c794e35b573cf8f01b09cf6da10855ac6531a306fa5230e9748bc1b5b0e08",
+              "usage": {
+                "totalTokens": 33142,
+                "inputTokens": 33011,
+                "cachedInputTokens": 31488,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 131,
+                "reasoningOutputTokens": 10
+              }
+            },
+            {
+              "responseIdSha256": "261c3f76b1a40b60d3cbe6ab3214edf1724cd9835d0c5384f62c91a576f2ab50",
+              "usage": {
+                "totalTokens": 33577,
+                "inputTokens": 33393,
+                "cachedInputTokens": 32512,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 184,
+                "reasoningOutputTokens": 12
+              }
+            },
+            {
+              "responseIdSha256": "cdcbd0c1b21994a38b688dd7488c0bb28b6265262b100656a03720ddb6c876b2",
+              "usage": {
+                "totalTokens": 34464,
+                "inputTokens": 34363,
+                "cachedInputTokens": 32512,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 101,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        },
+        "reduce": {
+          "usage": {
+            "totalTokens": 160555,
+            "inputTokens": 158156,
+            "cachedInputTokens": 131584,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 2399,
+            "reasoningOutputTokens": 813
+          },
+          "profile": "codex-balanced-v25",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "b30f83697021ea1966330357d3cfd127a5eae2fcc5e84bdab2d5183b0712dd51",
+              "usage": {
+                "totalTokens": 20588,
+                "inputTokens": 20391,
+                "cachedInputTokens": 7936,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 197,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "b021da49aa9acb50ae27de69356d79fc3c3bdb6a06a8b3a704920a63c7d90ffb",
+              "usage": {
+                "totalTokens": 23226,
+                "inputTokens": 23057,
+                "cachedInputTokens": 20224,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 169,
+                "reasoningOutputTokens": 9
+              }
+            },
+            {
+              "responseIdSha256": "41494a99e6df4269d893b312b4fc8efe1b33a2a43a0422f0389c6e820777aa8e",
+              "usage": {
+                "totalTokens": 26215,
+                "inputTokens": 26059,
+                "cachedInputTokens": 22272,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 156,
+                "reasoningOutputTokens": 11
+              }
+            },
+            {
+              "responseIdSha256": "9961b22bf505bec5536b45ab5aaf1ab81fa6dabb21de937c49b55731c5e4543e",
+              "usage": {
+                "totalTokens": 29482,
+                "inputTokens": 28280,
+                "cachedInputTokens": 25344,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 1202,
+                "reasoningOutputTokens": 372
+              }
+            },
+            {
+              "responseIdSha256": "1d461598ee7465b2162d3daafba50f5dbd9a98f0160d4bce4358587eab274a06",
+              "usage": {
+                "totalTokens": 29765,
+                "inputTokens": 29506,
+                "cachedInputTokens": 27392,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 259,
+                "reasoningOutputTokens": 122
+              }
+            },
+            {
+              "responseIdSha256": "99a89f5c20e556e7a4b63335084bd41a6d5032d16bff0f72194a8bd0ded30714",
+              "usage": {
+                "totalTokens": 31279,
+                "inputTokens": 30863,
+                "cachedInputTokens": 28416,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 416,
+                "reasoningOutputTokens": 299
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "reductionPercent": 48.17415660338804,
+      "nativeVersion": "codex-cli 0.160.1",
+      "source": "native rawResponse/completed",
+      "promptRevision": 1,
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "886b4955338a8b3ee93d3fa353afe953a95b3318341341cc684d02a4d72773b7",
+      "originalManifestSha256": "cd6b91955426888d71864d516984cb5efcd1af3f039419f59c6f859738f41c6b",
+      "arms": {
+        "observe": {
+          "usage": {
+            "totalTokens": 200647,
+            "inputTokens": 199098,
+            "cachedInputTokens": 174080,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1549,
+            "reasoningOutputTokens": 151
+          },
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "3df2c0037074726219009a351613d726cf03c3557474c14aba4f73efb9223ffe",
+              "usage": {
+                "totalTokens": 26364,
+                "inputTokens": 26181,
+                "cachedInputTokens": 12160,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 183,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "80724fa12360e939d1e606f880d7c6d02e26499ae4b8142a345c912827c27fdf",
+              "usage": {
+                "totalTokens": 33625,
+                "inputTokens": 33033,
+                "cachedInputTokens": 25984,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 592,
+                "reasoningOutputTokens": 91
+              }
+            },
+            {
+              "responseIdSha256": "07ab9a25b1358b69da22c5db65425b1a63bc1f13342b3e0d2712f7a962063726",
+              "usage": {
+                "totalTokens": 33760,
+                "inputTokens": 33649,
+                "cachedInputTokens": 32896,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 111,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "b29fa4e33d37123f5e8eb971fbed183967175ef1a7ed71b497ff64ac8af986ef",
+              "usage": {
+                "totalTokens": 35168,
+                "inputTokens": 34789,
+                "cachedInputTokens": 33408,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 379,
+                "reasoningOutputTokens": 23
+              }
+            },
+            {
+              "responseIdSha256": "173c9c07b9118f54ccf2ff31ce48c80fb7c66c98da85ac042c60786907668918",
+              "usage": {
+                "totalTokens": 35334,
+                "inputTokens": 35192,
+                "cachedInputTokens": 34560,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 142,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "2fb1d02f7bb3192b19ee51a71c32b2296bb00cdd685ac5d29ceeeffff6393582",
+              "usage": {
+                "totalTokens": 36396,
+                "inputTokens": 36254,
+                "cachedInputTokens": 35072,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 142,
+                "reasoningOutputTokens": 37
+              }
+            }
+          ]
+        },
+        "reduce": {
+          "usage": {
+            "totalTokens": 103987,
+            "inputTokens": 102430,
+            "cachedInputTokens": 84864,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1557,
+            "reasoningOutputTokens": 171
+          },
+          "profile": "codex-balanced-v18",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "16ef9e3a3fcd41f231eee7a711a1d736d8b74c6039d20fb390f123ee9a68b859",
+              "usage": {
+                "totalTokens": 19590,
+                "inputTokens": 19375,
+                "cachedInputTokens": 12160,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 215,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "3ec52fd9a7d9ed9b8d5a843873ee0342d266571a81eda3401f5bd7e2f37d012e",
+              "usage": {
+                "totalTokens": 26716,
+                "inputTokens": 25983,
+                "cachedInputTokens": 19200,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 733,
+                "reasoningOutputTokens": 93
+              }
+            },
+            {
+              "responseIdSha256": "2e00b9ff4c0170c88c18374f53403d659c70c38828a9a02277704f681ae9bc8e",
+              "usage": {
+                "totalTokens": 28291,
+                "inputTokens": 27778,
+                "cachedInputTokens": 25856,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 513,
+                "reasoningOutputTokens": 78
+              }
+            },
+            {
+              "responseIdSha256": "0aa130e97447badea5289fda5ee7ab4e4f8298302b3fb70cc34a05e13737c298",
+              "usage": {
+                "totalTokens": 29390,
+                "inputTokens": 29294,
+                "cachedInputTokens": 27648,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 96,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reductionPercent": 54.28867865882755,
+      "nativeVersion": "codex-cli 0.160.1",
+      "source": "native rawResponse/completed",
+      "promptRevision": 1,
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "886b4955338a8b3ee93d3fa353afe953a95b3318341341cc684d02a4d72773b7",
+      "originalManifestSha256": "90f8f45c4f27e63536d9611e9485adffbdf46c0d5f2e1451657450a48d7391c5",
+      "arms": {
+        "observe": {
+          "usage": {
+            "totalTokens": 228427,
+            "inputTokens": 226423,
+            "cachedInputTokens": 199936,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 2004,
+            "reasoningOutputTokens": 235
+          },
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "71841a67004354d2eafe41866ceac9c1d344ba1b86385f60640b1c2f62230314",
+              "usage": {
+                "totalTokens": 24905,
+                "inputTokens": 24648,
+                "cachedInputTokens": 11008,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 257,
+                "reasoningOutputTokens": 18
+              }
+            },
+            {
+              "responseIdSha256": "3b0c753721312964641031f31e583c7df5ef00e8f1a33299c790c958e42fdd04",
+              "usage": {
+                "totalTokens": 31879,
+                "inputTokens": 31654,
+                "cachedInputTokens": 24320,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 225,
+                "reasoningOutputTokens": 93
+              }
+            },
+            {
+              "responseIdSha256": "61fb8aef8e79a2982c7b6d6d932bdadae09d191b6a3e3f5fb1bcebc3d1e0841a",
+              "usage": {
+                "totalTokens": 33661,
+                "inputTokens": 32794,
+                "cachedInputTokens": 31488,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 867,
+                "reasoningOutputTokens": 71
+              }
+            },
+            {
+              "responseIdSha256": "f28cbd6c22669fef80b71894b4aad5476b34e7b423fbc3c887ff0fc326a9e003",
+              "usage": {
+                "totalTokens": 33820,
+                "inputTokens": 33685,
+                "cachedInputTokens": 32512,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 135,
+                "reasoningOutputTokens": 22
+              }
+            },
+            {
+              "responseIdSha256": "2a9d69194be8faee7e5f51aeb7617d643495aeec0aebf47c9c415ecfbeadd430",
+              "usage": {
+                "totalTokens": 34281,
+                "inputTokens": 34018,
+                "cachedInputTokens": 33536,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 263,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "783ea55159b93b2916e1d5fff0eb73f0e1eb55a5852c90bc879523dfb72eb39d",
+              "usage": {
+                "totalTokens": 34475,
+                "inputTokens": 34357,
+                "cachedInputTokens": 33536,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 118,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "71559858f04056b28f16c6b60b6047ee4dee6a8193ea6637a3a877bf0186f6e7",
+              "usage": {
+                "totalTokens": 35406,
+                "inputTokens": 35267,
+                "cachedInputTokens": 33536,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 139,
+                "reasoningOutputTokens": 31
+              }
+            }
+          ]
+        },
+        "reduce": {
+          "usage": {
+            "totalTokens": 104417,
+            "inputTokens": 102475,
+            "cachedInputTokens": 79872,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1942,
+            "reasoningOutputTokens": 341
+          },
+          "profile": "codex-balanced-v18",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "73c5b744f4ab4e6375362725bfa012334934c11319f1a9d20a4a88e03eefb65f",
+              "usage": {
+                "totalTokens": 18204,
+                "inputTokens": 17842,
+                "cachedInputTokens": 11008,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 362,
+                "reasoningOutputTokens": 30
+              }
+            },
+            {
+              "responseIdSha256": "54ed7a5470c809ee7560223df762c895b2e10cd60ff2804af1da7f9057a765f8",
+              "usage": {
+                "totalTokens": 24061,
+                "inputTokens": 23797,
+                "cachedInputTokens": 17152,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 264,
+                "reasoningOutputTokens": 14
+              }
+            },
+            {
+              "responseIdSha256": "01b37500383a2d0f8071d9b2bcc1b2ad19fbcba75e59a12ec814e38e71767097",
+              "usage": {
+                "totalTokens": 30504,
+                "inputTokens": 29350,
+                "cachedInputTokens": 23296,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 1154,
+                "reasoningOutputTokens": 226
+              }
+            },
+            {
+              "responseIdSha256": "5c90b9225782823200a7f04e30538cb37beeced86544eb320e1cb8feff9f62cc",
+              "usage": {
+                "totalTokens": 31648,
+                "inputTokens": 31486,
+                "cachedInputTokens": 28416,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 162,
+                "reasoningOutputTokens": 71
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "gpt-6-luna",
+      "reductionPercent": 47.6265701083323,
+      "nativeVersion": "codex-cli 0.160.1",
+      "source": "native rawResponse/completed",
+      "promptRevision": 2,
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "886b4955338a8b3ee93d3fa353afe953a95b3318341341cc684d02a4d72773b7",
+      "originalManifestSha256": "68a03862901bbe7db59157ca5e1799a4d0d0f9ef34fff75cad80331685ffd67b",
+      "arms": {
+        "observe": {
+          "usage": {
+            "totalTokens": 338034,
+            "inputTokens": 335819,
+            "cachedInputTokens": 300544,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 2215,
+            "reasoningOutputTokens": 0
+          },
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "8df0506660ee05e61ddcfb325ffb44901ff078b49b20bda41cffd1140797e264",
+              "usage": {
+                "totalTokens": 26671,
+                "inputTokens": 26472,
+                "cachedInputTokens": 7936,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 199,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "41f9c2a77bb0ea07208e4f519806bf6155b248bc9ae1ae456f0d077399531f2a",
+              "usage": {
+                "totalTokens": 26931,
+                "inputTokens": 26777,
+                "cachedInputTokens": 25344,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 154,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "862aa90d81ae6833ca94e2b84d0115e0840906c0dff751f51ee7b0327289363d",
+              "usage": {
+                "totalTokens": 34081,
+                "inputTokens": 33890,
+                "cachedInputTokens": 26368,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 191,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "55ce84b063855a453b2479507bfbae75ed758ec99f4b4f8a31d512fca0567a39",
+              "usage": {
+                "totalTokens": 34589,
+                "inputTokens": 34356,
+                "cachedInputTokens": 33536,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 233,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "89097ff15867736732c3a2f4d9eade68781efc29135d1935e91c0ce9600ade23",
+              "usage": {
+                "totalTokens": 35259,
+                "inputTokens": 34613,
+                "cachedInputTokens": 33536,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 646,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "5cfdd3faaddf5dbbc5d90baf0f00d2ce9e797e539b83ca16b020704f4f6d6919",
+              "usage": {
+                "totalTokens": 35446,
+                "inputTokens": 35283,
+                "cachedInputTokens": 33536,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 163,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "84ff3eedf497ec46de9efb4c2514fb91ac3be803be8fd43d6f19189ac53f3f2e",
+              "usage": {
+                "totalTokens": 35734,
+                "inputTokens": 35620,
+                "cachedInputTokens": 34560,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 114,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "950f0d036d9292d5648bd035bc15bfd4059db595cbcbf823323a80545437f6e5",
+              "usage": {
+                "totalTokens": 35903,
+                "inputTokens": 35789,
+                "cachedInputTokens": 34560,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 114,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "627b58c2fa0184c57be30df9c07a5eaaf2f89872bf97ea70dddffed016c84513",
+              "usage": {
+                "totalTokens": 36102,
+                "inputTokens": 35955,
+                "cachedInputTokens": 35584,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 147,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "e4123e9896ac6adbbb5c948d4d41f723ba3ae3705a042b9492d32fd7f789ba1a",
+              "usage": {
+                "totalTokens": 37318,
+                "inputTokens": 37064,
+                "cachedInputTokens": 35584,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 254,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        },
+        "reduce": {
+          "usage": {
+            "totalTokens": 177040,
+            "inputTokens": 175987,
+            "cachedInputTokens": 156928,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1053,
+            "reasoningOutputTokens": 0
+          },
+          "profile": "codex-balanced-v18",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "ca5991247b4333d27fbad39a13646f9f3ca90f2f552d203523cc8dfd76640af5",
+              "usage": {
+                "totalTokens": 19722,
+                "inputTokens": 19620,
+                "cachedInputTokens": 12032,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 102,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "b36c7916e2447b1cb72074d68eed029686f535d9782a0059b3f95df2a0e33d98",
+              "usage": {
+                "totalTokens": 20028,
+                "inputTokens": 19964,
+                "cachedInputTokens": 19200,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 64,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "4218397aa4dd9046b6bb98ae5344d76e80f429070ac0f66fcbfe795a46a4ed3a",
+              "usage": {
+                "totalTokens": 26798,
+                "inputTokens": 26697,
+                "cachedInputTokens": 19200,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 101,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "c9656e945a32c948535708245ee0e239ce32dd80720193e2a12a248137b018c6",
+              "usage": {
+                "totalTokens": 27168,
+                "inputTokens": 26944,
+                "cachedInputTokens": 26368,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 224,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "799e5623e5da5376a3b7751ef3672cbad24f4ceb22591d3b550759f5a2727b2c",
+              "usage": {
+                "totalTokens": 27615,
+                "inputTokens": 27192,
+                "cachedInputTokens": 26368,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 423,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "c11b640d6547fd9e0a8f6919c1573fbcadc3602164371eeae8b532ed875e8dd6",
+              "usage": {
+                "totalTokens": 27704,
+                "inputTokens": 27639,
+                "cachedInputTokens": 26368,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 65,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "c34d1281c6f282d179765bf26e1ec2189435d9d5e61628a9a234843328287791",
+              "usage": {
+                "totalTokens": 28005,
+                "inputTokens": 27931,
+                "cachedInputTokens": 27392,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 74,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "gpt-5.5",
+      "reductionPercent": 54.330855351545004,
+      "nativeVersion": "codex-cli 0.160.1",
+      "source": "native rawResponse/completed",
+      "promptRevision": 2,
+      "baselineCommit": "dfd4bcb06093f0644ef7002eee8616ac10d09830",
+      "treatmentArtifactSha256": "f09f8ca330de0df2c91f1ee538d579d9ff5e7c16a30757178032b903169c26fd",
+      "originalManifestSha256": "66c42890b41f840f09d05d5188bc7082ea53a7bc651d074b3a40f5799c882888",
+      "arms": {
+        "observe": {
+          "usage": {
+            "totalTokens": 279125,
+            "inputTokens": 276354,
+            "cachedInputTokens": 231040,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 2771,
+            "reasoningOutputTokens": 8
+          },
+          "profile": null,
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "00cd5fb0fd5761574f7b0e2f7f61fc92a4f0295161eac96c6d952e0a30e7beb7",
+              "usage": {
+                "totalTokens": 23789,
+                "inputTokens": 23424,
+                "cachedInputTokens": 4480,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 365,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "5aad8e020aac28f732714e1804db4a913fc0b6840b79d518240dcd5c5191d860",
+              "usage": {
+                "totalTokens": 30339,
+                "inputTokens": 29913,
+                "cachedInputTokens": 22912,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 426,
+                "reasoningOutputTokens": 8
+              }
+            },
+            {
+              "responseIdSha256": "8f2fb29a57f5bf17ca4f54bcc4207163132c97938c77ffd2b586aa1202fff76f",
+              "usage": {
+                "totalTokens": 43684,
+                "inputTokens": 42654,
+                "cachedInputTokens": 29056,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 1030,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "cece7bfa39f854a9983b02d3598ab82806984a76c0c6fdf70d7eeead5e4cc76c",
+              "usage": {
+                "totalTokens": 44086,
+                "inputTokens": 43844,
+                "cachedInputTokens": 42368,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 242,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "60641b3507ba291f08453f7ec7d114b0aafac29be47bd76faf7102d06ed6c6fc",
+              "usage": {
+                "totalTokens": 45071,
+                "inputTokens": 44838,
+                "cachedInputTokens": 43392,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 233,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "b62e6f5b0fa40d975ab59b5eb222f5609fbd2b98d3efc41e0fabb60423a46672",
+              "usage": {
+                "totalTokens": 45455,
+                "inputTokens": 45212,
+                "cachedInputTokens": 44416,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 243,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "d00931d6bc11d2aba306c002f6a8e35954bfa431376d6a082c99dd1c2c54ba8e",
+              "usage": {
+                "totalTokens": 46701,
+                "inputTokens": 46469,
+                "cachedInputTokens": 44416,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 232,
+                "reasoningOutputTokens": 0
+              }
+            }
+          ]
+        },
+        "reduce": {
+          "usage": {
+            "totalTokens": 127474,
+            "inputTokens": 125464,
+            "cachedInputTokens": 93056,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 2010,
+            "reasoningOutputTokens": 148
+          },
+          "profile": "codex-balanced-v26",
+          "qualityChecks": {
+            "diff": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "focused": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "typecheck": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "build": {
+              "pass": true,
+              "exitCode": 0
+            },
+            "behavior": {
+              "pass": true,
+              "exitCode": 0
+            }
+          },
+          "scopeValid": true,
+          "receipts": [
+            {
+              "responseIdSha256": "c1d3c8cb01fa72a1eefadaba3da9f092b3ec2e3c2797885befced93d560d0508",
+              "usage": {
+                "totalTokens": 20612,
+                "inputTokens": 20499,
+                "cachedInputTokens": 1408,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 113,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "eab9f026c23fe0698a602132696588d57ccd079fdc2e90594ece3033e6ee2e57",
+              "usage": {
+                "totalTokens": 20991,
+                "inputTokens": 20671,
+                "cachedInputTokens": 19840,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 320,
+                "reasoningOutputTokens": 11
+              }
+            },
+            {
+              "responseIdSha256": "86ce473b877d11fb9b0ecb02c74f76415dae2ec6b9fd1a971cd4a79a2ced2ff8",
+              "usage": {
+                "totalTokens": 22256,
+                "inputTokens": 21922,
+                "cachedInputTokens": 19840,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 334,
+                "reasoningOutputTokens": 0
+              }
+            },
+            {
+              "responseIdSha256": "59bf35911cfa4d7e4b210d886aff3cede5943a9d8b26877c92e5f16f19c783ac",
+              "usage": {
+                "totalTokens": 31090,
+                "inputTokens": 30174,
+                "cachedInputTokens": 21888,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 916,
+                "reasoningOutputTokens": 40
+              }
+            },
+            {
+              "responseIdSha256": "2fd9fd686e23301283b8fd976939a229ea1137faf8c6f15b33a9e82c1b6c0615",
+              "usage": {
+                "totalTokens": 32525,
+                "inputTokens": 32198,
+                "cachedInputTokens": 30080,
+                "cacheWriteInputTokens": 0,
+                "outputTokens": 327,
+                "reasoningOutputTokens": 97
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

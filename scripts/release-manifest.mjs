@@ -9,6 +9,7 @@ export const INTEGRATION_FILES = [
   "integrations/codex/tokenpilot/SKILL.md",
   "integrations/codex/tokenpilot/agents/openai.yaml",
   "integrations/grok/tokenpilot/SKILL.md",
+  "integrations/grok-bot/tokenpilot/SKILL.md",
   "integrations/kimi/tokenpilot/SKILL.md"
 ];
 

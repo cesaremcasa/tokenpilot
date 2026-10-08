@@ -5,8 +5,8 @@ import { collectPendingRuns } from "../src/collector.js";
 import { TelemetryDatabase } from "../src/database.js";
 import { ensureConfig, writeConfig } from "../src/config.js";
 import { runProvider } from "../src/launcher.js";
-import { CLAUDE_CORE_TOOLS, CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
-import { buildReport, reportMarkdown } from "../src/report.js";
+import { CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION, CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION, GROK_TOKEN_EFFICIENCY_INSTRUCTION, TOKEN_EFFICIENCY_INSTRUCTION } from "../src/optimization.js";
+import { buildReport, reportMarkdown, reportSummaryMarkdown } from "../src/report.js";
 import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
 describe("local launcher and collector", () => {
@@ -20,11 +20,33 @@ describe("local launcher and collector", () => {
     }
   }
 
-  function writeFakeCodex(paths: ReturnType<typeof temporaryPaths>, contents: string): string {
+  function writeFakeCodex(
+    paths: ReturnType<typeof temporaryPaths>,
+    contents: string,
+    appServer: { skills?: Array<{ name: string; path: string; enabled: boolean }>; errors?: string[]; observedCwdFile?: string } = {}
+  ): string {
     const originalBin = path.join(paths.userHome, "original-bin");
     const original = path.join(originalBin, "codex");
+    const provider = path.join(originalBin, "codex-original");
+    const server = path.join(originalBin, "codex-app-server.cjs");
     fs.mkdirSync(originalBin, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(original, contents, { mode: 0o700 });
+    fs.writeFileSync(provider, contents, { mode: 0o700 });
+    fs.writeFileSync(server, `const fs = require("node:fs");
+const readline = require("node:readline");
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const request = JSON.parse(line);
+  if (request.id === 1) process.stdout.write(JSON.stringify({ id: 1, result: { protocolVersion: "2025-03-26" } }) + "\\n");
+  if (request.method === "skills/list") {
+    ${appServer.observedCwdFile ? `fs.writeFileSync(${JSON.stringify(appServer.observedCwdFile)}, JSON.stringify({ processCwd: process.cwd(), cwds: request.params.cwds }));` : ""}
+    process.stdout.write(JSON.stringify({ id: request.id, result: { data: [{ errors: ${JSON.stringify(appServer.errors ?? [])}, skills: ${JSON.stringify(appServer.skills ?? [])} }] } }) + "\\n");
+  }
+});
+`, { mode: 0o600 });
+    fs.writeFileSync(original, `#!/bin/sh
+if [ "$1" = "app-server" ]; then exec '${process.execPath}' '${server}'; fi
+exec '${provider}' "$@"
+`, { mode: 0o700 });
     return originalBin;
   }
 
@@ -130,7 +152,7 @@ exit 0
     expect(collectPendingRuns(paths)).toEqual({ collected: 0, unavailable: 0 });
     const after = new TelemetryDatabase(paths);
     expect(after.getRun(runId)).toMatchObject({ collectionState: "unavailable" });
-    expect(after.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ inputNew: 0, inputCached: 0, output: 0 });
+    expect(after.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ inputNew: null, inputCached: null, output: null });
     after.close();
     cleanup(paths);
   });
@@ -145,19 +167,19 @@ exit 0
     expect(allocator.allocateBalancedMode("codex", () => 0.9)).toBe("observe");
     allocator.close();
 
-    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "super-secret-command-argument"], paths))).toBe(0);
+    expect(await withProviderPath(originalBin, () => runProvider("codex", ["exec", "--model", "gpt-6-astra", "super-secret-command-argument"], paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "codex",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "codex-balanced-v3",
+      optimizationProfile: "codex-balanced-v23",
       collectionState: "unavailable"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
     const markdown = reportMarkdown(buildReport(paths, 7));
-    for (const forbidden of ["super-secret-command-argument", TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION]) {
+    for (const forbidden of ["super-secret-command-argument", "gpt-6-astra", TOKEN_EFFICIENCY_INSTRUCTION, CODEX_TOKEN_EFFICIENCY_INSTRUCTION]) {
       expect(rawDatabase).not.toContain(forbidden);
       expect(markdown).not.toContain(forbidden);
     }
@@ -180,11 +202,11 @@ exit 0
     expect(allocator.allocateBalancedMode("codex", () => 0.1)).toBe("balanced");
     allocator.close();
 
-    const explicit = ["exec", "observe-user"];
+    const explicit = ["exec", "--model", "gpt-5.5", "observe-user"];
     expect(await withProviderPath(originalBin, () => runProvider("codex", explicit, paths))).toBe(0);
     const database = new TelemetryDatabase(paths);
     const run = database.recentRunsSince(new Date(0).toISOString())[0];
-    expect(run).toMatchObject({ mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v3" });
+    expect(run).toMatchObject({ mode: "observe", optimizationApplied: false, comparisonProfile: "codex-balanced-v18" });
     expect(run?.optimizationProfile).toBeNull();
     database.close();
     const observed = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
@@ -194,13 +216,86 @@ exit 0
     cleanup(paths);
   });
 
+  it("applies the verified Codex policy to an explicit gpt-5.5 invocation", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "codex-gpt55-arguments");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+if [ "$1" = "--help" ]; then echo '-c, --config <key=value> --model <model>'; exit 0; fi
+if [ "$1" = "--version" ]; then echo 'fake-codex 1.0'; exit 0; fi
+printf '%s\\n' "$@" > '${observedArguments}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+
+    const explicit = ["exec", "--model", "gpt-5.5", "--sandbox", "workspace-write", "task"];
+    expect(await withProviderPath(originalBin, () => runProvider("codex", explicit, paths))).toBe(0);
+
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
+      mode: "reduce",
+      optimizationApplied: true,
+      optimizationProfile: "codex-balanced-v18",
+      comparisonProfile: "codex-balanced-v18"
+    });
+    database.close();
+    const launchedArguments = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(launchedArguments.slice(-explicit.length)).toEqual(explicit);
+    expect(launchedArguments.join(" ")).not.toContain("model_auto_compact_token_limit");
+    expect(launchedArguments.join(" ")).not.toContain("--model gpt-6");
+    cleanup(paths);
+  });
+
+  it.each([
+    { selection: "config-only", args: ["exec", "--config", 'model="gpt-5.5"', "config-selected-task"] },
+    { selection: "profile-only", args: ["exec", "--profile", "gpt55", "profile-selected-task"] },
+    { selection: "ambiguous", args: ["exec", "--model", "gpt-5.5", "--model", "gpt-6-luna", "ambiguous-task"] }
+  ])("measures Codex without a treatment for $selection model selection", async ({ args }) => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "codex-unselected-model-arguments");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+if [ "$1" = "--help" ]; then echo '--config'; exit 0; fi
+if [ "$1" = "--version" ]; then echo 'fake-codex 1.0'; exit 0; fi
+printf '%s\\n' "$*" >> '${observedArguments}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", args, paths))).toBe(0);
+
+    const database = new TelemetryDatabase(paths);
+    const runs = database.recentRunsSince(new Date(0).toISOString());
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      provider: "codex",
+      mode: "reduce",
+      optimizationApplied: false,
+      optimizationProfile: null,
+      comparisonProfile: null
+    });
+    database.close();
+    const observed = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(observed).toHaveLength(1);
+    expect(observed[0]).toContain(args.join(" "));
+    expect(observed[0]).not.toContain("developer_instructions");
+    expect(observed[0]).not.toContain("model_auto_compact_token_limit");
+    const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
+    expect(rawDatabase).not.toContain("gpt-5.5");
+    expect(rawDatabase).not.toContain("gpt-6-luna");
+    expect(rawDatabase).not.toContain("config-selected-task");
+    cleanup(paths);
+  }, 15_000);
+
   it("always injects the Grok reduction policy in reduce mode", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-reduce-arguments");
     const originalBin = writeFakeGrok(paths, `#!/bin/sh
 case " $* " in
-  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
-  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
+  *" --version "*) echo 'grok 1.0.46'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --rules <rules> --system-prompt-override <prompt> --tools <tools> --no-subagents --disable-web-search --no-plan'; exit 0 ;;
 esac
 printf '%s\n' "$@" > '${observedArguments}'
 exit 0
@@ -215,30 +310,28 @@ exit 0
     expect(await withProviderPath(originalBin, () => runProvider("grok", [], paths))).toBe(0);
     const tuiArguments = fs.readFileSync(observedArguments, "utf8");
     expect(tuiArguments).toContain("--verbatim");
-    expect(tuiArguments).toContain("--no-subagents");
-    expect(tuiArguments).toContain("--no-memory");
-    expect(tuiArguments).toContain("--disable-web-search");
-    expect(tuiArguments).toContain("--no-plan");
-    expect(tuiArguments).toContain("--system-prompt-override");
-    expect(tuiArguments).not.toContain("--tools");
+    for (const flag of ["--no-subagents", "--no-memory", "--disable-web-search", "--no-plan", "--tools", "--system-prompt-override"]) {
+      expect(tuiArguments).not.toContain(flag);
+    }
+    expect(tuiArguments).toContain("--rules");
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "grok",
       mode: "reduce",
       optimizationApplied: true,
-      optimizationProfile: "grok-balanced-v6"
+      optimizationProfile: "grok-balanced-v8"
     });
     database.close();
     cleanup(paths);
   });
 
-  it("injects the complete Grok v6 policy without retaining its fixed rule", async () => {
+  it("injects Grok v7 through an appended rule while preserving native capabilities", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-arguments");
     const originalBin = writeFakeGrok(paths, `#!/bin/sh
 case " $* " in
-  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
-  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
+  *" --version "*) echo 'grok 1.0.46'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --rules <rules> --system-prompt-override <prompt> --tools <tools> --no-subagents --disable-web-search --no-plan'; exit 0 ;;
 esac
 printf '%s\n' "$@" > '${observedArguments}'
 exit 0
@@ -254,13 +347,10 @@ exit 0
     const argumentsText = fs.readFileSync(observedArguments, "utf8");
     expect(argumentsText).toContain("low");
     expect(argumentsText).toContain("--verbatim");
-    expect(argumentsText).toContain("--no-subagents");
-    expect(argumentsText).toContain("--no-memory");
-    expect(argumentsText).toContain("--disable-web-search");
-    expect(argumentsText).toContain("--no-plan");
-    expect(argumentsText).toContain("--system-prompt-override");
-    expect(argumentsText).toContain("--tools");
-    expect(argumentsText).toContain("run_terminal_cmd");
+    for (const flag of ["--no-subagents", "--no-memory", "--disable-web-search", "--no-plan", "--tools", "--system-prompt-override"]) {
+      expect(argumentsText).not.toContain(flag);
+    }
+    expect(argumentsText).toContain("--rules");
     expect(argumentsText).toContain(GROK_TOKEN_EFFICIENCY_INSTRUCTION);
 
     const database = new TelemetryDatabase(paths);
@@ -268,7 +358,7 @@ exit 0
       provider: "grok",
       mode: "balanced",
       optimizationApplied: true,
-      optimizationProfile: "grok-balanced-v6"
+      optimizationProfile: "grok-balanced-v8"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
@@ -280,17 +370,14 @@ exit 0
     cleanup(paths);
   });
 
-  it("deduplicates explicit Grok treatment flags in the real v0.4.16 reproduction", async () => {
+  it("preserves explicit Grok feature flags when applying v7", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "grok-deduplicated-arguments.json");
     const originalBin = writeFakeGrok(paths, `#!/usr/bin/env node
 import fs from "node:fs";
 const args = process.argv.slice(2);
-const flags = ["--no-subagents", "--disable-web-search", "--no-memory"];
-if (args.includes("--version")) { console.log("grok 1.0.4"); process.exit(0); }
-if (args.includes("--help")) { console.log("--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>"); process.exit(0); }
-const duplicate = flags.find((flag) => args.filter((argument) => argument === flag).length > 1);
-if (duplicate) { console.error("argument cannot be used multiple times: " + duplicate); process.exit(64); }
+if (args.includes("--version")) { console.log("grok 1.0.46"); process.exit(0); }
+if (args.includes("--help")) { console.log("--reasoning-effort <effort> --verbatim --rules <rules> --system-prompt-override <prompt> --tools <tools> --no-subagents --disable-web-search --no-plan"); process.exit(0); }
 fs.writeFileSync("${observedArguments}", JSON.stringify(args));
 process.exit(0);
 `);
@@ -302,9 +389,7 @@ process.exit(0);
     expect(await withProviderPath(originalBin, () => runProvider("grok", explicit, paths))).toBe(0);
     const observed = JSON.parse(fs.readFileSync(observedArguments, "utf8"));
     expect(observed.slice(-explicit.length)).toEqual(explicit);
-    for (const flag of ["--no-subagents", "--disable-web-search", "--no-memory"]) {
-      expect(observed.filter((argument) => argument === flag)).toHaveLength(1);
-    }
+    for (const flag of ["--no-subagents", "--disable-web-search", "--no-memory"]) expect(observed.filter((argument) => argument === flag)).toHaveLength(1);
     cleanup(paths);
   });
 
@@ -313,8 +398,8 @@ process.exit(0);
     const invocations = path.join(paths.userHome, "grok-conflict-invocations");
     const originalBin = writeFakeGrok(paths, `#!/bin/sh
 case " $* " in
-  *" --version "*) echo 'grok 1.0.4'; exit 0 ;;
-  *" --help "*) echo '--reasoning-effort <effort> --verbatim --no-subagents --no-memory --disable-web-search --no-plan --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
+  *" --version "*) echo 'grok 1.0.46'; exit 0 ;;
+  *" --help "*) echo '--reasoning-effort <effort> --verbatim --rules <rules> --system-prompt-override <prompt> --tools <tools>'; exit 0 ;;
 esac
 printf x >> '${invocations}'
 exit 0
@@ -329,7 +414,7 @@ exit 0
     cleanup(paths);
   });
 
-  it("injects the complete Claude v7 latency policy without retaining its fixed instruction", async () => {
+  it("preserves Claude's original tools and browser flags with the v8 policy", async () => {
     const paths = temporaryPaths();
     const observedArguments = path.join(paths.userHome, "claude-arguments");
     const originalBin = writeFakeClaude(paths, `#!/bin/sh
@@ -341,26 +426,24 @@ printf '%s\n' "$@" > '${observedArguments}'
 exit 0
 `);
     const config = ensureConfig(paths);
-    config.defaultMode = "balanced";
+    config.defaultMode = "reduce";
     writeConfig(paths, config);
-    const allocator = new TelemetryDatabase(paths);
-    expect(allocator.allocateBalancedMode("claude", () => 0.9)).toBe("observe");
-    allocator.close();
 
-    expect(await withProviderPath(originalBin, () => runProvider("claude", ["-p", "private-task"], paths))).toBe(0);
+    expect(await withProviderPath(originalBin, () => runProvider("claude", ["-p", "private-task", "--tools", "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch", "--chrome"], paths))).toBe(0);
     const argumentsText = fs.readFileSync(observedArguments, "utf8");
     expect(argumentsText).toContain("low");
-    expect(argumentsText).toContain(CLAUDE_CORE_TOOLS);
-    expect(argumentsText).toContain("--no-chrome");
-    expect(argumentsText).toContain("--exclude-dynamic-system-prompt-sections");
+    expect(argumentsText).toContain("Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch");
+    expect(argumentsText).toContain("--chrome");
+    expect(argumentsText).not.toContain("--no-chrome");
+    expect(argumentsText).not.toContain("--exclude-dynamic-system-prompt-sections");
     expect(argumentsText).toContain(CLAUDE_TOKEN_EFFICIENCY_INSTRUCTION);
 
     const database = new TelemetryDatabase(paths);
     expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
       provider: "claude",
-      mode: "balanced",
+      mode: "reduce",
       optimizationApplied: true,
-      optimizationProfile: "claude-balanced-v7"
+      optimizationProfile: "claude-balanced-v8"
     });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
@@ -381,7 +464,7 @@ exit 0
     const run = database.getPendingRuns();
     expect(run).toHaveLength(0);
     const aggregate = database.aggregateSince(new Date(Date.now() - 60_000).toISOString());
-    expect(aggregate[0]).toMatchObject({ provider: "codex", reportedTotal: 7675, inputNew: 0, output: 0 });
+    expect(aggregate[0]).toMatchObject({ provider: "codex", reportedTotal: 7675, inputNew: null, output: null });
     database.close();
     const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
     const markdown = reportMarkdown(buildReport(paths, 7));
@@ -389,6 +472,166 @@ exit 0
       expect(rawDatabase).not.toContain(forbidden);
       expect(markdown).not.toContain(forbidden);
     }
+    cleanup(paths);
+  });
+
+  it("collects only verified usage from Codex exec JSONL mode", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "codex-json-arguments");
+    const observedRun = path.join(paths.userHome, "codex-json-run");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+case " $* " in
+  *" --version "*) echo 'codex 0.155.1'; exit 0 ;;
+  *" --help "*) echo '-c, --config <key=value> --json --model <model>'; exit 0 ;;
+esac
+printf '%s\\n' "$@" > '${observedArguments}'
+printf '%s\\n' "$TP_RUN_CONTEXT_ID" > '${observedRun}'
+printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"private task result"}}'
+printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":15,"cache_write_input_tokens":3,"reasoning_output_tokens":10}}'
+exit 0
+`);
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+
+    const args = ["exec", "--json", "--model", "gpt-6-luna", "--ephemeral", "--skip-git-repo-check", "--sandbox", "workspace-write", "task"];
+    expect(await withProviderPath(originalBin, () => runProvider("codex", args, paths))).toBe(0);
+    const database = new TelemetryDatabase(paths);
+    expect(database.recentRunsSince(new Date(0).toISOString())[0]).toMatchObject({
+      provider: "codex",
+      optimizationApplied: true,
+      optimizationProfile: "codex-balanced-v18",
+      collectionState: "collected"
+    });
+    const summary = database.sessionSummariesSince(new Date(0).toISOString())[0];
+    const inheritedRun = fs.readFileSync(observedRun, "utf8").trim();
+    expect(inheritedRun).toBe(summary.id);
+    expect(reportSummaryMarkdown(buildReport(paths, 7), inheritedRun)).toContain("Cache reuse: 40%");
+    expect(summary).toMatchObject({
+      inputNew: 60,
+      inputCached: 40,
+      output: 15,
+      reportedTotal: 115,
+      reportedTotalIncludesCachedInput: true,
+      categoryMetricsComplete: false,
+      hasCacheCreated: 0,
+      hasReasoning: 0
+    });
+    expect(database.aggregateSince(new Date(0).toISOString())[0]).toMatchObject({
+      inputNew: 60,
+      inputCached: 40,
+      cacheCreated: null,
+      output: 15,
+      reasoning: null,
+      reportedTotal: 115
+    });
+    database.close();
+
+    const rawDatabase = fs.readFileSync(paths.databaseFile).toString("latin1");
+    const markdown = reportMarkdown(buildReport(paths, 7));
+    expect(rawDatabase).not.toContain("private task result");
+    expect(markdown).not.toContain("private task result");
+    const launchedArguments = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(launchedArguments.slice(-args.length)).toEqual(args);
+    expect(launchedArguments.join(" ")).toContain('model_reasoning_effort="low"');
+    expect(launchedArguments.join(" ")).toContain(CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION);
+    expect(launchedArguments.join(" ")).toContain("model_auto_compact_token_limit=16000");
+    expect(launchedArguments.join(" ")).toContain("skills.max_context_tokens=2000");
+    expect(launchedArguments.join(" ")).toContain('model_auto_compact_token_limit_scope="body_after_prefix"');
+    for (const setting of ["model=", "model_reasoning_summary", "model_verbosity"]) {
+      expect(launchedArguments.join(" ")).not.toContain(setting);
+    }
+    expect(rawDatabase).not.toContain(CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION);
+    expect(markdown).not.toContain(CODEX_V10_TOKEN_EFFICIENCY_INSTRUCTION);
+    cleanup(paths);
+  });
+
+  it.each(["--cd", "-C"])("budgets every enabled skill from the native catalog under the explicit Codex %s target", async (directoryFlag) => {
+    const paths = temporaryPaths();
+    const target = path.join(paths.userHome, "catalog-target");
+    fs.mkdirSync(target, { recursive: true });
+    const observedArguments = path.join(paths.userHome, "codex-catalog-arguments");
+    const observedCatalogCwd = path.join(paths.userHome, "codex-catalog-cwd");
+    const originalBin = writeFakeCodex(paths, `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+if (args[0] === "--version") { console.log("codex 0.160.1"); process.exit(0); }
+if (args[0] === "--help") { console.log("--config --model"); process.exit(0); }
+fs.writeFileSync("${observedArguments}", args.join("\\n"));
+process.stdout.write('{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}\\n');
+`, {
+      skills: [
+        { name: "n".repeat(5000), path: "/".repeat(3000), enabled: true },
+        { name: "hidden", path: "/skills/hidden", enabled: false }
+      ],
+      observedCwdFile: observedCatalogCwd
+    });
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+
+    const args = ["exec", "--model", "gpt-6-astra", directoryFlag, target, "Task text containing literal --cd /wrong-directory"];
+    expect(await withProviderPath(originalBin, () => runProvider("codex", args, paths))).toBe(0);
+    const expectedBudget = Math.max(2_000,
+      Math.ceil(Buffer.byteLength(`- ${"n".repeat(5000)}: (file: ${"/".repeat(3000)})\n`) / 4)
+      + Math.ceil(Buffer.byteLength("- hidden: (file: /skills/hidden)\n") / 4)
+      + 512);
+    const launched = fs.readFileSync(observedArguments, "utf8");
+    expect(launched).toContain(`skills.max_context_tokens=${expectedBudget}`);
+    expect(JSON.parse(fs.readFileSync(observedCatalogCwd, "utf8"))).toEqual({ processCwd: fs.realpathSync(target), cwds: [target] });
+    cleanup(paths);
+  });
+
+  it.each(["--profile", "--config"])("fails open when Codex %s may change the skill roster", async (override) => {
+    const paths = temporaryPaths();
+    const target = path.join(paths.userHome, "catalog-target");
+    fs.mkdirSync(target, { recursive: true });
+    const observedArguments = path.join(paths.userHome, "codex-override-arguments");
+    const observedCatalogCwd = path.join(paths.userHome, "codex-override-catalog");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+case " $* " in
+  *" --version "*) echo 'codex 0.160.1'; exit 0 ;;
+  *" --help "*) echo '--config --model'; exit 0 ;;
+esac
+printf '%s\\n' "$@" > '${observedArguments}'
+exit 0
+`, { observedCwdFile: observedCatalogCwd });
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+    const args = ["exec", "--model", "gpt-6-astra", "--cd", target, override, override === "--profile" ? "personal" : "skills.catalog=custom", "Task"];
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", args, paths))).toBe(0);
+    const launched = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(launched.slice(-args.length)).toEqual(args);
+    expect(launched.join(" ")).not.toContain("skills.max_context_tokens=");
+    expect(launched.join(" ")).not.toContain("developer_instructions=");
+    expect(fs.existsSync(observedCatalogCwd)).toBe(false);
+    cleanup(paths);
+  });
+
+  it("fails open without any Codex treatment when native skills metadata is uncertain", async () => {
+    const paths = temporaryPaths();
+    const observedArguments = path.join(paths.userHome, "codex-invalid-catalog-arguments");
+    const observedCatalogCwd = path.join(paths.userHome, "codex-invalid-catalog-cwd");
+    const originalBin = writeFakeCodex(paths, `#!/bin/sh
+case " $* " in
+  *" --version "*) echo 'codex 0.160.1'; exit 0 ;;
+  *" --help "*) echo '--config --model'; exit 0 ;;
+esac
+printf '%s\\n' "$@" > '${observedArguments}'
+exit 0
+`, { errors: ["catalog unavailable"], observedCwdFile: observedCatalogCwd });
+    const config = ensureConfig(paths);
+    config.defaultMode = "reduce";
+    writeConfig(paths, config);
+    const args = ["exec", "--model", "gpt-6-astra", "Task"];
+
+    expect(await withProviderPath(originalBin, () => runProvider("codex", args, paths))).toBe(0);
+    const launched = fs.readFileSync(observedArguments, "utf8").trim().split("\n");
+    expect(launched.slice(-args.length)).toEqual(args);
+    expect(launched.join(" ")).not.toContain("skills.max_context_tokens=");
+    expect(launched.join(" ")).not.toContain("developer_instructions=");
     cleanup(paths);
   });
 
@@ -444,7 +687,7 @@ exit 0
     expect(fs.readFileSync(environmentFile, "utf8")).toBe("1|otlp|none|none|0|false|http/json|1000");
     const database = new TelemetryDatabase(paths);
     expect(database.getPendingRuns()).toHaveLength(0);
-    expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ provider: "claude", inputNew: 0 });
+    expect(database.aggregateSince(new Date(Date.now() - 60_000).toISOString())[0]).toMatchObject({ provider: "claude", inputNew: null });
     database.close();
     cleanup(paths);
   });

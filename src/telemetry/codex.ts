@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import http from "node:http";
+import { StringDecoder } from "node:string_decoder";
 import type { AddressInfo } from "node:net";
 import type { TelemetryDatabase } from "../database.js";
 import type { UsageMetrics } from "../types.js";
@@ -13,6 +14,7 @@ import { configureLoopbackReceiver } from "./server.js";
  */
 const ANSI_ESCAPE = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 const MAX_INCOMPLETE_LINE = 128;
+const MAX_CODEX_JSON_LINE = 512 * 1024;
 const MAX_BODY_BYTES = 512 * 1024;
 const MAX_RESOURCE_METRICS = 8;
 const MAX_SCOPE_METRICS = 16;
@@ -24,6 +26,24 @@ const SOURCE = "codex-otlp-metrics-v1";
 type JsonObject = Record<string, unknown>;
 type CodexTokenType = "input" | "cached_input" | "cache_write_input" | "output" | "reasoning_output" | "total";
 type CodexRawUsage = Partial<Record<CodexTokenType, number>>;
+
+const CODEX_VALUE_OPTIONS = new Set([
+  "--add-dir", "--ask-for-approval", "--cd", "-C", "--color", "--config", "-c", "--image", "-i",
+  "--model", "-m", "--output-last-message", "-o", "--output-schema", "--profile", "-p", "--sandbox", "-s"
+]);
+
+/** Detect only an option before the positional prompt or `--` terminator. */
+export function isCodexJsonExec(args: string[]): boolean {
+  if (!isCodexExec(args)) return false;
+  for (let index = 1; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === "--") return false;
+    if (token === "--json") return true;
+    if (!token.startsWith("-")) return false;
+    if (CODEX_VALUE_OPTIONS.has(token) && args[index + 1] !== undefined) index += 1;
+  }
+  return false;
+}
 
 export interface CodexMetricsReceiver {
   endpoint: string;
@@ -276,6 +296,112 @@ export class CodexExecTokenParser {
       if (total !== undefined) this.total = total;
     }
   }
+}
+
+/**
+ * Reads only numeric usage fields from Codex's documented `turn.completed`
+ * JSONL event. All other event content is parsed transiently and discarded.
+ */
+export class CodexExecJsonUsageParser {
+  private readonly decoder = new StringDecoder("utf8");
+  private pending = "";
+  private totalInput = 0;
+  private totalOutput = 0;
+  private reportedTotal = 0;
+  private cachedInput = 0;
+  private completedTurns = 0;
+  private cachedInputComplete = true;
+  private inputTotalsComplete = true;
+
+  accept(chunk: Buffer | string): void {
+    const decoded = typeof chunk === "string" ? chunk : this.decoder.write(chunk);
+    this.acceptText(decoded);
+  }
+
+  finish(): UsageMetrics | undefined {
+    this.acceptText(this.decoder.end());
+    if (this.pending) this.acceptLine(this.pending);
+    this.pending = "";
+    if (this.completedTurns === 0 || !this.inputTotalsComplete) return undefined;
+
+    const usage: UsageMetrics = {
+      output: this.totalOutput,
+      reportedTotal: this.reportedTotal,
+      reportedTotalIncludesCachedInput: true
+    };
+    if (this.cachedInputComplete) usage.inputCached = this.cachedInput;
+    if (this.cachedInputComplete) usage.inputNew = this.totalInput - this.cachedInput;
+    return usage;
+  }
+
+  private acceptText(text: string): void {
+    const lines = (this.pending + text).split(/\r?\n/);
+    this.pending = lines.pop() ?? "";
+    if (Buffer.byteLength(this.pending, "utf8") > MAX_CODEX_JSON_LINE) {
+      this.inputTotalsComplete = false;
+      this.pending = "";
+    }
+    for (const line of lines) this.acceptLine(line);
+  }
+
+  private acceptLine(line: string): void {
+    if (!line.trim()) return;
+    if (Buffer.byteLength(line, "utf8") > MAX_CODEX_JSON_LINE) {
+      this.inputTotalsComplete = false;
+      return;
+    }
+
+    let event: unknown;
+    try {
+      event = JSON.parse(line) as unknown;
+    } catch {
+      this.inputTotalsComplete = false;
+      return;
+    }
+    const record = object(event);
+    if (record?.type !== "turn.completed") return;
+    const usage = object(record.usage);
+    const input = nonNegativeInteger(usage?.input_tokens);
+    const output = nonNegativeInteger(usage?.output_tokens);
+    if (input === undefined || output === undefined) {
+      this.inputTotalsComplete = false;
+      return;
+    }
+
+    const turnTotal = input + output;
+    // Codex exec publishes the latest thread total, not a per-turn delta.
+    const nextInput = input;
+    const nextOutput = output;
+    const nextTotal = turnTotal;
+    if (![turnTotal, nextInput, nextOutput, nextTotal].every(Number.isSafeInteger) || input < this.totalInput || output < this.totalOutput) {
+      this.inputTotalsComplete = false;
+      return;
+    }
+    this.totalInput = nextInput;
+    this.totalOutput = nextOutput;
+    this.reportedTotal = nextTotal;
+    this.completedTurns += 1;
+
+    const cached = optionalMetric(usage, "cached_input_tokens");
+    if (cached === undefined) {
+      this.cachedInputComplete = false;
+    } else if (cached === null || cached > input) {
+      this.cachedInputComplete = false;
+    } else {
+      if (this.completedTurns > 1 && cached < this.cachedInput) {
+        this.inputTotalsComplete = false;
+        return;
+      }
+      this.cachedInput = cached;
+      if (!Number.isSafeInteger(this.cachedInput)) this.cachedInputComplete = false;
+    }
+
+  }
+}
+
+function optionalMetric(record: JsonObject | undefined, key: string): number | null | undefined {
+  if (!record || !Object.hasOwn(record, key)) return undefined;
+  return nonNegativeInteger(record[key]) ?? null;
 }
 
 /** `codex exec` is non-interactive, so piped output cannot alter its TTY UI. */

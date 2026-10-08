@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
+import { treatmentComparisons } from "../src/report.js";
 import { GrokJsonUsageParser, isGrokHeadless, isGrokJsonSingle, parseGrokOtlpMetricSamples, parseGrokOtlpMetrics, startGrokMetricsReceiver, supportsGrokExternalOtelVersion } from "../src/telemetry/grok.js";
 import { cleanup, grokOtlpFixture, temporaryPaths } from "./helpers.js";
 
@@ -27,6 +28,28 @@ describe("Grok JSON usage telemetry", () => {
     expect(parseGrokOtlpMetrics(payload)).toEqual({ inputNew: 12, inputCached: 34, cacheCreated: 0, output: 5, reasoning: 6 });
     expect(parseGrokOtlpMetrics(grokOtlpFixture({ unknown: 999 }))).toBeUndefined();
     expect(parseGrokOtlpMetrics(grokOtlpFixture({ input: 12, cache_read: 34 }))).toBeUndefined();
+  });
+
+  it("keeps missing Grok categories unavailable through reports", () => {
+    const paths = temporaryPaths();
+    const database = new TelemetryDatabase(paths);
+    const now = new Date().toISOString();
+    try {
+      database.createRun({ id: "grok-baseline", provider: "grok", mode: "observe", startedAt: now, endedAt: now, comparisonProfile: "grok-balanced-v1", collectionState: "collected", taskKind: "feature", outcome: "completed" });
+      database.addUsage({ runId: "grok-baseline", observedAt: now, source: "grok-otlp-metrics-v2", inputNew: 100, inputCached: 0, cacheCreated: 0, output: 20, reasoning: 5 });
+      database.createRun({ id: "grok-partial", provider: "grok", mode: "reduce", startedAt: now, endedAt: now, optimizationApplied: true, optimizationProfile: "grok-balanced-v1", comparisonProfile: "grok-balanced-v1", collectionState: "collected", taskKind: "feature", outcome: "completed" });
+      const partial = parseGrokOtlpMetrics(grokOtlpFixture({ output: 7 }));
+      expect(partial).toEqual({ cacheCreated: 0, output: 7 });
+      expect(parseGrokOtlpMetricSamples(grokOtlpFixture({ output: 7 }, 2))?.cumulative).toEqual({ output: 7 });
+      database.addUsage({ runId: "grok-partial", observedAt: now, source: "grok-otlp-metrics-v2", ...partial });
+
+      const summaries = database.sessionSummariesSince("1970-01-01T00:00:00.000Z");
+      expect(summaries.find((session) => session.id === "grok-partial")?.categoryMetricsComplete).toBe(false);
+      expect(treatmentComparisons(summaries)).toMatchObject([{ tokenResult: "limited", reason: expect.stringContaining("category total unavailable") }]);
+    } finally {
+      database.close();
+      cleanup(paths);
+    }
   });
 
   it("separates cumulative samples so repeated exports cannot overstate usage", () => {

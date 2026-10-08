@@ -2,13 +2,15 @@
 
 This document is a **historical snapshot**. It is not live TokenPilot output. A `/tokenpilot` or `tokenpilot report` on any machine must print that machine's current scoreboard, never this table.
 
+The recorded aggregates have not been revalidated under the October 2026 Codex/Grok output and reasoning semantics. The per-session source evidence needed to recalculate them is not included here. These historical percentages are not current measured results.
+
 This document is the first manually reviewed TokenPilot research snapshot published by Cesar Augusto / Mycellium Lab. It records what the local reports said at the end of the round; it is not a promise of future performance.
 
 The Kimi figures below are historical only. The Kimi REST/WebSocket bridge was disabled during the subsequent Codex Security hardening audit, so current Kimi sessions run unchanged and remain envelope-only.
 
 This snapshot predates the 0.4.16 reproducible artifact workflow and the 0.5 evidence terminology. Those distribution and reporting controls do not revise the recorded totals. Under the 0.5 contract, every percentage below is a preliminary observed cache-aware variation because the round did not include formal quality-equivalence evidence.
 
-The next weekly snapshot is planned for Saturday, August 22, 2026. Future rounds should be appended as separate dated sections or files so earlier evidence remains reproducible.
+New evaluations are recorded separately with their actual CLI versions, task acceptance checks and source-qualified counters.
 
 ## Environment
 

@@ -8,7 +8,7 @@ import { install } from "../src/installer.js";
 describe("doctor", () => {
   it("inspects readiness without creating TokenPilot configuration or telemetry", () => {
     const paths = temporaryPaths();
-    const report = doctor(paths, { platform: "linux", nodeVersion: "22.5.0", pathValue: "" });
+    const report = doctor(paths, { platform: "linux", nodeVersion: "22.13.0", pathValue: "" });
     expect(report.ready).toBe(false);
     expect(report.checks).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "Platform and Node", status: "ready" }),
@@ -24,7 +24,7 @@ describe("doctor", () => {
 
   it("reports an unsupported platform with an actionable correction", () => {
     const paths = temporaryPaths();
-    const report = doctor(paths, { platform: "win32", nodeVersion: "22.5.0", pathValue: "" });
+    const report = doctor(paths, { platform: "win32", nodeVersion: "22.13.0", pathValue: "" });
     expect(report.checks[0]).toMatchObject({ status: "unavailable", fix: expect.stringContaining("macOS or Linux") });
     cleanup(paths);
   });
@@ -37,7 +37,7 @@ describe("doctor", () => {
     for (const provider of ["claude", "grok"]) {
       fs.writeFileSync(path.join(originalBin, provider), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     }
-    const report = doctor(paths, { platform: "linux", nodeVersion: "22.5.0", pathValue: `${originalBin}${path.delimiter}${paths.shimDir}` });
+    const report = doctor(paths, { platform: "linux", nodeVersion: "22.13.0", pathValue: `${originalBin}${path.delimiter}${paths.shimDir}` });
     expect(report.installationReady).toBe(false);
     expect(report.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({ provider: "claude", state: "shadowed" }),
@@ -60,11 +60,15 @@ describe("doctor", () => {
           : "--config";
       fs.writeFileSync(path.join(originalBin, provider), `#!/bin/sh\nif [ "$1" = "--help" ]; then echo '${help}'; fi\nif [ "$1" = "--version" ]; then echo '${provider} ${version}'; fi\nexit 0\n`, { mode: 0o700 });
     }
-    const report = doctor(paths, { platform: "linux", nodeVersion: "22.5.0", pathValue: `${paths.shimDir}${path.delimiter}${originalBin}` });
+    const report = doctor(paths, { platform: "linux", nodeVersion: "22.13.0", pathValue: `${paths.shimDir}${path.delimiter}${originalBin}` });
     expect(report).toMatchObject({ installationReady: true, measurementReady: false });
     expect(report.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({ provider: "claude", state: "active", fix: undefined }),
-      expect.objectContaining({ provider: "codex", state: "active" }),
+      expect.objectContaining({
+        provider: "codex",
+        state: "active",
+        detail: expect.stringContaining("default, config-only, and profile-only model selection is measured without treatment")
+      }),
       expect.objectContaining({ provider: "grok", state: "active", detail: expect.stringContaining("normal TTY/TUI and headless sessions") }),
       expect.objectContaining({ provider: "kimi", state: "limited", detail: expect.stringContaining("measurement is disabled") })
     ]));

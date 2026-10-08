@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { TelemetryDatabase } from "../src/database.js";
-import { CodexExecTokenParser, isCodexExec, parseCodexOtlpMetricSamples, parseCodexOtlpMetrics, startCodexMetricsReceiver } from "../src/telemetry/codex.js";
+import { CodexExecJsonUsageParser, CodexExecTokenParser, isCodexExec, isCodexJsonExec, parseCodexOtlpMetricSamples, parseCodexOtlpMetrics, startCodexMetricsReceiver } from "../src/telemetry/codex.js";
 import { cleanup, temporaryPaths } from "./helpers.js";
 
 const payload = {
@@ -41,6 +41,60 @@ describe("Codex non-interactive token total", () => {
     expect(parser.finish()).toBeUndefined();
     expect(isCodexExec(["exec", "prompt"])).toBe(true);
     expect(isCodexExec(["--config", "x=1"])).toBe(false);
+  });
+
+  it("extracts only cache-aware numeric usage from Codex JSONL events", () => {
+    const parser = new CodexExecJsonUsageParser();
+    parser.accept('{"type":"item.completed","item":{"type":"agent_message","text":"private output"}}\n{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":15,"reasoning_output_tokens":10,"cache_write_input_tokens":3}}\n');
+
+    expect(parser.finish()).toEqual({
+      inputNew: 60,
+      inputCached: 40,
+      output: 15,
+      reportedTotal: 115,
+      reportedTotalIncludesCachedInput: true
+    });
+  });
+
+  it("uses the latest cumulative JSON receipt without summing repeated totals", () => {
+    const parser = new CodexExecJsonUsageParser();
+    for (const usage of [
+      { input_tokens: 100, cached_input_tokens: 40, output_tokens: 15 },
+      { input_tokens: 100, cached_input_tokens: 40, output_tokens: 15 },
+      { input_tokens: 200, cached_input_tokens: 90, output_tokens: 25 }
+    ]) parser.accept(JSON.stringify({ type: "turn.completed", usage }) + "\n");
+    expect(parser.finish()).toEqual({ inputNew: 110, inputCached: 90, output: 25, reportedTotal: 225, reportedTotalIncludesCachedInput: true });
+  });
+
+  it("rejects cumulative JSON counters that decrease", () => {
+    const parser = new CodexExecJsonUsageParser();
+    parser.accept('{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":15}}\n');
+    parser.accept('{"type":"turn.completed","usage":{"input_tokens":90,"output_tokens":15}}\n');
+    expect(parser.finish()).toBeUndefined();
+  });
+
+  it("rejects decreasing cumulative cache counters", () => {
+    const parser = new CodexExecJsonUsageParser();
+    parser.accept('{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":15}}\n');
+    parser.accept('{"type":"turn.completed","usage":{"input_tokens":200,"cached_input_tokens":30,"output_tokens":25}}\n');
+    expect(parser.finish()).toBeUndefined();
+  });
+
+  it("keeps the provider total when category details are absent without filling zeros", () => {
+    const parser = new CodexExecJsonUsageParser();
+    parser.accept('{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":15}}\n');
+
+    expect(parser.finish()).toEqual({
+      output: 15,
+      reportedTotal: 115,
+      reportedTotalIncludesCachedInput: true
+    });
+  });
+
+  it("detects only Codex exec JSON mode before its prompt", () => {
+    expect(isCodexJsonExec(["exec", "--json", "--model", "gpt-6-luna", "task"])).toBe(true);
+    expect(isCodexJsonExec(["exec", "--model", "gpt-6-luna", "task --json"])).toBe(false);
+    expect(isCodexJsonExec(["exec", "--", "--json"])).toBe(false);
   });
 
   it("extracts Codex's metrics-only token histogram and separates cache hits", () => {
