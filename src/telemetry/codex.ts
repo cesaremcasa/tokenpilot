@@ -12,6 +12,7 @@ import { configureLoopbackReceiver } from "./server.js";
  * nor response: it recognises those two exact lines, keeps at most one short
  * incomplete line while a stream chunk is split, and returns just a number.
  */
+// eslint-disable-next-line no-control-regex -- matches ANSI escape sequences on purpose
 const ANSI_ESCAPE = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 const MAX_INCOMPLETE_LINE = 128;
 const MAX_CODEX_JSON_LINE = 512 * 1024;
