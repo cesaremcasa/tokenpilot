@@ -10,4 +10,4 @@ Research scope: all 21 Grok Bot pages listed in the [official documentation inde
 
 ## First task for a personal Bot
 
-Prepare `/workspace/tokenpilot`, verify supported Node.js, install public `@cesaremcasa/tokenpilot@0.5.5` in that project without sudo, and read its packaged Grok Bot skill. Save it as a private TokenPilot skill and verify the `/` menu. Return the installed version and a read-only CLI report; absent metrics remain unavailable. Measure Grok Build only when it is already part of the task—do not add an LLM subprocess merely to obtain counters. Parent-Bot savings remain unmeasured.
+Prepare `/workspace/tokenpilot`, verify supported Node.js, install public `@cesaremcasa/tokenpilot@0.5.6` in that project without sudo, and read its packaged Grok Bot skill. Save it as a private TokenPilot skill and verify the `/` menu. Return the installed version and a read-only CLI report; absent metrics remain unavailable. Measure Grok Build only when it is already part of the task—do not add an LLM subprocess merely to obtain counters. Parent-Bot savings remain unmeasured.
