@@ -8,3 +8,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Keep Node.js type definitions on the oldest supported runtime (engines: ^22.13.0).
+      # Newer majors describe APIs that Node.js 22 does not provide.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
