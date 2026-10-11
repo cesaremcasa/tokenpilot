@@ -64,6 +64,7 @@ export async function readCodexSkillBudget(
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       for (const line of lines) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped JSON-RPC line, narrowed by the checks below
         let message: any;
         try {
           message = JSON.parse(line);
