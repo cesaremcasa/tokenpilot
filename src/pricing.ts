@@ -17,6 +17,7 @@ export function isPricingProfile(value: unknown): value is PricingProfile {
   return typeof profile.id === "string" && PROFILE_ID.test(profile.id)
     && typeof profile.provider === "string" && ["claude", "codex", "grok", "kimi"].includes(profile.provider)
     && typeof profile.version === "string" && PROFILE_VERSION.test(profile.version)
+    // eslint-disable-next-line no-control-regex -- rejects control characters in labels on purpose
     && typeof profile.label === "string" && profile.label.length > 0 && profile.label.length <= 80 && !/[\u0000-\u001f\u007f]/.test(profile.label)
     && profile.currency === "USD"
     && Boolean(rates)

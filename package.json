@@ -42,6 +42,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:install": "node scripts/install-smoke.mjs",
     "release:artifact": "node scripts/release-artifact.mjs",
@@ -49,9 +50,12 @@
     "dev": "tsx src/cli.ts"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.15.3",
+    "eslint": "^10.12.0",
     "tsx": "^4.23.15",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.71.1",
     "vitest": "^4.1.11"
   }
 }
