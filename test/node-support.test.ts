@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { isSupportedNodeVersion, SUPPORTED_NODE_RANGE, unsupportedNodeMessage } from "../src/node-support.js";
+import { isSqliteExperimentalWarning, isSupportedNodeVersion, suppressSqliteExperimentalWarning, SUPPORTED_NODE_RANGE, unsupportedNodeMessage } from "../src/node-support.js";
 
 describe("Node.js runtime guard", () => {
   it("accepts exactly the engines range", () => {
@@ -22,5 +22,24 @@ describe("Node.js runtime guard", () => {
     const message = unsupportedNodeMessage("20.19.2");
     expect(message).toContain(SUPPORTED_NODE_RANGE);
     expect(message).toContain("20.19.2");
+  });
+});
+
+describe("SQLite experimental warning filter", () => {
+  it("matches only the node:sqlite ExperimentalWarning", () => {
+    expect(isSqliteExperimentalWarning("SQLite is an experimental feature and might change at any time", "ExperimentalWarning")).toBe(true);
+    expect(isSqliteExperimentalWarning("SQLite is an experimental feature and might change at any time", { type: "ExperimentalWarning" })).toBe(true);
+    expect(isSqliteExperimentalWarning("SQLite is an experimental feature", "DeprecationWarning")).toBe(false);
+    expect(isSqliteExperimentalWarning("WASI is an experimental feature", "ExperimentalWarning")).toBe(false);
+    expect(isSqliteExperimentalWarning("SQLite is an experimental feature")).toBe(false);
+  });
+
+  it("forwards every other warning unchanged", () => {
+    const seen: unknown[][] = [];
+    const target = { emitWarning: (...args: unknown[]) => { seen.push(args); } } as unknown as Pick<NodeJS.Process, "emitWarning">;
+    suppressSqliteExperimentalWarning(target);
+    target.emitWarning("SQLite is an experimental feature and might change at any time", "ExperimentalWarning");
+    target.emitWarning("something else", "DeprecationWarning", "DEP0001");
+    expect(seen).toEqual([["something else", "DeprecationWarning", "DEP0001"]]);
   });
 });
