@@ -2,6 +2,17 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
+## Unreleased
+
+Changes on `main` since the `v0.5.6` tag. They are not in the npm package yet.
+
+- Update development tooling to patched versions: vitest 3 → 4, tsx 4.19 → 4.23 (#69). Runtime dependencies and the published CLI are unchanged.
+- Point installation guidance at the verified public npm release (#68, #70).
+- Clarify which Kimi sessions are currently eligible for measurement (#71).
+- CI: bump `actions/checkout` to 7.0.1 (#43) and `actions/setup-node` to 7.0.0 (#42).
+
+Publication note: 0.5.1–0.5.4 were never published to npm. 0.5.5 was published to npm (2026-10-06) but has no git tag or GitHub release. The published versions are 0.5.0, 0.5.5 and 0.5.6.
+
 ## 0.5.6 — 2026-10-07
 
 - Label session percentages as cache reuse, distinct from measured A/B reduction.
