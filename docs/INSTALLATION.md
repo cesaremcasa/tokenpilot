@@ -1,6 +1,6 @@
 # Installation
 
-TokenPilot 0.5.6 supports macOS and Linux with zsh or bash with Node.js 22.13.0 or later in the 22.x line, or 23.4.0 and later. npm is required for the npm installation. Native Windows and PowerShell are unsupported.
+TokenPilot 0.5.7 supports macOS and Linux with zsh or bash with Node.js 22.13.0 or later in the 22.x line, or 23.4.0 and later. npm is required for the npm installation. Native Windows and PowerShell are unsupported.
 
 Install and authenticate at least one provider CLI first. TokenPilot uses that existing CLI and its existing login; it does not install providers or handle their authentication. You do not need all four providers.
 
@@ -11,10 +11,10 @@ codex --version # or claude --version, grok --version, or kimi --version
 
 ## Install from npm
 
-Install the published 0.5.6 package from npm:
+Install the published 0.5.7 package from npm:
 
 ```sh
-npm install -g @cesaremcasa/tokenpilot@0.5.6
+npm install -g @cesaremcasa/tokenpilot@0.5.7
 tokenpilot install
 tokenpilot doctor
 ```
@@ -22,7 +22,7 @@ tokenpilot doctor
 If npm global installation fails with `EACCES`, use a user-owned Node/npm installation or this no-global alternative instead of sudo:
 
 ```sh
-npm exec --yes --package=@cesaremcasa/tokenpilot@0.5.6 -- tokenpilot install
+npm exec --yes --package=@cesaremcasa/tokenpilot@0.5.7 -- tokenpilot install
 ```
 
 The installer copies its runtime into user-owned state, so the npm cache is not required afterward.
@@ -60,7 +60,7 @@ tokenpilot report --provider codex # substitute your provider
 
 `doctor` reports installation readiness separately from measurement availability. `Measurement: limited` can mean the provider is installed but does not expose a supported correlated usage source. A provider you do not use may be unavailable without affecting the providers you installed.
 
-To update an npm installation, run `npm install -g @cesaremcasa/tokenpilot@0.5.6` and then `tokenpilot install`. The installer refreshes TokenPilot-owned launchers and runtime files and preserves local measurements.
+To update an npm installation, run `npm install -g @cesaremcasa/tokenpilot@0.5.7` and then `tokenpilot install`. The installer refreshes TokenPilot-owned launchers and runtime files and preserves local measurements.
 
 ## Bypass and uninstall
 

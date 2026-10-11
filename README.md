@@ -10,12 +10,12 @@ Local token measurement and efficiency treatments for AI coding command-line too
 
 ## Install and run
 
-Install the published 0.5.6 package from npm:
+Install the published 0.5.7 package from npm:
 
 Requires macOS or Linux with zsh or bash, Node.js 22.13.0+ in the 22.x line or 23.4.0 and later, npm, and at least one supported provider CLI already installed and authenticated. You do not need all four providers. Native Windows and PowerShell are not supported.
 
 ```sh
-npm install -g @cesaremcasa/tokenpilot@0.5.6
+npm install -g @cesaremcasa/tokenpilot@0.5.7
 tokenpilot install
 tokenpilot doctor
 ```
