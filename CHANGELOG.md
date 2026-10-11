@@ -2,16 +2,16 @@
 
 All notable changes to TokenPilot are recorded here. Version numbers follow semantic versioning while the project remains pre-1.0 research software.
 
-## Unreleased
+## 0.5.7 — 2026-10-11
 
-Changes on `main` since the `v0.5.6` tag. They are not in the npm package yet.
+- Exit with a clear message and code 1 on unsupported Node.js instead of a `node:sqlite` stack trace (#72).
+- Hide only the `node:sqlite` ExperimentalWarning when the npm-installed `tokenpilot` bin runs directly (#77).
+- README: document what the default `reduce` mode changes, all run modes, and the limits of the measured evidence (#73).
+- Development tooling: vitest 5 (#57), patched vitest 4 / tsx 4.23 (#69), a minimal ESLint configuration and `npm run lint` (#78), and `@types/node` kept on the Node.js 22 line (#75, #80). Runtime dependencies are unchanged.
+- Installation guidance points at the verified public npm release (#68, #70). Kimi measurement eligibility is clarified (#71).
+- CI: `actions/checkout` 7.0.1 (#43) and `actions/setup-node` 7.1.0 (#42, #79).
 
-- Update development tooling to patched versions: vitest 3 → 4, tsx 4.19 → 4.23 (#69). Runtime dependencies and the published CLI are unchanged.
-- Point installation guidance at the verified public npm release (#68, #70).
-- Clarify which Kimi sessions are currently eligible for measurement (#71).
-- CI: bump `actions/checkout` to 7.0.1 (#43) and `actions/setup-node` to 7.0.0 (#42).
-
-Publication note: 0.5.1–0.5.4 were never published to npm. 0.5.5 was published to npm (2026-10-06) but has no git tag or GitHub release. The published versions are 0.5.0, 0.5.5 and 0.5.6.
+Publication note: 0.5.1–0.5.4 were never published to npm. 0.5.5 was published to npm on 2026-10-06 and was tagged retroactively (`v0.5.5`) on 2026-10-11.
 
 ## 0.5.6 — 2026-10-07
 
